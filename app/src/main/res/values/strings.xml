@@ -1891,10 +1891,10 @@
     <string name="chat_modify_text_saved">Local display updated</string>
     <string name="chat_modify_text_diag">Diagnostics (tap to copy)</string>
     <string name="chat_modify_text_blacklist_title">Blocked text hosts</string>
-    <string name="chat_modify_text_blacklist_description">Each row label in the editor is a blocking key. Enter an id (a44) or Class@id (bkp@a44); it applies immediately. Tap the trailing icon to remove one entry.</string>
+    <string name="chat_modify_text_blacklist_description">Each row label in the editor is a blocking key. Enter an id (a44) or Class#id (bkp#a44); it applies immediately. Tap the trailing icon to remove one entry.</string>
     <string name="chat_modify_text_blacklist_empty">No blocked hosts</string>
     <string name="chat_modify_text_blacklist_add">Add blocked host</string>
-    <string name="chat_modify_text_blacklist_hint">e.g. a44 or bkp@a44</string>
+    <string name="chat_modify_text_blacklist_hint">e.g. a44 or bkp#a44</string>
     <string name="chat_quote_jump_message_list">Jump from quoted messages in the message list</string>
     <string name="chat_quote_jump_message_list_description">Tap a quoted message in the chat history to jump directly to the original message</string>
     <string name="chat_quote_jump_input_box">Jump from the quote in the input bar</string>

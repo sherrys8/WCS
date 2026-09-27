@@ -80,7 +80,7 @@ object ModifyTextMessageDisplay : ClickableFeature(),
     private fun isBlacklisted(view: View): Boolean {
         val id = entryName(view)
         val key = hostKey(view)
-        return textHostBlacklist.any { it == id || it == key }
+        return textHostBlacklist.map(::normalizeEntry).any { it == id || it == key }
     }
 
     override fun onClick(context: ComponentActivity) {
@@ -464,8 +464,8 @@ private fun entryName(view: View): String {
         .getOrDefault(view.id.toString())
 }
 
-/** 黑名单键：`R.id 条目名`（`a44`）或 `类简单名@条目名`（`bkp@a44`）。 */
-private fun hostKey(view: View): String = view.javaClass.simpleName + "@" + entryName(view)
+/** 黑名单键：`R.id 条目名`（`a44`）或 `类简单名#条目名`（`bkp#a44`）。 */
+private fun hostKey(view: View): String = view.javaClass.simpleName + "#" + entryName(view)
 
 /** 弹窗每行的标注，同时也是可直接填进屏蔽名单的键。 */
 private fun hostLabel(view: View): String = hostKey(view)
@@ -475,28 +475,33 @@ private fun hostLabel(view: View): String = hostKey(view)
  * 例如 `bju` 既是文件卡片可改的 MMNeat7extView，也是该屏蔽的 MsgTextView。
  */
 private val defaultTextHostBlacklist = setOf(
-    "MsgTextView@bju",
-    "MsgTextView@bj2",
-    "MsgTextView@a4r",
-    "B@a44",
-    "B@bkn",
-    "bkp@a44",
-    "bkp@a46",
-    "bkp@a4s",
-    "bkp@a4r",
-    "bkp@a48",
-    "bkp@bjp",
-    "bkq@bkm",
-    "bkr@bkn",
-    "bks@bkn",
-    "bkl@a46",
+    "MsgTextView#bju",
+    "MsgTextView#bj2",
+    "MsgTextView#a4r",
+    "B#a44",
+    "B#bkn",
+    "bkp#a44",
+    "bkp#a46",
+    "bkp#a4s",
+    "bkp#a4r",
+    "bkp#a48",
+    "bkp#bjp",
+    "bkq#bkm",
+    "bkr#bkn",
+    "bks#bkn",
+    "bkl#a46",
 )
 
-/** 去掉包名与首尾空白，`com.tencent...MsgTextView@bju` → `MsgTextView@bju`。 */
+/**
+ * 归一化用户输入：`@` 与 `#` 都认（布局检查器给的是 `#`，XML 写法是 `@id/`），
+ * 完整类名削成简单名，`id/` 前缀去掉。
+ */
 private fun normalizeEntry(raw: String): String {
-    val trimmed = raw.trim()
-    if (!trimmed.contains('@')) return trimmed
-    return trimmed.substringBefore('@').substringAfterLast('.') + "@" + trimmed.substringAfter('@').trim()
+    val text = raw.trim().replace('@', '#')
+    if (!text.contains('#')) return text
+    val clazz = text.substringBefore('#').substringAfterLast('.')
+    val id = text.substringAfter('#').trim().removePrefix("id/")
+    return if (clazz.isEmpty()) id else "$clazz#$id"
 }
 
 /** 自绘文本宿主：类名去掉数字混淆位后含 `extView`（如 MMNeat7extView）。 */

@@ -1845,10 +1845,10 @@
     <string name="chat_modify_text_saved">已修改本地显示</string>
     <string name="chat_modify_text_diag">诊断信息（点击复制）</string>
     <string name="chat_modify_text_blacklist_title">屏蔽名单</string>
-    <string name="chat_modify_text_blacklist_description">弹窗里每行上方显示的就是可屏蔽的键。填 id（如 a44）或 类名@id（如 bkp@a44），保存后立即生效；点条目右侧图标可单独删除。</string>
+    <string name="chat_modify_text_blacklist_description">弹窗里每行上方显示的就是可屏蔽的键。填 id（如 a44）或 类名#id（如 bkp#a44），保存后立即生效；点条目右侧图标可单独删除。</string>
     <string name="chat_modify_text_blacklist_empty">暂无屏蔽项</string>
     <string name="chat_modify_text_blacklist_add">添加屏蔽项</string>
-    <string name="chat_modify_text_blacklist_hint">如 a44 或 bkp@a44</string>
+    <string name="chat_modify_text_blacklist_hint">如 a44 或 bkp#a44</string>
     <string name="chat_quote_jump_message_list">消息列表引用直达</string>
     <string name="chat_quote_jump_message_list_description">点击聊天消息中的被引用消息时，直接跳转到原消息</string>
     <string name="chat_quote_jump_input_box">输入框引用直达</string>

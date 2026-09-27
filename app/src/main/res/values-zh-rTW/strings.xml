@@ -1841,10 +1841,10 @@
     <string name="chat_modify_text_saved">已修改本地顯示</string>
     <string name="chat_modify_text_diag">診斷資訊（點擊複製）</string>
     <string name="chat_modify_text_blacklist_title">屏蔽名單</string>
-    <string name="chat_modify_text_blacklist_description">彈窗裡每行上方顯示的就是可屏蔽的鍵。填 id（如 a44）或 類名@id（如 bkp@a44），保存後立即生效；點條目右側圖示可單獨刪除。</string>
+    <string name="chat_modify_text_blacklist_description">彈窗裡每行上方顯示的就是可屏蔽的鍵。填 id（如 a44）或 類名#id（如 bkp#a44），保存後立即生效；點條目右側圖示可單獨刪除。</string>
     <string name="chat_modify_text_blacklist_empty">暫無屏蔽項</string>
     <string name="chat_modify_text_blacklist_add">添加屏蔽項</string>
-    <string name="chat_modify_text_blacklist_hint">如 a44 或 bkp@a44</string>
+    <string name="chat_modify_text_blacklist_hint">如 a44 或 bkp#a44</string>
     <string name="chat_quote_jump_message_list">消息列表引用直達</string>
     <string name="chat_quote_jump_message_list_description">點擊聊天消息中的被引用消息時，直接跳轉到原消息</string>
     <string name="chat_quote_jump_input_box">輸入框引用直達</string>
