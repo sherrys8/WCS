@@ -346,6 +346,7 @@ Prefer these over raw Compose controls:
 - CI 单 flavor 化 `684cb3d2`（见 CI 节）；备份分支 `backup/dev-sherry-20260926` = `b02c2c79` 已推 `sherrys8/WeKit`（`backup/*` 不在 CI 分支过滤内，不触发构建）
 
 ### In Progress
+- 「修改文本消息显示」+ 表情 span 方案**已回退**：`9413da4d`（写回时继承原文的表情 span）装到真机后**模块无法注入微信**，`07fd425b` 单独 revert 掉它，保留可编辑名单 `50b18a27` 与 `#` 分隔符 `99d61e54`。被丢的提交留在本地 ref `backup/dev-sherry-20260927` = `9413da4d`。**未证实是 span 改动导致的注入失败**——若回退包仍无法注入，要往更早查（`b02c2c79` 的 auto-accept/`modifyContactRemark`、上游合并、或设备侧模块开关/版本）
 - 豆包后端与魔方切换的真机验证矩阵：豆包生成 → 切回魔方确认音色列表恢复且可生成 → 再切回豆包；魔方若仍失败，需回读 toast 中的 `code=`/`msg` 才能定位是 Key、额度还是音色名问题。CI 侧 `build`/`build_zygisk`/`upload-telegram` 均绿，仅 `dex-test` 的 `Enforce Dex resolution result` 为分支既有失败（1 个 `UNEXPECTED_FAILURE` + 3 个 `BLOCKED`），本轮未改任何 Dex 声明，按约定不追
 - 「修改文本消息显示」待真机收尾：① 确认 `99d61e54` 的名单**真的开始屏蔽**了（`e4053af2` 那版因完整类名 + `.` 写法对嵌套类从不命中，等于完全没生效），行集正好、引用段仍可改；② 弹窗底部诊断区块已随 `e4053af2` 移除，`buildSubtreeDump` 只写 `WeLogger.i`（收集新宿主仍可用）；每行的 `类名#id` 标注暂时保留——它就是屏蔽键的可抄来源，等用户确认名单够用后再删，同时删掉已无引用的 `chat_modify_text_diag` 三语言串；③ 菜单正文自身若被写进名单，该条消息会退化成「这条消息没有可修改的文本」toast，需确认是否预期；④ 验证滚动/重进聊天/切会话后替换仍生效，以及「恢复原文」干净
 
@@ -372,7 +373,7 @@ Prefer these over raw Compose controls:
 4. 「修改文本消息显示」可编辑屏蔽名单 `50b18a27` + 分隔符 `#` 的 `99d61e54` 已推、CI 均绿：待真机确认名单确实生效且行集干净，再按 In Progress 条目删掉每行标注与失效的 `chat_modify_text_diag` 三语言串
 
 ## Critical Context
-- 本克隆 `origin` = `https://github.com/sherrys8/WeKit.git`，`dev-sherry` 最新 commit：`99d61e54`（本地与 `origin/dev-sherry` 同步；备份分支 `backup/dev-sherry-20260926` = `b02c2c79`）。另有**分叉的** `sherrys7/WeKit:dev-sherry`（不是本克隆的 remote，需 `git fetch <url> dev-sherry` 才能比对），2026-09-26 实测它比本地多 12 个提交、本地多 147 个，且 sherrys8 对其只有读权限，**不要**把它的 SHA 当成本分支的远端状态
+- 本克隆 `origin` = `https://github.com/sherrys8/WeKit.git`，`dev-sherry` 最新 commit：`07fd425b`（revert 表情 span；备份 ref `backup/dev-sherry-20260927` = `9413da4d`，更早的远端备份分支 `backup/dev-sherry-20260926` = `b02c2c79`）。另有**分叉的** `sherrys7/WeKit:dev-sherry`（不是本克隆的 remote，需 `git fetch <url> dev-sherry` 才能比对），2026-09-26 实测它比本地多 12 个提交、本地多 147 个，且 sherrys8 对其只有读权限，**不要**把它的 SHA 当成本分支的远端状态
 - **微信气泡文本宿主分布（真机 dump 结论，做同类功能必读）**：
   - `com.tencent.mm.ui.widget.MMNeat7extView` 是自绘文本 View（微信把 `TextView` 的 `T` 换成 `7`），**既不是 `TextView` 子类也不是 `ViewGroup`**，`is TextView` 与按名含 "Text" 匹配都拿不到它；判定规则用「类名去掉数字位后含 `extView`」。它的文本在自己的 CharSequence 字段上，写字段 + `invalidate()` **确实会重绘**（文件卡片 `<title>` = `id=bju` 已验证）
   - 文件卡片：文件名 `MMNeat7extView id=bju`，大小 `MMTextView id=bj2`
