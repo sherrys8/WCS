@@ -724,7 +724,7 @@
     <string name="feature_message_time_enhancements_name">Enhanced message timestamps</string>
     <string name="feature_message_time_enhancements_description">Shows the precise time the message was sent and allows more details to be displayed</string>
     <string name="feature_modify_text_message_display_name">Modify text message display</string>
-    <string name="feature_modify_text_message_display_description">Long press any message bubble to modify its local display text (red packets, transfers and more). Persists across re-entering the chat and can be reverted anytime</string>
+    <string name="feature_modify_text_message_display_description">Add a menu item to the message long press menu to modify any bubble locally; persists across re-entering the chat. Tap the feature row to manage the block list</string>
     <string name="feature_monitor_group_member_operations_name">Group member behavior monitoring</string>
     <string name="feature_monitor_group_member_operations_description">Monitor group members’ behavior of leaving the group and changing group nicknames</string>
     <string name="feature_quick_back_to_bottom_name">Quick jump to latest message</string>
@@ -1890,6 +1890,11 @@
     <string name="chat_modify_text_revert">Restore original</string>
     <string name="chat_modify_text_saved">Local display updated</string>
     <string name="chat_modify_text_diag">Diagnostics (tap to copy)</string>
+    <string name="chat_modify_text_blacklist_title">Blocked text hosts</string>
+    <string name="chat_modify_text_blacklist_description">Each row label in the editor is a blocking key. Enter an id (a44) or Class@id (bkp@a44); it applies immediately. Tap the trailing icon to remove one entry.</string>
+    <string name="chat_modify_text_blacklist_empty">No blocked hosts</string>
+    <string name="chat_modify_text_blacklist_add">Add blocked host</string>
+    <string name="chat_modify_text_blacklist_hint">e.g. a44 or bkp@a44</string>
     <string name="chat_quote_jump_message_list">Jump from quoted messages in the message list</string>
     <string name="chat_quote_jump_message_list_description">Tap a quoted message in the chat history to jump directly to the original message</string>
     <string name="chat_quote_jump_input_box">Jump from the quote in the input bar</string>

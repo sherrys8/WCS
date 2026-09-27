@@ -685,7 +685,7 @@
     <string name="feature_message_time_enhancements_name">消息時間增強</string>
     <string name="feature_message_time_enhancements_description">顯示精確消息發送時間並允許顯示更多詳情</string>
     <string name="feature_modify_text_message_display_name">修改文本消息顯示</string>
-    <string name="feature_modify_text_message_display_description">長按任意消息氣泡可修改其本地顯示文本（含紅包、轉賬等），重進聊天仍然生效，可隨時恢復原文</string>
+    <string name="feature_modify_text_message_display_description">向消息長按菜單添加菜單項，可修改任意氣泡的本地顯示文本，重進聊天仍然生效；點擊功能行可管理屏蔽名單</string>
     <string name="feature_monitor_group_member_operations_name">羣成員行爲監控</string>
     <string name="feature_monitor_group_member_operations_description">監控羣成員的退羣與修改羣暱稱行爲</string>
     <string name="feature_quick_back_to_bottom_name">快捷回底</string>
@@ -1840,6 +1840,11 @@
     <string name="chat_modify_text_revert">恢復原文</string>
     <string name="chat_modify_text_saved">已修改本地顯示</string>
     <string name="chat_modify_text_diag">診斷資訊（點擊複製）</string>
+    <string name="chat_modify_text_blacklist_title">屏蔽名單</string>
+    <string name="chat_modify_text_blacklist_description">彈窗裡每行上方顯示的就是可屏蔽的鍵。填 id（如 a44）或 類名@id（如 bkp@a44），保存後立即生效；點條目右側圖示可單獨刪除。</string>
+    <string name="chat_modify_text_blacklist_empty">暫無屏蔽項</string>
+    <string name="chat_modify_text_blacklist_add">添加屏蔽項</string>
+    <string name="chat_modify_text_blacklist_hint">如 a44 或 bkp@a44</string>
     <string name="chat_quote_jump_message_list">消息列表引用直達</string>
     <string name="chat_quote_jump_message_list_description">點擊聊天消息中的被引用消息時，直接跳轉到原消息</string>
     <string name="chat_quote_jump_input_box">輸入框引用直達</string>

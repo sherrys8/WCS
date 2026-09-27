@@ -5,12 +5,14 @@ import android.text.SpannableStringBuilder
 import android.view.View
 import android.widget.AdapterView
 import android.widget.TextView
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -23,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.outlined.Delete
 import com.composables.icons.materialsymbols.outlined.Edit
 import dev.ujhhgtg.reflekt.reflekt
 import dev.ujhhgtg.wekit.R
@@ -30,11 +33,14 @@ import dev.ujhhgtg.wekit.features.api.core.models.MessageInfo
 import dev.ujhhgtg.wekit.features.api.core.models.MessageType
 import dev.ujhhgtg.wekit.features.api.ui.WeChatMessageContextMenuApi
 import dev.ujhhgtg.wekit.features.api.ui.WeChatMessageViewApi
+import dev.ujhhgtg.wekit.features.core.ClickableFeature
 import dev.ujhhgtg.wekit.features.core.FeatureCategoryIds
-import dev.ujhhgtg.wekit.features.core.SwitchFeature
 import dev.ujhhgtg.wekit.preferences.WePrefs.Companion.prefOption
 import dev.ujhhgtg.wekit.ui.content.AlertDialogContent
 import dev.ujhhgtg.wekit.ui.content.TextButton
+import dev.ujhhgtg.wekit.ui.content.m3.BaseWidget
+import dev.ujhhgtg.wekit.ui.content.m3.SegmentedColumn
+import dev.ujhhgtg.wekit.ui.content.m3.TextFieldDialogWidget
 import dev.ujhhgtg.wekit.ui.utils.EditIcon
 import dev.ujhhgtg.wekit.ui.utils.allViews
 import dev.ujhhgtg.wekit.ui.utils.showComposeDialog
@@ -45,7 +51,7 @@ import dev.ujhhgtg.wekit.utils.serialization.DefaultJson
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier as JavaModifier
 
-object ModifyTextMessageDisplay : SwitchFeature(),
+object ModifyTextMessageDisplay : ClickableFeature(),
     WeChatMessageContextMenuApi.IMenuItemsProvider,
     WeChatMessageViewApi.ICreateViewListener {
 
@@ -57,15 +63,100 @@ object ModifyTextMessageDisplay : SwitchFeature(),
     private const val TAG = "ModifyTextMessageDisplay"
     private const val MENU_ITEM_ID = 777002
     private const val OVERRIDES_KEY = "modify_text_message_display_overrides"
+    private const val BLACKLIST_KEY = "modify_text_display_host_blacklist"
 
     /** 每条被改消息存一份「原文 -> 替换文本」，超过这个条数就丢最旧的。 */
     private const val MAX_OVERRIDDEN_MESSAGES = 200
 
     private var overridesPref by prefOption(OVERRIDES_KEY, "{}")
 
+    /** 屏蔽名单存偏好而非硬编码，设置页增删后下一次采集即生效。 */
+    private var textHostBlacklist by prefOption(BLACKLIST_KEY, defaultTextHostBlacklist)
+
     /** key: 消息标识; value: 原文 -> 替换文本（插入序即修改序，用于淘汰最旧条目） */
     private val overrides = LinkedHashMap<String, MutableMap<String, String>>()
     private var loaded = false
+
+    private fun isBlacklisted(view: View): Boolean {
+        val id = entryName(view)
+        val key = hostKey(view)
+        return textHostBlacklist.any { it == id || it == key }
+    }
+
+    override fun onClick(context: ComponentActivity) {
+        showComposeDialog(context) {
+            BlacklistSettingsDialog(onDismiss)
+        }
+    }
+
+    @Composable
+    private fun BlacklistSettingsDialog(onDismiss: () -> Unit) {
+        var entries by remember { mutableStateOf(textHostBlacklist.sorted()) }
+
+        fun write(next: Set<String>) {
+            textHostBlacklist = next
+            entries = next.sorted()
+        }
+
+        AlertDialogContent(
+            title = { Text(stringResource(R.string.chat_modify_text_blacklist_title)) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    Text(
+                        text = stringResource(R.string.chat_modify_text_blacklist_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                    SegmentedColumn {
+                        if (entries.isEmpty()) {
+                            item {
+                                BaseWidget(
+                                    title = stringResource(R.string.chat_modify_text_blacklist_empty),
+                                )
+                            }
+                        }
+                        entries.forEach { entry ->
+                            item {
+                                BaseWidget(
+                                    title = entry,
+                                    onTrailingClick = { write(entries.filterNot { it == entry }.toSet()) },
+                                    trailingContent = {
+                                        Icon(
+                                            imageVector = MaterialSymbols.Outlined.Delete,
+                                            contentDescription = stringResource(R.string.action_delete),
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                        item {
+                            TextFieldDialogWidget(
+                                title = stringResource(R.string.chat_modify_text_blacklist_add),
+                                value = "",
+                                onValueChange = { input ->
+                                    val entry = normalizeEntry(input)
+                                    if (entry.isNotBlank()) write((entries + entry).toSet())
+                                },
+                                dialogTitle = stringResource(R.string.chat_modify_text_blacklist_add),
+                                confirmLabel = stringResource(R.string.dialog_confirm),
+                                dismissLabel = stringResource(R.string.dialog_cancel),
+                                valueHint = stringResource(R.string.chat_modify_text_blacklist_hint),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.dialog_close)) }
+            },
+        )
+    }
 
     override fun onEnable() {
         WeChatMessageContextMenuApi.addProvider(this)
@@ -275,7 +366,7 @@ object ModifyTextMessageDisplay : SwitchFeature(),
 
     private class TextViewTarget(override val hostView: TextView) : TextTarget {
         override val current get() = hostView.text.toString()
-        override val label get() = hostView.javaClass.simpleName + "#" + entryName(hostView)
+        override val label get() = hostLabel(hostView)
         override fun write(value: String) {
             hostView.text = value
         }
@@ -290,7 +381,7 @@ object ModifyTextMessageDisplay : SwitchFeature(),
         private val field: Field,
     ) : TextTarget {
         override val current get() = field.get(hostView)?.toString().orEmpty()
-        override val label get() = hostView.javaClass.simpleName + "#" + entryName(hostView) + "." + field.name
+        override val label get() = hostLabel(hostView) + "." + field.name
         override fun write(value: String) {
             coerceToField(field, value)?.let { field.set(hostView, it) }
             hostView.invalidate()
@@ -308,7 +399,7 @@ object ModifyTextMessageDisplay : SwitchFeature(),
         }
 
         override val current get() = field?.get()?.toString().orEmpty()
-        override val label get() = "field:" + hostView.javaClass.simpleName
+        override val label get() = hostLabel(hostView)
         override fun write(value: String) {
             hostView.reflekt().firstMethod {
                 parameters(CharSequence::class)
@@ -325,7 +416,7 @@ object ModifyTextMessageDisplay : SwitchFeature(),
     private fun collectTargets(menuView: View): List<TextTarget> {
         val targets = mutableListOf<TextTarget>()
         editRootOf(menuView).allViews.forEach { child ->
-            if (hostKey(child) in blacklistedTextHosts) return@forEach
+            if (isBlacklisted(child)) return@forEach
             when {
                 child is TextView ->
                     if (child.text?.isNotBlank() == true) targets += TextViewTarget(child)
@@ -341,7 +432,7 @@ object ModifyTextMessageDisplay : SwitchFeature(),
 
         // 菜单交给我们的往往就是正文 View 本身，它的「首个 CharSequence 字段 + 同名 setter」
         // 是纯文本、拍一拍已验证可用的通路；与字段行原文相同时会被并成同一行
-        if (hostKey(menuView) !in blacklistedTextHosts) {
+        if (!isBlacklisted(menuView)) {
             HostFieldTarget(menuView).takeIf { it.current.isNotBlank() }?.let { targets += it }
         }
         return targets
@@ -373,27 +464,40 @@ private fun entryName(view: View): String {
         .getOrDefault(view.id.toString())
 }
 
-/** 黑名单键：完整类名 + "@" + R.id 条目名，与真机布局检查器给出的形式一致。 */
-private fun hostKey(view: View): String = view.javaClass.name + "@" + entryName(view)
+/** 黑名单键：`R.id 条目名`（`a44`）或 `类简单名@条目名`（`bkp@a44`）。 */
+private fun hostKey(view: View): String = view.javaClass.simpleName + "@" + entryName(view)
 
-/** 真机确认过不该进弹窗的文本宿主（昵称、时间、平台自带字段、重复正文等）。 */
-private val blacklistedTextHosts = setOf(
-    "com.tencent.mm.ui.chat.view.MsgTextView@bju",
-    "com.tencent.mm.ui.chat.view.MsgTextView@bj2",
-    "com.tencent.mm.ui.chat.view.MsgTextView@a4r",
-    "com.tencent.mm.ui.chat.view.chatting_menu.B@a44",
-    "com.tencent.mm.ui.chat.view.chatting_menu.B@bkn",
-    "com.tencent.mm.ui.chat.view.chatting_menu.bkp@a44",
-    "com.tencent.mm.ui.chat.view.chatting_menu.bkp@a46",
-    "com.tencent.mm.ui.chat.view.chatting_menu.bkp@a4s",
-    "com.tencent.mm.ui.chat.view.chatting_menu.bkp@a4r",
-    "com.tencent.mm.ui.chat.view.chatting_menu.bkp@a48",
-    "com.tencent.mm.ui.chat.view.chatting_menu.bkp@bjp",
-    "com.tencent.mm.ui.chat.view.chatting_menu.bkq@bkm",
-    "com.tencent.mm.ui.chat.view.chatting_menu.bkr@bkn",
-    "com.tencent.mm.ui.chat.view.chatting_menu.bks@bkn",
-    "com.tencent.mm.ui.chat.view.chatting_menu.bkl@a46",
+/** 弹窗每行的标注，同时也是可直接填进屏蔽名单的键。 */
+private fun hostLabel(view: View): String = hostKey(view)
+
+/**
+ * 只写 id 会屏蔽该 id 的所有宿主；带类名可区分同一个 id 被多个类复用的情况，
+ * 例如 `bju` 既是文件卡片可改的 MMNeat7extView，也是该屏蔽的 MsgTextView。
+ */
+private val defaultTextHostBlacklist = setOf(
+    "MsgTextView@bju",
+    "MsgTextView@bj2",
+    "MsgTextView@a4r",
+    "B@a44",
+    "B@bkn",
+    "bkp@a44",
+    "bkp@a46",
+    "bkp@a4s",
+    "bkp@a4r",
+    "bkp@a48",
+    "bkp@bjp",
+    "bkq@bkm",
+    "bkr@bkn",
+    "bks@bkn",
+    "bkl@a46",
 )
+
+/** 去掉包名与首尾空白，`com.tencent...MsgTextView@bju` → `MsgTextView@bju`。 */
+private fun normalizeEntry(raw: String): String {
+    val trimmed = raw.trim()
+    if (!trimmed.contains('@')) return trimmed
+    return trimmed.substringBefore('@').substringAfterLast('.') + "@" + trimmed.substringAfter('@').trim()
+}
 
 /** 自绘文本宿主：类名去掉数字混淆位后含 `extView`（如 MMNeat7extView）。 */
 private fun isTextHost(view: View): Boolean =

@@ -687,7 +687,7 @@
     <string name="feature_message_time_enhancements_name">消息时间增强</string>
     <string name="feature_message_time_enhancements_description">显示精确消息发送时间并允许显示更多详情</string>
     <string name="feature_modify_text_message_display_name">修改文本消息显示</string>
-    <string name="feature_modify_text_message_display_description">长按任意消息气泡可修改其本地显示文本（含红包、转账等），重进聊天仍然生效，可随时恢复原文</string>
+    <string name="feature_modify_text_message_display_description">向消息长按菜单添加菜单项，可修改任意气泡的本地显示文本，重进聊天仍然生效；点击功能行可管理屏蔽名单</string>
     <string name="feature_monitor_group_member_operations_name">群成员行为监控</string>
     <string name="feature_monitor_group_member_operations_description">监控群成员的退群与修改群昵称行为</string>
     <string name="feature_quick_back_to_bottom_name">快捷回底</string>
@@ -1844,6 +1844,11 @@
     <string name="chat_modify_text_revert">恢复原文</string>
     <string name="chat_modify_text_saved">已修改本地显示</string>
     <string name="chat_modify_text_diag">诊断信息（点击复制）</string>
+    <string name="chat_modify_text_blacklist_title">屏蔽名单</string>
+    <string name="chat_modify_text_blacklist_description">弹窗里每行上方显示的就是可屏蔽的键。填 id（如 a44）或 类名@id（如 bkp@a44），保存后立即生效；点条目右侧图标可单独删除。</string>
+    <string name="chat_modify_text_blacklist_empty">暂无屏蔽项</string>
+    <string name="chat_modify_text_blacklist_add">添加屏蔽项</string>
+    <string name="chat_modify_text_blacklist_hint">如 a44 或 bkp@a44</string>
     <string name="chat_quote_jump_message_list">消息列表引用直达</string>
     <string name="chat_quote_jump_message_list_description">点击聊天消息中的被引用消息时，直接跳转到原消息</string>
     <string name="chat_quote_jump_input_box">输入框引用直达</string>
