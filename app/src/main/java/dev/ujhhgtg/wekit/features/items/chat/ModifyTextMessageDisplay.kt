@@ -2,10 +2,6 @@ package dev.ujhhgtg.wekit.features.items.chat
 
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.DynamicDrawableSpan
-import android.text.style.ImageSpan
-import android.text.style.ReplacementSpan
 import android.view.View
 import android.widget.AdapterView
 import android.widget.TextView
@@ -363,20 +359,16 @@ object ModifyTextMessageDisplay : ClickableFeature(),
     /** 真机上报：红包、转账、文件卡片等自定义气泡的文本宿主各不相同，这里统一成一个写入口。 */
     private interface TextTarget {
         val hostView: View
-
-        /** 宿主当前真正显示的文本，表情以 span 形式挂在上面；写入时要从它继承 span。 */
-        val raw: CharSequence?
         val current: String
         val label: String
         fun write(value: String)
     }
 
     private class TextViewTarget(override val hostView: TextView) : TextTarget {
-        override val raw get() = hostView.text
         override val current get() = hostView.text.toString()
         override val label get() = hostLabel(hostView)
         override fun write(value: String) {
-            hostView.text = applySmileySpans(raw, value)
+            hostView.text = value
         }
     }
 
@@ -388,11 +380,10 @@ object ModifyTextMessageDisplay : ClickableFeature(),
         override val hostView: View,
         private val field: Field,
     ) : TextTarget {
-        override val raw get() = field.get(hostView) as? CharSequence
         override val current get() = field.get(hostView)?.toString().orEmpty()
         override val label get() = hostLabel(hostView) + "." + field.name
         override fun write(value: String) {
-            coerceToField(field, applySmileySpans(raw, value))?.let { field.set(hostView, it) }
+            coerceToField(field, value)?.let { field.set(hostView, it) }
             hostView.invalidate()
         }
     }
@@ -407,13 +398,12 @@ object ModifyTextMessageDisplay : ClickableFeature(),
             superclass()
         }
 
-        override val raw get() = field?.get() as? CharSequence
         override val current get() = field?.get()?.toString().orEmpty()
         override val label get() = hostLabel(hostView)
         override fun write(value: String) {
             hostView.reflekt().firstMethod {
                 parameters(CharSequence::class)
-            }.invoke(applySmileySpans(raw, value))
+            }.invoke(value)
         }
     }
 
@@ -523,43 +513,11 @@ private fun acceptsTextField(field: Field): Boolean =
             SpannableStringBuilder::class.java.isAssignableFrom(field.type)
 
 /** 宿主自绘文本时可能缓存 Spannable 变体，按字段声明类型构造对应实现。 */
-private fun coerceToField(field: Field, value: CharSequence): Any? = when {
-    field.type == String::class.java -> value.toString()
-    field.type == CharSequence::class.java ||
-            SpannableStringBuilder::class.java.isAssignableFrom(field.type) -> SpannableStringBuilder(value)
-
+private fun coerceToField(field: Field, value: String): Any? = when {
+    field.type == String::class.java || field.type == CharSequence::class.java -> value
+    SpannableStringBuilder::class.java.isAssignableFrom(field.type) -> SpannableStringBuilder(value)
     SpannableString::class.java.isAssignableFrom(field.type) -> SpannableString(value)
     else -> null
-}
-
-/** 微信表情的文字形态（`[发呆]`），宿主渲染时会把它换成带 span 的图片。 */
-private val smileyTokenRegex = Regex("""\[[^[\]]{1,12}\]""")
-
-/**
- * 宿主画表情靠的是原文上盖着的 span，直接写 String 就退回 `[发呆]` 字面量。
- * 这里把原文里覆盖表情 token 的 span 按 token 文本搬到新文本的相同 token 上；
- * 新文本里出现而原文没有的表情，只能继续显示成文字。
- */
-private fun applySmileySpans(original: CharSequence?, text: String): CharSequence {
-    if (original !is Spanned || !text.contains('[')) return text
-
-    val spansByToken = LinkedHashMap<String, List<Any>>()
-    smileyTokenRegex.findAll(original).forEach { match ->
-        if (spansByToken.containsKey(match.value)) return@forEach
-        val spans = original
-            .getSpans(match.range.first, match.range.last + 1, Any::class.java)
-            .filter { it is ImageSpan || it is DynamicDrawableSpan || it is ReplacementSpan }
-        if (spans.isNotEmpty()) spansByToken[match.value] = spans
-    }
-    if (spansByToken.isEmpty()) return text
-
-    val builder = SpannableStringBuilder(text)
-    smileyTokenRegex.findAll(text).forEach { match ->
-        spansByToken[match.value]?.forEach { span ->
-            builder.setSpan(span, match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-    }
-    return builder
 }
 
 private fun settableTextFields(host: View): List<Field> {
