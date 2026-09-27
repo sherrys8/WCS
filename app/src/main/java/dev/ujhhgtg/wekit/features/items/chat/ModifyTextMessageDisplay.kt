@@ -475,21 +475,20 @@ private fun hostLabel(view: View): String = hostKey(view)
  * 例如 `bju` 既是文件卡片可改的 MMNeat7extView，也是该屏蔽的 MsgTextView。
  */
 private val defaultTextHostBlacklist = setOf(
-    "MsgTextView#bju",
-    "MsgTextView#bj2",
+    "MMTextView#srr",
     "MsgTextView#a4r",
-    "B#a44",
-    "B#bkn",
-    "bkp#a44",
-    "bkp#a46",
-    "bkp#a4s",
-    "bkp#a4r",
-    "bkp#a48",
-    "bkp#bjp",
-    "bkq#bkm",
-    "bkr#bkn",
-    "bks#bkn",
-    "bkl#a46",
+    "MsgTextView#bj2",
+    "MsgTextView#bju",
+    "TextView#MsgInfo_TextView",
+    "TextView#a47",
+    "TextView#bj1",
+    "TextView#bjw",
+    "TextView#brc",
+    "TextView#brk",
+    "TextView#sql",
+    "X2CTextView#bpw",
+    "X2CTextView#br1",
+    "X2CTextView#none",
 )
 
 /**
