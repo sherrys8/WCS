@@ -33,7 +33,7 @@ object MonetModulePackager {
             add(
                 "module.prop",
                 "id=wcs-monet-engine\nname=微信莫奈引擎 (WcS)\n" +
-                    "version=$versionName ($versionCode)\nversionCode=$versionCode\nauthor=Ujhhgtg\n" +
+                    "version=$versionName ($versionCode)\nversionCode=$versionCode\nauthor=sherrys8\n" +
                     "description=为微信 $versionName 启用动态壁纸取色, 由 WcS 在运行时生成\n",
             )
             add("customize.sh", CUSTOMIZE_SCRIPT)

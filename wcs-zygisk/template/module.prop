@@ -2,6 +2,6 @@ id=wcs_zygisk
 name=WcS
 version=@VERSION_NAME@
 versionCode=@VERSION_CODE@
-author=ujhhgtg
+author=sherrys8
 description=WcS (@VARIANT@) — Zygisk mode. Manage per-Android-user injection targets from the KernelSU WebUI.
 #updateJson=
