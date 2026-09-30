@@ -240,8 +240,8 @@ func wcs_tunnel_status(pointer unsafe.Pointer, buffer *C.char, bufferLen C.size_
 	return C.int(resultOK)
 }
 
-//export Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStartQuick
-func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStartQuick(
+//export Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStartQuick
+func Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStartQuick(
 	env *C.JNIEnv,
 	receiver C.jobject,
 	origin C.jstring,
@@ -257,8 +257,8 @@ func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeSta
 	return C.jlong(uintptr(registerHandle(handle, identity)))
 }
 
-//export Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStartToken
-func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStartToken(
+//export Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStartToken
+func Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStartToken(
 	env *C.JNIEnv,
 	receiver C.jobject,
 	token C.jstring,
@@ -280,8 +280,8 @@ func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeSta
 	return C.jlong(uintptr(registerHandle(handle, identity)))
 }
 
-//export Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStop
-func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStop(
+//export Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStop
+func Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStop(
 	env *C.JNIEnv,
 	receiver C.jobject,
 	pointer C.jlong,
@@ -291,8 +291,8 @@ func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeSto
 	return wcs_tunnel_stop(unsafe.Pointer(uintptr(pointer)))
 }
 
-//export Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStatus
-func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStatus(
+//export Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStatus
+func Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeStatus(
 	env *C.JNIEnv,
 	receiver C.jobject,
 	pointer C.jlong,
@@ -315,8 +315,8 @@ func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeSta
 	return C.wcs_new_jstring(env, cPayload)
 }
 
-//export Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthBegin
-func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthBegin(
+//export Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthBegin
+func Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthBegin(
 	env *C.JNIEnv,
 	receiver C.jobject,
 ) C.jlong {
@@ -337,8 +337,8 @@ func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAut
 	return C.jlong(id)
 }
 
-//export Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthStatus
-func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthStatus(
+//export Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthStatus
+func Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthStatus(
 	env *C.JNIEnv,
 	receiver C.jobject,
 	pointer C.jlong,
@@ -355,8 +355,8 @@ func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAut
 	return newJNIString(env, payload)
 }
 
-//export Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthList
-func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthList(
+//export Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthList
+func Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthList(
 	env *C.JNIEnv,
 	receiver C.jobject,
 	pointer C.jlong,
@@ -381,8 +381,8 @@ func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAut
 	return newJNIString(env, payload)
 }
 
-//export Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthSelect
-func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthSelect(
+//export Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthSelect
+func Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthSelect(
 	env *C.JNIEnv,
 	receiver C.jobject,
 	pointer C.jlong,
@@ -420,8 +420,8 @@ func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAut
 	return C.wcs_new_jstring(env, cToken)
 }
 
-//export Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthCancel
-func Java_dev_ujhhgtg_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthCancel(
+//export Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthCancel
+func Java_dev_sherry_wcs_features_items_chat_ReadReceiptsTunnelNative_nativeAuthCancel(
 	env *C.JNIEnv,
 	receiver C.jobject,
 	pointer C.jlong,
