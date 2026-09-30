@@ -5,7 +5,11 @@ package dev.ujhhgtg.wekit.ui.content.m3
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.MenuDefaults
@@ -21,15 +25,20 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
 data class DropdownOption<T>(val value: T, val label: String)
+
+/** M3 菜单行的固定高度，用于把弹窗限制在若干行内并开启滚动。 */
+private const val MENU_ITEM_HEIGHT_DP = 48
 
 @Composable
 fun <T> ExpressiveOptionDropdown(
     expanded: Boolean,
     value: T,
     options: List<DropdownOption<T>>,
+    maxVisibleItems: Int = 6,
     onDismissRequest: () -> Unit,
     onValueChange: (T) -> Unit,
 ) {
@@ -37,14 +46,20 @@ fun <T> ExpressiveOptionDropdown(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
     ) {
-        DropdownMenuGroup(shapes = MenuDefaults.groupShapes()) {
-            options.forEachIndexed { index, option ->
-                SelectableDropdownMenuItem(
-                    selected = option.value == value,
-                    onClick = { onValueChange(option.value) },
-                    text = { Text(option.label) },
-                    shapes = MenuDefaults.itemShape(index, options.size),
-                )
+        Column(
+            Modifier
+                .heightIn(max = (MENU_ITEM_HEIGHT_DP * maxVisibleItems).dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            DropdownMenuGroup(shapes = MenuDefaults.groupShapes()) {
+                options.forEachIndexed { index, option ->
+                    SelectableDropdownMenuItem(
+                        selected = option.value == value,
+                        onClick = { onValueChange(option.value) },
+                        text = { Text(option.label) },
+                        shapes = MenuDefaults.itemShape(index, options.size),
+                    )
+                }
             }
         }
     }
