@@ -1,7 +1,7 @@
-# WeKit 翻译贡献指南
+# WcS 翻译贡献指南
 
-WeKit 使用英语作为源语言，并维护简体中文和繁体中文翻译。项目通过
-[Hosted Weblate](https://hosted.weblate.org/projects/wekit/wekit/) 接收社区翻译；GitHub
+WcS 使用英语作为源语言，并维护简体中文和繁体中文翻译。项目通过
+[Hosted Weblate](https://hosted.weblate.org/projects/wcs/wcs/) 接收社区翻译；GitHub
 `dev` 分支始终是最终源代码和资源目录的权威来源。
 
 ## 支持的语言与文件
@@ -57,6 +57,6 @@ git diff --check
 
 ## 许可与署名
 
-提交的翻译作为 WeKit 项目贡献，按仓库的 GPLv3 许可证发布；本项目不要求单独签署翻译
+提交的翻译作为 WcS 项目贡献，按仓库的 GPLv3 许可证发布；本项目不要求单独签署翻译
 CLA。已接受贡献的译者可以在 [`TRANSLATORS.md`](TRANSLATORS.md) 中添加自愿公开的名称
 和个人主页，不需要提供私人邮箱。通用术语请参阅 [`GLOSSARY.md`](GLOSSARY.md)。

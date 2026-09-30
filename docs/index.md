@@ -1,10 +1,10 @@
-# WeKit
+# WcS
 
-本网站对应 WeKit 开发版，功能与设置以当前开发代码为准。
+本网站对应 WcS 开发版，功能与设置以当前开发代码为准。
 
-WeKit 是一个功能丰富的微信增强模块, 支持通过 Xposed 框架或 Zygisk 模块加载, 提供大量微信增强功能。
+WcS 是一个功能丰富的微信增强模块, 支持通过 Xposed 框架或 Zygisk 模块加载, 提供大量微信增强功能。
 
-[![CI 状态](https://github.com/Ujhhgtg/WeKit/actions/workflows/ci.yml/badge.svg)](https://github.com/Ujhhgtg/WeKit/actions/workflows/ci.yml)
+[![CI 状态](https://github.com/sherrys8/WCS/actions/workflows/ci.yml/badge.svg)](https://github.com/sherrys8/WCS/actions/workflows/ci.yml)
 
 ## 导航
 
@@ -15,7 +15,7 @@ WeKit 是一个功能丰富的微信增强模块, 支持通过 Xposed 框架或 
 - [❓ 常见问题](faq.md)
 - [🛠 开发指南](development/index.md)
 
-## 修改内容 (相比 [上游](https://github.com/cwuom/WeKit))
+## 修改内容 (相比 [上游](https://github.com/cwuom/WcS))
 
 - 添加 Auxiliary 与 NewMiko 目前公开源代码中的部分功能
 - 移除全部校验, 减少模块体积, 避免不必要性能开销
@@ -31,13 +31,13 @@ WeKit 是一个功能丰富的微信增强模块, 支持通过 Xposed 框架或 
 
 ## 联系
 
-[GitHub 仓库](https://github.com/Ujhhgtg/WeKit)
+[GitHub 仓库](https://github.com/sherrys8/WCS)
 
 [Telegram 超级群组](https://t.me/+7j5dJ6g16B43OWVl)
 
 ## 致谢
 
-[WeKit 上游](https://github.com/cwuom/WeKit)
+[WcS 上游](https://github.com/cwuom/WcS)
 
 [WAuxiliary](https://github.com/HdShare/WAuxiliary_Public)
 

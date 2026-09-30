@@ -1,19 +1,19 @@
 # ====================================================================
 # XPOSED ENTRY POINTS (Critical Startup)
 # ====================================================================
-Ldev/ujhhgtg/wekit/loader/entry/lxp/LxpHookEntry;
-Ldev/ujhhgtg/wekit/loader/entry/xp51/Xp51HookEntry;
+Ldev/sherry/wcs/loader/entry/lxp/LxpHookEntry;
+Ldev/sherry/wcs/loader/entry/xp51/Xp51HookEntry;
 
 # ====================================================================
 # CORE APIs & INTERNAL HOOKING INTERFACES
 # ====================================================================
-Ldev/ujhhgtg/wekit/features/api/core/WeAppMsgApi;
-Ldev/ujhhgtg/wekit/features/api/core/WeConversationApi;
-Ldev/ujhhgtg/wekit/features/api/core/WeDatabaseApi;
-Ldev/ujhhgtg/wekit/features/api/core/WeDatabaseListenerApi;
-Ldev/ujhhgtg/wekit/features/api/core/WeMessageApi;
-Ldev/ujhhgtg/wekit/features/api/core/WeServiceApi;
-Ldev/ujhhgtg/wekit/features/api/core/WeUnsafeApi;
-Ldev/ujhhgtg/wekit/features/api/net/WeNetSceneApi;
-Ldev/ujhhgtg/wekit/features/api/net/WePacketHelper;
-Ldev/ujhhgtg/wekit/features/api/net/listener/WePacketDispatcher;
+Ldev/sherry/wcs/features/api/core/WeAppMsgApi;
+Ldev/sherry/wcs/features/api/core/WeConversationApi;
+Ldev/sherry/wcs/features/api/core/WeDatabaseApi;
+Ldev/sherry/wcs/features/api/core/WeDatabaseListenerApi;
+Ldev/sherry/wcs/features/api/core/WeMessageApi;
+Ldev/sherry/wcs/features/api/core/WeServiceApi;
+Ldev/sherry/wcs/features/api/core/WeUnsafeApi;
+Ldev/sherry/wcs/features/api/net/WeNetSceneApi;
+Ldev/sherry/wcs/features/api/net/WePacketHelper;
+Ldev/sherry/wcs/features/api/net/listener/WePacketDispatcher;

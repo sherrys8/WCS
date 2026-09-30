@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "wekit-docs",
+  "name": "wcs-docs",
   "compatibility_date": "2026-09-05",
   "assets": {
     "directory": "./.vitepress/dist",
@@ -8,6 +8,6 @@
     "not_found_handling": "404-page"
   },
   "routes": [
-    { "pattern": "docs.wekit.ujhhgtg.dev", "custom_domain": true }
+    { "pattern": "docs.wcs.ujhhgtg.dev", "custom_domain": true }
   ]
 }

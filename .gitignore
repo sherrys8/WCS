@@ -41,7 +41,7 @@ local.properties
 
 /decrypted_wechat.db
 
-# Superpowers artifacts live in /home/ujhhgtg/coding/wcs_dev/superpowers (AGENTS.md there)
+# Superpowers artifacts live in /home/ujhhgtg/coding/wekit_dev/superpowers (AGENTS.md there)
 .superpowers/
 docs/superpowers/
 .worktrees/

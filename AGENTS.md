@@ -2,11 +2,12 @@
 
 ## Superpowers
 
-- All Superpowers workflow artifacts for WeKit (plans, specs/designs, SDD ledgers and
+- All Superpowers workflow artifacts for WcS (plans, specs/designs, SDD ledgers and
   reports, brainstorm sessions) are written, edited, and committed **only** in
   `~/coding/wekit_dev/superpowers` (its own git repo; read its `AGENTS.md` for layout and
   rules). Never create, edit, or commit `.superpowers/` or `docs/superpowers/` inside this
-  repo — those paths are gitignored here by design.
+  repo — those paths are gitignored here by design. (The host directory was NOT renamed by
+  the WCS rebrand; it still lives under its original name.)
 
 ## Build
 
@@ -28,11 +29,11 @@
   never modify or repack the signed output. There is no separate `zygisk build` command.
 - JDK 21
 - **Gradle does NOT build the Rust native lib.** `./gradlew assemble*` only packages whatever
-  prebuilt `libwekit_native.so` already sits in `app/src/main/jniLibs/<abi>/`. Compiling
-  `app/src/main/rust/wekit-native` and refreshing those `.so` files is xtask's job
+  prebuilt `libwcs_native.so` already sits in `app/src/main/jniLibs/<abi>/`. Compiling
+  `app/src/main/rust/wcs-native` and refreshing those `.so` files is xtask's job
   (`task_build_native`), so **always go through `./x`** — running Gradle directly will silently ship
   a stale native lib. Requires a Rust toolchain + the Android NDK and its Rust targets;
-  `./x configure` regenerates `wekit-native/.cargo/config.toml` from the local NDK and is invoked
+  `./x configure` regenerates `wcs-native/.cargo/config.toml` from the local NDK and is invoked
   automatically by the build tasks.
 - `./x build --native-only` prepares both the application and Zygisk native libs in `jniLibs/`
 - AGP 9, Gradle version catalog in `gradle/libs.versions.toml`
@@ -43,7 +44,7 @@
 - `libs/common/annotation-scanner/` — KSP processors: source-subtype discovery for
   `BaseFeature`/`ExtensionPack` objects plus the `@AgentTool` scanner
 - `libs/common/libxposed-api/` — compileOnly LibXposed API interface stubs (compileOnly since they are provided by user's Xposed framework)
-- `libs/common/bsh/` — submodule: forked BeanShell interpreter with snapshot serialization (`BshSnapshot`, `BshSnapshotHelper`); snapshots are encrypted AST byte representations used by the WAuxiliary Xposed module; `app/src/main/java/dev/ujhhgtg/wekit/utils/BshSnapshotDecompiler.kt` — decompiles encrypted BeanShell snapshot files back into Java-like source code; the AES key was recovered from WAuxiliary's decompiled source
+- `libs/common/bsh/` — submodule: forked BeanShell interpreter with snapshot serialization (`BshSnapshot`, `BshSnapshotHelper`); snapshots are encrypted AST byte representations used by the WAuxiliary Xposed module; `app/src/main/java/dev/sherry/wcs/utils/BshSnapshotDecompiler.kt` — decompiles encrypted BeanShell snapshot files back into Java-like source code; the AES key was recovered from WAuxiliary's decompiled source
 - `libs/common/reflekt/` — submodule: reflection utility library (`dev.ujhhgtg.reflekt`)
 - `libs/common/stubs/` — compileOnly stubs for WeChat and Android hidden classes
 - `buildSrc/` — custom Gradle tasks: `GenerateMethodHashesTask` (`IResolveDex` `resolveDex` method MD5 cache), `GenerateNewFeaturesTask` (Kotlin source files added within 30 days of the HEAD commit → `NewFeatures.ADDED_AT_BY_SOURCE_KEY`; KSP joins source keys to discovered features for the 新功能 pseudo-category)
@@ -52,7 +53,7 @@
 
 ## Entry Points & Architecture
 
-- Xposed entry: `dev.ujhhgtg.wekit.loader.entry.lxp.LxpHookEntry` (libxposed 101 ~ 102) and legacy Xposed API (51+) entry: `dev.ujhhgtg.wekit.loader.entry.xp51.Xp51HookEntry`
+- Xposed entry: `dev.sherry.wcs.loader.entry.lxp.LxpHookEntry` (libxposed 101 ~ 102) and legacy Xposed API (51+) entry: `dev.sherry.wcs.loader.entry.xp51.Xp51HookEntry`
 - Unified flow: `UnifiedEntryPoint.entry()` → `StartupAgent.startup()` → `WeLauncher.init()`
 - Feature objects inherit `BaseFeature`, declare `technicalId`/resource/category metadata as
   override properties, and are auto-discovered by KSP from their source subtype at compile time
@@ -156,7 +157,7 @@
   database integration when they fall outside the qualifying conditions below; use the required
   build, static checks, and manual host validation instead.
 
-- TDD and new automated tests are allowed only when all core logic under test lives in WeKit,
+- TDD and new automated tests are allowed only when all core logic under test lives in WcS,
   has low coupling to WeChat, and does not depend on WeChat host classes, runtime state, UI, or
   behavior.
 - Do not add tests for simple logic that is easy to verify by static review, such as constants,
@@ -178,7 +179,7 @@
 
 ## Key Conventions
 
-- Package namespace: `dev.ujhhgtg.wekit`
+- Package namespace: `dev.sherry.wcs`
 - `app` is an application module, not a library and cannot be consumed by other projects. Do not
   use the `internal` visibility modifier in Kotlin production sources under `app/src/main`; use
   Kotlin's default implicit `public` visibility instead, because `internal` provides no meaningful
@@ -204,8 +205,8 @@
   default, e.g. `thisObject.reflekt().firstField { ... }` or `.getField(name, true)` — not
   hand-rolled `getDeclaredField`/`getMethod` traversal.
 - **NEVER use `Path.of` or `Files.writeString`.** These are frequent mistakes and
-  are unavailable on older Android API levels supported by WeKit. Convert strings through
-  `dev.ujhhgtg.wekit.utils.fs.asPath` from `utils/fs/PathUtils.kt` (for example,
+  are unavailable on older Android API levels supported by WcS. Convert strings through
+  `dev.sherry.wcs.utils.fs.asPath` from `utils/fs/PathUtils.kt` (for example,
   `pathString.asPath` or `base.asPath.resolve(child)`) and write text through
   `kotlin.io.path.writeText`.
 - No excessive defensiveness. When e.g. the hooked method and its argument types are
@@ -214,17 +215,17 @@
   Code that is correct does not need the defense; code that is wrong must throw loudly and get caught by either `HookUtils`' or code's own exception catcher, and these
   guards only swallow the exception and hide the real error. Defenses and guards that are reasonable should still exist.
 - The libraries `DexKit` and `reflekt` are NOT something you are familiar with. Do NOT hallucinate their API surfaces. Read their code before using them.
-- In Compose, `LocalContext` always means the platform context and is never localized by WeKit.
-  Use standard Compose resource APIs for composable text and `LocalWeKitLocalizedContext` only
-  for imperative WeKit resource reads. Mixed platform/resource operations must read both locals.
+- In Compose, `LocalContext` always means the platform context and is never localized by WcS.
+  Use standard Compose resource APIs for composable text and `LocalWcSLocalizedContext` only
+  for imperative WcS resource reads. Mixed platform/resource operations must read both locals.
   Use `LocalActivity.current` for Activity-only APIs, and never add AndroidX owner forwarding to
-  `WeKitLocaleProvider`.
+  `WcSLocaleProvider`.
 
 ## Material 3 UI Standards
 
 Design reference: `~/coding/InstallerX-Revived` — when unsure how a settings page should
 look or behave, read its `app/src/main/java/com/rosan/installer/ui/page/main/widget/setting/`.
-WeKit's ported widget family lives in `app/src/main/java/dev/ujhhgtg/wekit/ui/content/m3/`.
+WcS's ported widget family lives in `app/src/main/java/dev/sherry/wcs/ui/content/m3/`.
 
 ### Layout
 
@@ -271,8 +272,8 @@ Prefer these over raw Compose controls:
 
 ## Naming Conventions
 
-- 群聊: WeChat: chatroom; WeKit: group/群组
-- 朋友圈: WeChat: sns; WeKit: moment
+- 群聊: WeChat: chatroom; WcS: group/群组
+- 朋友圈: WeChat: sns; WcS: moment
 
 ## Context you need
 
@@ -281,7 +282,9 @@ Prefer these over raw Compose controls:
 
 ## CI
 
-- GitHub Actions: builds on push/PR to `master`/`dev`/`dev-sherry`。纯文档变更（`*.md`/`*.txt` 等 paths-ignore 列表内文件）不会触发 CI；修改 AGENTS.md 无需构建，不会跑 CI
+- GitHub Actions: builds on push/PR to `master`/`dev`/`dev-sherry`/`WCS`/`dev2`。纯文档变更（`*.md`/`*.txt` 等 paths-ignore 列表内文件）不会触发 CI；修改 AGENTS.md 无需构建，不会跑 CI
+- `WCS` 分支自 `7cede8ea` 起与 `dev-sherry` 同一条流水线（`build` + `upload-telegram`，其余 job skipped），实测 push 到新分支确实自动排 run
+- 仓库守卫 `github.repository == 'Ujhhgtg/WeKit-Dev'` 在 `a5a5c390` 统一改成 `sherrys8/WCS`。**但 GitHub 上的仓库仍叫 `sherrys8/WeKit`**（`git remote get-url origin` 可核对），所以这些守卫现在永远不匹配：`dex-test`/`build-extensions`/`extensions-changes`/`release-dex-test`/`release-ci` 继续 skipped，`build`/`upload-telegram` 只按 `refs/heads/*` 判断、不受影响。把远端仓库改名成 `WCS` 之后它们才会活过来
 - `build` job 自 `684cb3d2` 起**只构建 standard 一个 flavor**（`./x build --release --flavor standard`）：不带 `--flavor` 会走 `assembleRelease` 把 standard/legacy 各编一遍，实测 21m32s → 13m48s。legacy 需要时本地 `./x build --release --flavor legacy`
 - 产物只经 `upload-telegram` 发到 Telegram 频道；本 fork 的 `dev-sherry` **不建 GitHub release**（`gh release list` 只有 Extensions / Dex Test），AGENTS 旧述的「release named CI」在本分支不成立
 - APK 仍是双格式：同一个包可直接装为 APK，或改后缀 `.zip` 经 root 管理器装为 Zygisk 模块，flavor 只决定 libxposed 入口有无（standard 有、legacy 无），与双格式无关
@@ -321,7 +324,7 @@ Prefer these over raw Compose controls:
 - 全屏沉浸双保险：`showComposeDialog` fullScreen 分支增加 `decorView.systemUiVisibility`（LAYOUT_STABLE/FULLSCREEN/HIDE_NAVIGATION），配合 `setDecorFitsSystemWindows(false)` 确保内容背景延伸到顶部导航栏
 - 状态栏改为不沉浸（最终方案）：`showComposeDialog` fullScreen 分支移除 edge-to-edge（decorFits 恢复默认 true，内容从状态栏下方开始），状态栏/导航栏着色为页面背景色——`GroupSummaryDialog` 内用 `SideEffect` 将 `MaterialTheme.colorScheme.surface.toArgb()` 回写到 `DialogWindowProvider.window`，视觉上背景延伸到系统栏而内容不延伸；fullScreen 分支首帧先按深浅色给近似底色（dark=0xFF1C1B1F / light=WHITE）避免闪出宿主界面；仅群聊分析使用 fullScreen=true，其他弹窗不受影响
 - 群聊分析默认主题重写：`buildAnalysisPrompt` 深度分析分支改为「联想标题 + 内容概览 + 灵活模块」（主要内容/重点话题/整体氛围/有趣亮点/总结），模块标题与数量（4~6）由模型按聊天内容灵活组织；去掉旧 5 模块（话题总结/情绪评估/关键信息/人物倾向/回复方案）与【】固定格式
-- 群聊分析全屏切换 ComponentActivity：新增 `GroupSummaryActivity`（`ComponentActivity` + `@Keep`，经 ActivityProxy 借壳在宿主进程运行，数据库 API 可用）；`showGroupSummaryDialog` 改为 `startActivity`（`FLAG_ACTIVITY_NEW_TASK` + talker extra）；`GroupSummaryDialog` 改 internal、复用为先例 `ReadReceiptsSettingsActivity` 的 `WeKitLocaleProvider(InjectedHost)` + `ModuleTheme` 模式；onCreate 配置 window（DRAWS_SYSTEM_BAR_BACKGROUNDS、清 TRANSLUCENT、`SOFT_INPUT_ADJUST_RESIZE`、`isStatusBarContrastEnforced=false`、图标明暗随深浅色）；`SideEffect` 将 `surface.toArgb()` 回写 statusBar/navigationBarColor（背景视觉延伸、内容不延伸）；移除 GroupSummaryDialog 内 DialogWindowProvider 回写死代码；manifest 注册（非 exported，`Theme.Material3.DynamicColors.DayNight.NoActionBar`）；`showComposeDialog` 的 fullScreen 分支保留但已无调用方
+- 群聊分析全屏切换 ComponentActivity：新增 `GroupSummaryActivity`（`ComponentActivity` + `@Keep`，经 ActivityProxy 借壳在宿主进程运行，数据库 API 可用）；`showGroupSummaryDialog` 改为 `startActivity`（`FLAG_ACTIVITY_NEW_TASK` + talker extra）；`GroupSummaryDialog` 改 internal、复用为先例 `ReadReceiptsSettingsActivity` 的 `WcSLocaleProvider(InjectedHost)` + `ModuleTheme` 模式；onCreate 配置 window（DRAWS_SYSTEM_BAR_BACKGROUNDS、清 TRANSLUCENT、`SOFT_INPUT_ADJUST_RESIZE`、`isStatusBarContrastEnforced=false`、图标明暗随深浅色）；`SideEffect` 将 `surface.toArgb()` 回写 statusBar/navigationBarColor（背景视觉延伸、内容不延伸）；移除 GroupSummaryDialog 内 DialogWindowProvider 回写死代码；manifest 注册（非 exported，`Theme.Material3.DynamicColors.DayNight.NoActionBar`）；`showComposeDialog` 的 fullScreen 分支保留但已无调用方
 - 群聊分析默认主题精简：`buildAnalysisPrompt` else 分支 systemPrompt 整段替换为用户提供的单句提示词（「你是一个微信聊天分析助手……语言幽默生动、排版清晰、记录较少时简短回复」）；userPrompt 仅保留统计数据+聊天记录片段，去掉「请进行深度分析」结尾行
 - 编译修复：bd073e7b 因误删 GroupChatSummary.kt 的 `Color` import（时段 chips 的 `Color.Transparent` 在用）导致 build 失败，df2f3c74 补回
 - 清理死代码：depth=0（群聊日报）/depth=1（话题热度统计）提示词分支从未被调用（`generateReport` 硬编码 depth=2），删除两分支及 `buildAnalysisPrompt`/`aiGenerateReport` 的 `depth` 参数；`buildAnalysisPrompt` 现在只有自定义主题/默认两条路径
@@ -330,7 +333,7 @@ Prefer these over raw Compose controls:
 - 群聊分析后续迭代（二）：① 删除词云/高频词功能（`extractWords`/`commonStopWords`/`WordCloud`/`GroupStats.words`/`renderStatsReport` 高频词行/`ui_group_stat_words_title` 三语言全删），深度图表 7 模块 → 6 模块；② 提取消息默认值 1000 条（原 3000）、滑块上限 3000（原 1000）；③ 智能摘要卡片与 6 个深度图表卡的展开/折叠改用 `AnimatedVisibility` 过渡动画（`expandVertically`/`shrinkVertically` 默认 clip 裁剪，替代早前重叠方案）+ `fillMaxWidth`；④ 删除 `renderStatsReport` 末尾 Hchat 签名行
 - 群聊分析后续迭代（三）：① 折叠动画重叠修复——`expandVertically`/`shrinkVertically` 在 `verticalScroll` 容器内高度测量异常（无限高度约束），改外层卡片 `animateContentSize(tween(220))` 平滑高度 + 内容纯 `fadeIn`/`fadeOut`（不改变布局尺寸），动画保留且不重叠；② 布局切换新设计稿（标题「智能洞察」单行去日期、主卡片浅绿底+渐变描边、时段条浅灰容器+选中白色胶囊、结果空态占位卡）——随后按用户要求恢复标题区「分析报告+日期副标题」与主卡片原色（surfaceVariant + primary 35% 描边），仅保留时段条容器样式与结果空态占位卡；③ 新增 `ui_group_result_placeholder` 三语言（空态占位文案）
 - 文字转语音（A 套 `TextToSpeech`）入口拆分：`SwitchFeature` → `ClickableFeature`，新增两个独立入口开关偏好 `tts_entry_bubble`（长按消息气泡菜单）/`tts_entry_input_bar`（长按加号或发送按钮菜单），默认全部 `false`；`getMenuItems()`/`getActionItems()` 在 provider 内直接读偏好，故功能设置弹窗（`onClick` → `SegmentedColumn` + 两行 `SwitchWidget`）拨动即刻生效、无需重启微信；三语言新增 `tts_entry_group_title`/`tts_entry_bubble(+_description)`/`tts_entry_input_bar(+_description)` 5 条，`feature_text_to_speech_description` 改写为双入口说明
-- 文字转语音接入豆包后端：新增 `tts_backend`（0=配音魔方 / 1=豆包，默认魔方）+ `tts_doubao_cookie` + `tts_doubao_speaker`（与魔方 `tts_voice_id` 分开持久化，来回切后端各自记住所选）；主弹窗左下角新增 `Compare_arrows` 切换按钮显示当前后端名、点按即切。弹窗布局不随后端变化，只换数据——「系统音色」在豆包下标题改「豆包音色」并填 `DOUBAO_VOICES`（9 个内置 speaker id 常量表），「自定义音色」与「语气」两行在豆包下 `enabled = false` + 空 options（语气用 `description = if (isDoubao) emotion else null` 保持灰显当前值，因为 `DropDownMenuWidget` 的显示规则是 `description ?: selected?.label ?: "未选择"`）。`generateVoiceDoubao()` 用 OkHttp WebSocket 连 `wss://ws-samantha.doubao.com/samantha/audio/tts`：query 拼 `speaker`/`format=aac`/`speech_rate`/`pitch` + `aid=real_aid=497858`、`version_code=20800`、`pc_version=2.46.3` 等网页端指纹，`device_id`/`web_id`/`tea_uuid` 每次随机 19 位、`web_tab_id` 用 uuid4；握手头带 `Origin: https://www.doubao.com` + Chrome UA + `Cookie`；`onOpen` 发 `{"event":"text"}` 与 `{"event":"finish"}`，二进制帧即 ADTS AAC，落 `cacheDir/wekit_tts/doubao_*.aac` 后复用 `AudioUtils.anyToSilk` → `WeMessageApi.sendVoice`。设置弹窗 `showApiKeyDialog` 改名 `showSettingsDialog`，新增「豆包」组 Cookie 密码行
+- 文字转语音接入豆包后端：新增 `tts_backend`（0=配音魔方 / 1=豆包，默认魔方）+ `tts_doubao_cookie` + `tts_doubao_speaker`（与魔方 `tts_voice_id` 分开持久化，来回切后端各自记住所选）；主弹窗左下角新增 `Compare_arrows` 切换按钮显示当前后端名、点按即切。弹窗布局不随后端变化，只换数据——「系统音色」在豆包下标题改「豆包音色」并填 `DOUBAO_VOICES`（9 个内置 speaker id 常量表），「自定义音色」与「语气」两行在豆包下 `enabled = false` + 空 options（语气用 `description = if (isDoubao) emotion else null` 保持灰显当前值，因为 `DropDownMenuWidget` 的显示规则是 `description ?: selected?.label ?: "未选择"`）。`generateVoiceDoubao()` 用 OkHttp WebSocket 连 `wss://ws-samantha.doubao.com/samantha/audio/tts`：query 拼 `speaker`/`format=aac`/`speech_rate`/`pitch` + `aid=real_aid=497858`、`version_code=20800`、`pc_version=2.46.3` 等网页端指纹，`device_id`/`web_id`/`tea_uuid` 每次随机 19 位、`web_tab_id` 用 uuid4；握手头带 `Origin: https://www.doubao.com` + Chrome UA + `Cookie`；`onOpen` 发 `{"event":"text"}` 与 `{"event":"finish"}`，二进制帧即 ADTS AAC，落 `cacheDir/wcs_tts/doubao_*.aac` 后复用 `AudioUtils.anyToSilk` → `WeMessageApi.sendVoice`。设置弹窗 `showApiKeyDialog` 改名 `showSettingsDialog`，新增「豆包」组 Cookie 密码行
 - 豆包协议要点（参考实现见 Critical Context）：鉴权只在 WebSocket 握手期完成，9 个音色全部需要 `sessionid`+`sid_guard`+`uid_tt`（约 30 天）；结束判定不能照抄参考实现的 30 秒 `recv` 超时，改为「连续 2.5 秒无新增字节」或 `onClosing`/`code != 0` 收尾、30 秒兜底上限
 - CI 修复 `8fc0e276`：OkHttp **5.5.0** 的 `WebSocketListener.onFailure` 形参是 `Throwable` 而非 `IOException`，按后者覆写会报 `'onFailure' overrides nothing` 并使 `:app:compileStandardReleaseKotlin` 直接失败；`okio.ByteString`（`onMessage` 二进制重载）解析正常，属全仓首次引入 okio
 - 魔方/豆包切换冲突修复 `1d2f285a`：原 `LaunchedEffect(Unit)` 只在弹窗打开时取一次魔方音色，从豆包切回魔方时列表只剩 `DEFAULT_VOICES` 三条、`customVoices` 为空导致该行不可选，且残留的豆包 speaker id 会被魔方接口拒绝，而提示是写死的「请检查 API Key 与网络」；改为 `LaunchedEffect(backendMode)` 且仅魔方模式请求，回填前用 `backend` 偏好做竞态二次校验（`return@post`），所选不在魔方列表内时归位到首个音色；`generateVoice` 回调扩为 `(String?, String)`，把 HTTP 状态与服务端 `code`/`msg` 带进 toast
@@ -343,7 +346,8 @@ Prefer these over raw Compose controls:
   - 行过滤：屏蔽名单存偏好 `modify_text_display_host_blacklist`，采集时现读，**设置里增删即时生效**。键为 `R.id 条目名`（`a44`）或 `类简单名#条目名`（`bkp#a44`），输入端 `@`/`#`、`@id/`、完整包名都会归一（`normalizeEntry`）。默认 15 条由用户真机指定：`MsgTextView#bju`/`#bj2`/`#a4r`，`B#a44`/`#bkn`，`bkp#a44`/`#a46`/`#a4s`/`#a4r`/`#a48`/`#bjp`，`bkq#bkm`，`bkr#bkn`，`bks#bkn`，`bkl#a46`。**带类名才精确**：同一 id 被多个类复用，`bju` 既是可改的文件卡片标题 `MMNeat7extView`，也是该屏蔽的 `MsgTextView`，只写 id 会一起屏蔽。演进：`ce83340b` 硬编码 id 白名单 → `e4053af2` 硬编码「完整类名@id」黑名单（**因嵌套类 `javaClass.name` 是 `chatting_menu$B` 而名单写 `chatting_menu.B`，实际从不命中**）→ `50b18a27` 改为偏好可编辑 + 简单名匹配 → `99d61e54` 分隔符统一为 `#`
   - 三语言新增 `chat_modify_text_no_editable`/`_revert`/`_saved`/`_diag`，`feature_modify_text_message_display_description` 改写
 - 宿主文本定位真机结论（详见 Critical Context 同名条目）：文件卡片 `<title>` 在 `MMNeat7extView id=bju`、大小在 `MMTextView id=bj2`；引用消息菜单给的是正文叶子 View `MMNeat7extView id=bkl`，引用块是同行的兄弟 View，故编辑与重放都要上溯到「行根」
-- CI 单 flavor 化 `684cb3d2`（见 CI 节）；备份分支 `backup/dev-sherry-20260926` = `b02c2c79` 已推 `sherrys8/WeKit`（`backup/*` 不在 CI 分支过滤内，不触发构建）
+- CI 单 flavor 化 `684cb3d2`（见 CI 节）；备份分支 `backup/dev-sherry-20260926` = `b02c2c79` 已推 `sherrys8/WeKit`（远端仓库至今仍叫 `WeKit`；`backup/*` 不在 CI 分支过滤内，不触发构建）
+- **WCS 分支改名（彻底换皮）** `478398df`→`0d6a6589`→`a5a5c390`→批次 4：包名 `dev.ujhhgtg.wekit` → `dev.sherry.wcs`，品牌按 `wekit`→`wcs`、`WeKit`→`WcS`、`WEKIT`→`WCS`、`weKit`→`wcS` 四条规则全量替换。改动面：7 棵源码树 git mv（app main/standard/test、annotation-scanner src+bin、python-runtime-api、python-runtime runtime/kotlin+python 包、stubs）+ `app/schemas` 目录；`libs.versions.toml` 的 namespace 同时是 applicationId；两个 xposed 入口清单与 KSP services 文件；keep 规则；manifest taskAffinity；crate `wcs-native`/`wcs-llama`/`wcs-zygisk`、`libwcs_*.so`、go 模块目录、python 容器包 `wcs/`；xtask 与 `verify-dual-apk.py`；ci.yml 的 artifact/keystore/缓存路径与 job 守卫；`module.prop` 的 id/name/author；四个下载源与展示跳转 → `sherrys8/WCS`。全仓 `wekit` 残留只剩 `WeAgentDatabase` 迁移里的 `'WEKIT_ROUTER'`（历史数据值，故意保留）
 
 ### In Progress
 - 「修改文本消息显示」+ 表情 span 方案**已回退**：`9413da4d`（写回时继承原文的表情 span）装到真机后**模块无法注入微信**，`07fd425b` 单独 revert 掉它，保留可编辑名单 `50b18a27` 与 `#` 分隔符 `99d61e54`。被丢的提交留在本地 ref `backup/dev-sherry-20260927` = `9413da4d`。**未证实是 span 改动导致的注入失败**——若回退包仍无法注入，要往更早查（`b02c2c79` 的 auto-accept/`modifyContactRemark`、上游合并、或设备侧模块开关/版本）
@@ -373,15 +377,23 @@ Prefer these over raw Compose controls:
 4. 「修改文本消息显示」可编辑屏蔽名单 `50b18a27` + 分隔符 `#` 的 `99d61e54` 已推、CI 均绿：待真机确认名单确实生效且行集干净，再按 In Progress 条目删掉每行标注与失效的 `chat_modify_text_diag` 三语言串
 
 ## Critical Context
-- 本克隆 `origin` = `https://github.com/sherrys8/WeKit.git`，`dev-sherry` 最新 commit：`07fd425b`（revert 表情 span；备份 ref `backup/dev-sherry-20260927` = `9413da4d`，更早的远端备份分支 `backup/dev-sherry-20260926` = `b02c2c79`）。另有**分叉的** `sherrys7/WeKit:dev-sherry`（不是本克隆的 remote，需 `git fetch <url> dev-sherry` 才能比对），2026-09-26 实测它比本地多 12 个提交、本地多 147 个，且 sherrys8 对其只有读权限，**不要**把它的 SHA 当成本分支的远端状态
+- **WCS 改名留下的运行期耦合（真机/资产侧，CI 绿了也不代表没事）**：
+  - `applicationId` 由 `dev.ujhhgtg.wekit` 变成 `dev.sherry.wcs`（`libs.versions.toml` 的 namespace 就是 applicationId）→ 装上去就是**另一个应用**：MMKV 偏好、Room 库、LSPosed 模块开关与作用域、通知渠道全部不继承，必须先重新启用模块并重新配置
+  - `wcs-zygisk/template/module.prop` 的 `id=wcs_zygisk` → KernelSU/APatch 里是**新模块**，旧的 `wekit_zygisk` 条目不会自动消失，需手动卸载，否则两个模块同时注入
+  - 四个下载源现在指向 `sherrys8/WCS`，而该仓库**尚不存在** → 应用内自动更新（`AppUpdater`）、扩展包索引（`ExtensionPacks`）、云端 Dex 报告（`CloudDexResolver`）、贡献者 API 全部 404。要么建仓库并镜像 `CI`/`Extensions`/`Dex-Test` 三个 release 的资产，要么把这几个 URL 改回 `Ujhhgtg/WeKit`
+  - 资产/契约名跟着变了，镜像时必须同步重命名，否则对不上：`wcs-python-sdk.zip`、python 容器内的包目录 `wcs/`（`PythonRuntimeArchive`/`PythonRuntimePack` 现在找 `wcs/__init__.py`）、`update.json` 的 versionCode 序列、`WcS-<versionCode>-<versionName>-release.zip` 这个 Zygisk 包名（仓库里没有任何生产者用它，这条链路本来就断）
+  - `PythonPluginManifest.minWcSVersionCode`（原 `minWeKitVersionCode`）是**序列化键**，而 `PythonPluginManager` 的 Json 配置是 `ignoreUnknownKeys = false` → 用户手写的旧 `plugin.json` 现在直接解析失败（不是降级，是抛错）。要兼容只需给该字段加 `@SerialName("minWeKitVersionCode")`
+  - 写进宿主查询/共享存储的字符串也换了前缀：聚合会话的 `wcs_folder_`（`ConversationAggregation.FOLDER_PREFIX`、`ConversationGrouping`/`HideContactsSql` 的子串守卫）、插件目录 `_wcs_plugins`、`Downloads/wcs/`、`filesDir/wcs-extensions/`、日志目录 `Android/data/com.tencent.mm/WcS/logs/`、logcat tag 恒为 `WcS`。旧的对应目录/记录不会被新构建识别，需真机逐项确认
+  - 唯一**故意没改**的品牌串：`WeAgentDatabase` 迁移 SQL 里的 `'WEKIT_ROUTER'`——那是历史数据值，改名会让迁移指向一个从未写入过的值
+- 本克隆 `origin` = `https://github.com/sherrys8/WeKit.git`（**远端仓库名至今仍是 `WeKit`，改名只发生在分支与工作树内**），`dev-sherry` 最新 commit：`07fd425b`（revert 表情 span；备份 ref `backup/dev-sherry-20260927` = `9413da4d`，更早的远端备份分支 `backup/dev-sherry-20260926` = `b02c2c79`）。另有**分叉的** `sherrys7/WeKit:dev-sherry`（不是本克隆的 remote，需 `git fetch <url> dev-sherry` 才能比对），2026-09-26 实测它比本地多 12 个提交、本地多 147 个，且 sherrys8 对其只有读权限，**不要**把它的 SHA 当成本分支的远端状态
 - **微信气泡文本宿主分布（真机 dump 结论，做同类功能必读）**：
   - `com.tencent.mm.ui.widget.MMNeat7extView` 是自绘文本 View（微信把 `TextView` 的 `T` 换成 `7`），**既不是 `TextView` 子类也不是 `ViewGroup`**，`is TextView` 与按名含 "Text" 匹配都拿不到它；判定规则用「类名去掉数字位后含 `extView`」。它的文本在自己的 CharSequence 字段上，写字段 + `invalidate()` **确实会重绘**（文件卡片 `<title>` = `id=bju` 已验证）
   - 文件卡片：文件名 `MMNeat7extView id=bju`，大小 `MMTextView id=bj2`
   - 长按菜单回调给的 `args[1]` **可能只是正文叶子 View**（引用消息即 `MMNeat7extView id=bkl`，其子树就它一个），引用块等同行兄弟 View 不在其中；要覆盖整条气泡必须向上爬到「行根」（父级是 `AdapterView` 或类名含 `RecyclerView` 即停，限 6 跳），且**编辑与重绑重放要用同一个根**
   - 反射父类字段若不在 `android.`/`androidx.` 处停下，会扫到 `android.view.View` 自带成员（`handleResultReason` 值就是 `handled by onTouchEvent`、`mContentDescription`、`mTransitionName`、`mAllowedHandwriting*PackageName` 等），造出假的可编辑行，`mContentDescription` 还会与正文重复
   - 纯文本、拍一拍（PAT）气泡的正文**不在子 TextView 上**，而在条目 View 自己的 CharSequence 字段 + 同名 setter 上；只遍历 TextView 会静默改不到它们
-- **日志与产物获取**：`WeLogger` 的 logcat tag 恒为 `WeKit`（`BuildConfig.TAG`），功能名只是消息前缀（`Log.i(TAG, "$tag: $msg")`），按功能名过滤 tag 搜不到；文件日志在 `/storage/emulated/0/Android/data/com.tencent.mm/WeKit/logs/wekit-<日期>.log`。本分支 APK 只经 Telegram 下发，GitHub 上没有 "CI" release
-- 豆包 TTS 参考实现在仓库根的 `doubao-tts/`：它是**未被本仓库跟踪的嵌套浅克隆**（自带 `.git`，源 `https://github.com/sherrys7/doubao-tts`，仅 1 个 commit），`git add -A` 只会写入 gitlink 而不会收进文件内容；其中 `_decode.py`/`_serve.py`/`doubao-voice-audition.js` 连内层仓库也未跟踪（本地自写的试听面板与 ADTS 帧校验工具）。实测约束：跨域 `Origin` 会被握手层直接拒（close 1006，症状酷似风控，但原生客户端自设 `Origin` 头不受此限）；约 6 次快速请求触发服务端 `710022002` block；`speech_rate` 量纲未验证，故 WeKit 侧固定传 0；README 自述为逆向工程、仅供学习研究，失效时先看 Cookie 是否过期（约 30 天）
+- **日志与产物获取**：`WeLogger` 的 logcat tag 恒为 `WcS`（`BuildConfig.TAG`），功能名只是消息前缀（`Log.i(TAG, "$tag: $msg")`），按功能名过滤 tag 搜不到；文件日志在 `/storage/emulated/0/Android/data/com.tencent.mm/WcS/logs/wcs-<日期>.log`。本分支 APK 只经 Telegram 下发，GitHub 上没有 "CI" release
+- 豆包 TTS 参考实现在仓库根的 `doubao-tts/`：它是**未被本仓库跟踪的嵌套浅克隆**（自带 `.git`，源 `https://github.com/sherrys7/doubao-tts`，仅 1 个 commit），`git add -A` 只会写入 gitlink 而不会收进文件内容；其中 `_decode.py`/`_serve.py`/`doubao-voice-audition.js` 连内层仓库也未跟踪（本地自写的试听面板与 ADTS 帧校验工具）。实测约束：跨域 `Origin` 会被握手层直接拒（close 1006，症状酷似风控，但原生客户端自设 `Origin` 头不受此限）；约 6 次快速请求触发服务端 `710022002` block；`speech_rate` 量纲未验证，故 WcS 侧固定传 0；README 自述为逆向工程、仅供学习研究，失效时先看 Cookie 是否过期（约 30 天）
 - 豆包 Cookie 是等价于账号登录态的凭据（`sessionid`/`sid_guard`/`uid_tt`），存于 `WePrefs` 的 MMKV 明文偏好中，无 cryptKey；设置项以 password 模式输入，日志不打印其内容
 - 本仓库提交身份是**仓库级**覆盖：`sherrys8 <323482072+sherrys8@users.noreply.github.com>`；全局 `~/.gitconfig` 是 `sherrys7` / `sherrys7@users.noreply.github.com`（2026-09-26 实测，旧述的 `sherrys7@qq.com` 已过期）。**推送凭据**：github.com 被全局 `credential.https://github.com.helper` 指定为 `gh auth git-credential`，即走已登录的 **sherrys8** gh token；系统级 `credential.helper=manager`（GCM）只对其它主机生效。另一克隆 `D:\1\ZcodeData\dev-sherry\repo` 配的是 sherrys7 + 公司域名邮箱 `monkeycode-ai@chaitin.com`，公开历史中已出现上百次，未做处理，提交前先看 `git config user.email`
 - 本分支 `dex-test` job 的 `Enforce Dex resolution result` 长期失败（1 个 `UNEXPECTED_FAILURE` + 3 个 `BLOCKED`），`build`/`build_zygisk`/`upload-telegram` 正常；纯逻辑改动撞到这个红叉不必追

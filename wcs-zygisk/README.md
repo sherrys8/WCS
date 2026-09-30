@@ -1,11 +1,11 @@
-# WeKit Zygisk Module
+# WcS Zygisk Module
 
-WeKit can be loaded through Zygisk on a per-Android-user, per-package basis.
+WcS can be loaded through Zygisk on a per-Android-user, per-package basis.
 The module is disabled for every process immediately after installation.
 
 ## KernelSU WebUI
 
-Open the WeKit module page in KernelSU to manage injection targets.
+Open the WcS module page in KernelSU to manage injection targets.
 
 - The first page open scans every Android user and adds every installed package
   matching `PackageNames.isWeChat` (`com.tencent.mm*`) as a disabled target.
@@ -18,12 +18,12 @@ Open the WeKit module page in KernelSU to manage injection targets.
   the current result, preserves switches for surviving rows, and disables newly
   discovered rows. The WebUI intentionally has no manual add or delete action.
 
-The persisted target list is `/data/adb/wekit_zygisk/injection-targets.tsv`. Module
+The persisted target list is `/data/adb/wcs_zygisk/injection-targets.tsv`. Module
 updates retain it; uninstall removes it without touching app data.
 
 ## Installation and updates
 
-Every WeKit APK is also a Zygisk module ZIP. Rename `.apk` to `.zip`, install it
+Every WcS APK is also a Zygisk module ZIP. Rename `.apk` to `.zip`, install it
 from your root manager, select the target instances in the WebUI, and restart as
 required by the manager. APK installation and module installation update their
 respective deployments separately. Do not enable both injection modes for the
