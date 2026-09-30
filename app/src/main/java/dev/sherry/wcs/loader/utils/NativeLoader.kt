@@ -63,7 +63,7 @@ object NativeLoader {
             ).also {
                 require(it.isDirectory) { "installed WcS native-library directory is unavailable: $it" }
             }
-            for (name in listOf("androidx.graphics.path", "dexkit", "wekit_native")) {
+            for (name in listOf("androidx.graphics.path", "dexkit", "wcs_native")) {
                 System.load(installedNativeLibrary(name).absolutePath)
             }
         } else {

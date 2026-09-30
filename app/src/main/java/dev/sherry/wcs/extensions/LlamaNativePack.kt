@@ -16,7 +16,7 @@ class LlamaPackNotInstalledException(message: String) : RuntimeException(message
 
 /**
  * llama-native 扩展包:arm64 zip,安装时把两个变体都解到 version 目录——
- * libwekit_llama.so(CPU/Vulkan)与 libwekit_llama_opencl.so(额外含 OpenCL),
+ * libwcs_llama.so(CPU/Vulkan)与 libwcs_llama_opencl.so(额外含 OpenCL),
  * 父进程只加载基础变体提供控制器 JNI，每个 app_process 子进程独立加载所选变体。
  */
 object LlamaNativePack : ExtensionPack {
@@ -28,8 +28,8 @@ object LlamaNativePack : ExtensionPack {
     override val icon: ImageVector = MaterialSymbols.Outlined.Memory
 
     private const val ABI = "arm64-v8a"
-    private const val LIB = "libwekit_llama.so"
-    private const val LIB_OPENCL = "libwekit_llama_opencl.so"
+    private const val LIB = "libwcs_llama.so"
+    private const val LIB_OPENCL = "libwcs_llama_opencl.so"
 
     private val baseDir: File
         get() = File(HostInfo.application.filesDir, "wcs-extensions/$id")

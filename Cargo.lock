@@ -3370,7 +3370,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 
 [[package]]
-name = "wekit-llama"
+name = "wcs-llama"
 version = "0.1.0"
 dependencies = [
  "axum 0.8.9",
@@ -3387,7 +3387,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "wekit-native"
+name = "wcs-native"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -3408,11 +3408,11 @@ dependencies = [
  "symphonia",
  "tokio",
  "webm-iterable",
- "wekit-read-receipts-server",
+ "wcs-read-receipts-server",
 ]
 
 [[package]]
-name = "wekit-read-receipts-server"
+name = "wcs-read-receipts-server"
 version = "0.1.0"
 dependencies = [
  "axum 0.8.9",
@@ -3431,7 +3431,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "wekit-zygisk"
+name = "wcs-zygisk"
 version = "0.1.0"
 dependencies = [
  "anyhow",

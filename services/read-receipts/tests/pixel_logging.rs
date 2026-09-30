@@ -16,7 +16,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tower::ServiceExt;
-use wekit_read_receipts_server::{
+use wcs_read_receipts_server::{
     AppState, RouteProfile, ServerConfig, build_router, open_database,
 };
 
@@ -24,7 +24,7 @@ struct TestDirectory(PathBuf);
 
 impl TestDirectory {
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!("wekit-pixel-logging-{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("wcs-pixel-logging-{}", std::process::id()));
         fs::create_dir(&path).unwrap();
         Self(path)
     }

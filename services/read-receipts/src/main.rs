@@ -10,7 +10,7 @@ use std::io::Write;
 use std::sync::{Mutex, OnceLock};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tracing::{error, info};
-use wekit_read_receipts_server::{
+use wcs_read_receipts_server::{
     AppState, RouteProfile, ServerConfig, build_router, compute_msg_id, initialize_database,
 };
 
@@ -604,7 +604,7 @@ async fn route_command(
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::io::IsTerminal;
     if std::env::args().any(|argument| argument == "--help" || argument == "-h") {
-        println!("WeKit read receipts reference server");
+        println!("WcS read receipts reference server");
         println!();
         println!("Configuration is read from environment variables:");
         println!("  BIND_ADDR              bind IP address (default: 0.0.0.0)");

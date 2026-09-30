@@ -1,13 +1,13 @@
-//! WeKit xtask — build automation for the WeKit Android project.
+//! WcS xtask — build automation for the WcS Android project.
 //!
 //! Usage: cargo xtask <COMMAND>
 //!
-//!   configure            Regenerate wekit-native/.cargo/config.toml from the local NDK.
+//!   configure            Regenerate wcs-native/.cargo/config.toml from the local NDK.
 //!   build [OPTIONS]      Build the project (default: full Android debug build via Gradle).
 //!   cloudflared-build    Build the embedded cloudflared bridge for Android.
 //!   check [OPTIONS]      Run `cargo check` on the native library.
 //!   clippy [OPTIONS]     Run `cargo clippy` on the native library.
-//!   dex-test [OPTIONS]   Resolve WeKit DexKit targets against desktop APKs.
+//!   dex-test [OPTIONS]   Resolve WcS DexKit targets against desktop APKs.
 //!   dex-report-diff      Compare member signatures in existing per-APK reports.
 //!   dex-test-ci          Prepare APK sources and mutable Dex-Test Release assets.
 //!   i18n-check           Validate the Android English and Chinese resource catalogs.
@@ -67,13 +67,13 @@ struct GoAndroidTarget {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ApkNativeBuildStep {
     Configure,
-    WeKitNative,
+    WcSNative,
     ZygiskNative,
 }
 
 const APK_NATIVE_BUILD_STEPS: &[ApkNativeBuildStep] = &[
     ApkNativeBuildStep::Configure,
-    ApkNativeBuildStep::WeKitNative,
+    ApkNativeBuildStep::WcSNative,
     ApkNativeBuildStep::ZygiskNative,
 ];
 
@@ -89,14 +89,14 @@ static ABI_TABLE: &[AbiSpec] = &[AbiSpec {
 /// ABIs included in release APKs (the default build targets).
 static RELEASE_ABIS: &[&str] = &["arm64-v8a"];
 
-const ZYGISK_CARGO_PACKAGE: &str = "wekit-zygisk";
-const ZYGISK_MODULE_ID: &str = "wekit_zygisk";
+const ZYGISK_CARGO_PACKAGE: &str = "wcs-zygisk";
+const ZYGISK_MODULE_ID: &str = "wcs_zygisk";
 // ── CLI ────────────────────────────────────────────────────────────────────────
 
 #[derive(Parser)]
 #[command(
     name = "cargo xtask",
-    about = "WeKit build automation",
+    about = "WcS build automation",
     long_about = None,
     disable_help_subcommand = true,
 )]
@@ -107,7 +107,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Regenerate wekit-native/.cargo/config.toml from the local NDK.
+    /// Regenerate wcs-native/.cargo/config.toml from the local NDK.
     Configure,
 
     /// Build the project.
@@ -245,7 +245,7 @@ fn print_banner() {
     | |/ |/ /  __/ /| |/ / /_
     |__/|__/\___/_/ |_/_/\__/
 
-[WeKit] WeChat, now with superpowers
+[WcS] WeChat, now with superpowers
 "#
     );
 }
@@ -284,17 +284,17 @@ pub(crate) fn workspace_root() -> PathBuf {
         }
         dir = dir
             .parent()
-            .unwrap_or_else(|| panic!("workspace root not found; run from inside the WeKit repo"))
+            .unwrap_or_else(|| panic!("workspace root not found; run from inside the WcS repo"))
             .to_owned();
     }
 }
 
 fn native_crate_dir(root: &Path) -> PathBuf {
-    root.join("app/src/main/rust/wekit-native")
+    root.join("app/src/main/rust/wcs-native")
 }
 
 fn cloudflared_bridge_dir(root: &Path) -> PathBuf {
-    root.join("app/src/main/go/wekit-cloudflared")
+    root.join("app/src/main/go/wcs-cloudflared")
 }
 
 fn jni_libs_dir(root: &Path) -> PathBuf {
@@ -326,7 +326,7 @@ fn proot_cache_key(root: &Path, ndk: &Path) -> Result<String> {
     let patch = fs::read(proot_patch_path(root))?;
     let build_script = fs::read(proot_source_dir(root).join("tools/build-static-aarch64.sh"))?;
     let mut hasher = Sha256::new();
-    hasher.update(b"wekit-proot-cache-v1\0");
+    hasher.update(b"wcs-proot-cache-v1\0");
     hasher.update(PROOT_COMMIT.as_bytes());
     hasher.update(ndk.to_string_lossy().as_bytes());
     hasher.update(MIN_SDK.to_le_bytes());
@@ -375,7 +375,7 @@ fn chroot_cleanup_artifact_paths(root: &Path, spec: &AbiSpec) -> (PathBuf, PathB
 }
 
 fn zygisk_dir(root: &Path) -> PathBuf {
-    root.join("wekit-zygisk")
+    root.join("wcs-zygisk")
 }
 
 // ── ABI resolution ─────────────────────────────────────────────────────────────
@@ -551,22 +551,22 @@ fn task_configure() -> Result<()> {
 
     let out = out.trim_end_matches('\n').to_owned() + "\n";
 
-    // Write for wekit-native
+    // Write for wcs-native
     let config_path = native_crate_dir(&root).join(".cargo/config.toml");
     fs::create_dir_all(config_path.parent().unwrap())?;
     fs::write(&config_path, &out)
         .with_context(|| format!("failed to write {}", config_path.display()))?;
     println!("configure: wrote {}", config_path.display());
 
-    // Write for wekit-zygisk (same linker config + extra linker flags for symbol visibility)
+    // Write for wcs-zygisk (same linker config + extra linker flags for symbol visibility)
     let zygisk_config_path = zygisk_dir(&root).join("native/.cargo/config.toml");
     fs::create_dir_all(zygisk_config_path.parent().unwrap())?;
     fs::write(&zygisk_config_path, &out)
         .with_context(|| format!("failed to write {}", zygisk_config_path.display()))?;
     println!("configure: wrote {}", zygisk_config_path.display());
 
-    // Write for wekit-llama (same linker config; llama-cpp-sys-2's build.rs drives its own cmake)
-    let llama_config_path = root.join("app/src/main/rust/wekit-llama/.cargo/config.toml");
+    // Write for wcs-llama (same linker config; llama-cpp-sys-2's build.rs drives its own cmake)
+    let llama_config_path = root.join("app/src/main/rust/wcs-llama/.cargo/config.toml");
     fs::create_dir_all(llama_config_path.parent().unwrap())?;
     fs::write(&llama_config_path, &out)
         .with_context(|| format!("failed to write {}", llama_config_path.display()))?;
@@ -663,7 +663,7 @@ fn task_prepare_apk_native_inputs(abi_args: &[String], save_symbols: bool) -> Re
     for step in apk_native_build_steps() {
         match step {
             ApkNativeBuildStep::Configure => task_configure()?,
-            ApkNativeBuildStep::WeKitNative => task_build_native(abi_args)?,
+            ApkNativeBuildStep::WcSNative => task_build_native(abi_args)?,
             ApkNativeBuildStep::ZygiskNative => {
                 build_zygisk_native(&workspace_root(), abi_args, save_symbols)?
             }
@@ -850,9 +850,9 @@ fn task_build_native(abi_args: &[String]) -> Result<()> {
         let so_src = root
             .join("target")
             .join(spec.cargo_triple)
-            .join("release/libwekit_native.so");
+            .join("release/libwcs_native.so");
         let so_dst_dir = jni_libs_dir(&root).join(spec.android_name);
-        let so_dst = so_dst_dir.join("libwekit_native.so");
+        let so_dst = so_dst_dir.join("libwcs_native.so");
 
         fs::create_dir_all(&so_dst_dir)
             .with_context(|| format!("could not create {}", so_dst_dir.display()))?;
@@ -961,7 +961,7 @@ pub(crate) fn task_build_cloudflared(abi_args: &[String]) -> Result<()> {
         let build_dir = root.join("target/cloudflared").join(spec.android_name);
         fs::create_dir_all(&build_dir)
             .with_context(|| format!("could not create {}", build_dir.display()))?;
-        let so_src = build_dir.join("libwekit_cloudflared.so");
+        let so_src = build_dir.join("libwcs_cloudflared.so");
         println!(
             "cloudflared-build: {} (android/{})",
             spec.android_name, target.arch
@@ -1123,7 +1123,7 @@ fn build_zygisk_native(root: &Path, abi_names: &[String], save_symbols: bool) ->
             let stage = symbols.join("files").join(abi.android_name);
             copy_if_changed(&source, &stage.join(&name))?;
             let commit = git_output(root, &["rev-parse", "--short=8", "HEAD"])?;
-            let archive = symbols.join(format!("WeKit-{commit}-{}-symbols.zip", abi.android_name));
+            let archive = symbols.join(format!("WcS-{commit}-{}-symbols.zip", abi.android_name));
             write_zip_from_directory(&stage, &archive)?;
             println!("build(symbols): {}", archive.display());
         }
@@ -1141,8 +1141,8 @@ fn validate_module_apk(path: &Path) -> Result<()> {
         "customize.sh",
         "META-INF/com/google/android/update-binary",
         "META-INF/com/google/android/updater-script",
-        "lib/arm64-v8a/libwekit_zygisk.so",
-        "lib/arm64-v8a/libwekit_native.so",
+        "lib/arm64-v8a/libwcs_zygisk.so",
+        "lib/arm64-v8a/libwcs_native.so",
     ] {
         let mut entry = archive.by_name(name).with_context(|| {
             format!(
@@ -1273,8 +1273,8 @@ fn install_zygisk_apk(
 ) -> Result<()> {
     let manager = validate_root_manager(manager)?;
     // The bytes are the signed APK; only the device-side extension changes.
-    let remote_zip = format!("/data/local/tmp/wekit-module-{}.zip", std::process::id());
-    let remote_script = "/data/local/tmp/install_wekit_zygisk.sh";
+    let remote_zip = format!("/data/local/tmp/wcs-module-{}.zip", std::process::id());
+    let remote_script = "/data/local/tmp/install_wcs_zygisk.sh";
     let script = zygisk_dir(root).join("scripts/install_module.sh");
     run_adb(
         root,
@@ -1410,15 +1410,15 @@ mod tests {
     fn test_git_repo() -> TestGitRepo {
         static NEXT_ID: AtomicU64 = AtomicU64::new(0);
         let path = env::temp_dir().join(format!(
-            "wekit-cloudflared-pin-test-{}-{}",
+            "wcs-cloudflared-pin-test-{}-{}",
             std::process::id(),
             NEXT_ID.fetch_add(1, Ordering::Relaxed),
         ));
         fs::create_dir(&path).unwrap();
         for args in [
             vec!["init", "-q"],
-            vec!["config", "user.name", "WeKit Test"],
-            vec!["config", "user.email", "wekit-test@example.invalid"],
+            vec!["config", "user.name", "WcS Test"],
+            vec!["config", "user.email", "wcs-test@example.invalid"],
         ] {
             assert!(
                 Command::new("git")
@@ -1462,12 +1462,12 @@ mod tests {
     }
 
     #[test]
-    fn apk_native_build_plan_runs_configure_before_wekit_native() {
+    fn apk_native_build_plan_runs_configure_before_wcs_native() {
         assert_eq!(
             apk_native_build_steps(),
             &[
                 ApkNativeBuildStep::Configure,
-                ApkNativeBuildStep::WeKitNative,
+                ApkNativeBuildStep::WcSNative,
                 ApkNativeBuildStep::ZygiskNative,
             ],
         );
@@ -1538,7 +1538,7 @@ mod tests {
     fn proot_cache_requires_matching_inputs_and_artifacts() {
         static NEXT_CACHE_ID: AtomicU64 = AtomicU64::new(0);
         let root = env::temp_dir().join(format!(
-            "wekit-proot-cache-test-{}-{}",
+            "wcs-proot-cache-test-{}-{}",
             std::process::id(),
             NEXT_CACHE_ID.fetch_add(1, Ordering::Relaxed),
         ));

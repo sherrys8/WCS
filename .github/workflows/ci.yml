@@ -40,7 +40,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'workflow_dispatch' && github.repository == 'Ujhhgtg/WeKit-Dev') ||
+      (github.event_name == 'workflow_dispatch' && github.repository == 'sherrys8/WCS') ||
       (
         !startsWith(github.event.head_commit.message, '[skip ci]') && 
         (
@@ -50,7 +50,7 @@ jobs:
           github.ref == 'refs/heads/WCS' ||
           github.ref == 'refs/heads/dev2' ||
           github.event_name == 'pull_request' ||
-          (github.repository == 'Ujhhgtg/WeKit-Dev' && github.ref == 'refs/heads/master')
+          (github.repository == 'sherrys8/WCS' && github.ref == 'refs/heads/master')
         )
       )
     steps:
@@ -123,22 +123,22 @@ jobs:
       - name: Validate build tools, DEX reader, and i18n catalogs
         run: |
           cargo test -p xtask --bin xtask
-          cargo test -p wekit-zygisk --lib
+          cargo test -p wcs-zygisk --lib
           ./x i18n-check
 
       - name: Decode keystore
         if: github.event_name != 'pull_request'
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $RUNNER_TEMP/wekit-keystore.jks
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $RUNNER_TEMP/wcs-keystore.jks
 
       - name: Build Release (Signed)
         if: github.event_name != 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WEKIT_KEYSTORE_FILE: ${{ runner.temp }}/wekit-keystore.jks
-          WEKIT_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          WEKIT_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          WEKIT_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          WCS_KEYSTORE_FILE: ${{ runner.temp }}/wcs-keystore.jks
+          WCS_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          WCS_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          WCS_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./x build --release --flavor standard
 
       - name: Build Release (Unsigned)
@@ -154,7 +154,7 @@ jobs:
 
           apk="app/build/outputs/apk/standard/release/app-standard-release.apk"
           python3 .github/scripts/verify-dual-apk.py --check-installer "$apk"
-          WEKIT_TEST_APK="$GITHUB_WORKSPACE/$apk" cargo test -p wekit-zygisk --lib apk::tests::reads_built_apk -- --ignored
+          WCS_TEST_APK="$GITHUB_WORKSPACE/$apk" cargo test -p wcs-zygisk --lib apk::tests::reads_built_apk -- --ignored
 
           cp -v "$apk" dist/apk/
 
@@ -174,18 +174,18 @@ jobs:
       - name: Upload Release APKs
         uses: actions/upload-artifact@v7
         with:
-          name: wekit-apk
+          name: wcs-apk
           path: dist/apk/*.apk
 
       - name: Upload Release Obfuscation Mapping
         uses: actions/upload-artifact@v7
         with:
-          name: wekit-mapping
+          name: wcs-mapping
           path: dist/mapping/*.txt
 
   dex-test:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.repository == 'Ujhhgtg/WeKit-Dev'
+    if: github.event_name == 'pull_request' || github.repository == 'sherrys8/WCS'
     outputs:
       reports-available: ${{ steps.report-check.outputs.available }}
     steps:
@@ -220,22 +220,22 @@ jobs:
         id: apk-cache
         uses: actions/cache/restore@v6
         with:
-          path: ${{ runner.temp }}/wekit-dex-test-apks
+          path: ${{ runner.temp }}/wcs-dex-test-apks
           key: dex-test-apks-v1-${{ runner.os }}-${{ hashFiles('docs/getting-started.md', '.github/scripts/download-dex-test-apks.sh', 'xtask/src/dex_test_ci.rs') }}
 
       - name: Restore DexKit desktop cache
         id: dexkit-cache
         uses: actions/cache/restore@v6
         with:
-          path: .wekit/dex-test/source
+          path: .wcs/dex-test/source
           key: dexkit-desktop-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'xtask/src/dex_test.rs') }}
 
       - name: Generate supported APK manifest
         run: |
           ./x dex-test-ci sources \
             --doc docs/getting-started.md \
-            --output "$RUNNER_TEMP/wekit-dex-test-sources.json"
-          test "$(jq '.sources | length' "$RUNNER_TEMP/wekit-dex-test-sources.json")" -gt 0
+            --output "$RUNNER_TEMP/wcs-dex-test-sources.json"
+          test "$(jq '.sources | length' "$RUNNER_TEMP/wcs-dex-test-sources.json")" -gt 0
 
       - name: Download supported WeChat APKs
         id: apks
@@ -243,19 +243,19 @@ jobs:
           chmod +x .github/scripts/download-dex-test-apks.sh
           set +e
           .github/scripts/download-dex-test-apks.sh \
-            "$RUNNER_TEMP/wekit-dex-test-sources.json" \
-            "$RUNNER_TEMP/wekit-dex-test-apks" \
-            --failures-out "$RUNNER_TEMP/wekit-dex-test-download-failures.txt" \
-            > "$RUNNER_TEMP/wekit-dex-test-apks.txt"
+            "$RUNNER_TEMP/wcs-dex-test-sources.json" \
+            "$RUNNER_TEMP/wcs-dex-test-apks" \
+            --failures-out "$RUNNER_TEMP/wcs-dex-test-download-failures.txt" \
+            > "$RUNNER_TEMP/wcs-dex-test-apks.txt"
           download_status=$?
           set -e
-          if [[ -s "$RUNNER_TEMP/wekit-dex-test-download-failures.txt" ]]; then
+          if [[ -s "$RUNNER_TEMP/wcs-dex-test-download-failures.txt" ]]; then
             while IFS= read -r failed_apk; do
               echo "::warning::failed to download $failed_apk; skipping its dex resolution"
-            done < "$RUNNER_TEMP/wekit-dex-test-download-failures.txt"
+            done < "$RUNNER_TEMP/wcs-dex-test-download-failures.txt"
           fi
-          if [[ -s "$RUNNER_TEMP/wekit-dex-test-apks.txt" ]]; then
-            mapfile -t downloaded_apks < "$RUNNER_TEMP/wekit-dex-test-apks.txt"
+          if [[ -s "$RUNNER_TEMP/wcs-dex-test-apks.txt" ]]; then
+            mapfile -t downloaded_apks < "$RUNNER_TEMP/wcs-dex-test-apks.txt"
             echo "apk-count=${#downloaded_apks[@]}" >> "$GITHUB_OUTPUT"
           else
             echo "apk-count=0" >> "$GITHUB_OUTPUT"
@@ -269,7 +269,7 @@ jobs:
         id: dex-resolution
         if: steps.apks.outcome == 'success' && fromJSON(steps.apks.outputs.apk-count || '0') > 0
         run: |
-          mapfile -t apks < "$RUNNER_TEMP/wekit-dex-test-apks.txt"
+          mapfile -t apks < "$RUNNER_TEMP/wcs-dex-test-apks.txt"
           args=()
           for apk in "${apks[@]}"; do
             args+=(--apk "$apk")
@@ -295,7 +295,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: wekit-dex-test-reports
+          name: wcs-dex-test-reports
           path: dex-test-results/ci
           if-no-files-found: warn
 
@@ -303,14 +303,14 @@ jobs:
         if: always() && steps.apks.outcome == 'success'
         uses: actions/cache/save@v6
         with:
-          path: ${{ runner.temp }}/wekit-dex-test-apks
+          path: ${{ runner.temp }}/wcs-dex-test-apks
           key: ${{ steps.apk-cache.outputs.cache-primary-key }}
 
       - name: Save DexKit desktop cache
         if: always() && steps.dex-resolution.outcome == 'success'
         uses: actions/cache/save@v6
         with:
-          path: .wekit/dex-test/source
+          path: .wcs/dex-test/source
           key: ${{ steps.dexkit-cache.outputs.cache-primary-key }}
 
       - name: Enforce Dex resolution result
@@ -324,7 +324,7 @@ jobs:
   release-dex-test:
     needs: dex-test
     runs-on: ubuntu-latest
-    if: ${{ always() && github.repository == 'Ujhhgtg/WeKit-Dev' && github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.dex-test.outputs.reports-available == 'true' }}
+    if: ${{ always() && github.repository == 'sherrys8/WCS' && github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.dex-test.outputs.reports-available == 'true' }}
     permissions:
       contents: write
     steps:
@@ -339,7 +339,7 @@ jobs:
       - name: Download Dex resolution reports
         uses: actions/download-artifact@v8
         with:
-          name: wekit-dex-test-reports
+          name: wcs-dex-test-reports
           path: dex-test-results/ci
 
       - name: Stage successful Release assets
@@ -363,14 +363,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
-          if gh release view Dex-Test --repo Ujhhgtg/WeKit >/dev/null 2>&1; then
-            gh release edit Dex-Test --repo Ujhhgtg/WeKit \
+          if gh release view Dex-Test --repo sherrys8/WCS >/dev/null 2>&1; then
+            gh release edit Dex-Test --repo sherrys8/WCS \
               --title "Dex Test" \
               --prerelease \
               --notes-file dist/dex-test-release/release-notes.md
           else
             gh release create Dex-Test \
-              --repo Ujhhgtg/WeKit \
+              --repo sherrys8/WCS \
               --title "Dex Test" \
               --prerelease \
               --notes-file dist/dex-test-release/release-notes.md
@@ -380,11 +380,11 @@ jobs:
           while IFS= read -r asset; do
             [[ -n "$asset" ]] && upload+=("dist/dex-test-release/$asset")
           done < dist/dex-test-release/assets.txt
-          gh release upload Dex-Test --repo Ujhhgtg/WeKit "${upload[@]}" --clobber
+          gh release upload Dex-Test --repo sherrys8/WCS "${upload[@]}" --clobber
 
   extensions-changes:
     runs-on: ubuntu-latest
-    if: github.repository == 'Ujhhgtg/WeKit-Dev' && github.event_name == 'push'
+    if: github.repository == 'sherrys8/WCS' && github.event_name == 'push'
     outputs:
       changed: ${{ steps.filter.outputs.extensions }}
     steps:
@@ -448,9 +448,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: app/src/main/go/wekit-cloudflared/go.mod
+          go-version-file: app/src/main/go/wcs-cloudflared/go.mod
           cache: true
-          cache-dependency-path: app/src/main/go/wekit-cloudflared/go.sum
+          cache-dependency-path: app/src/main/go/wcs-cloudflared/go.sum
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v10.0.1
@@ -516,7 +516,7 @@ jobs:
 
       - name: Download and verify Arch rootfs
         env:
-          WEKIT_ARCH_ROOTFS: ${{ runner.temp }}/arch-pack/ArchLinuxARM-aarch64-rootfs.tar.gz
+          WCS_ARCH_ROOTFS: ${{ runner.temp }}/arch-pack/ArchLinuxARM-aarch64-rootfs.tar.gz
         run: |
           SOURCE=extension-packs/archlinux-arm64-sources.json
           ROOTFS_URL=$(jq -r '.rootfs.url' "$SOURCE")
@@ -527,18 +527,18 @@ jobs:
           mkdir -p "$RUNNER_TEMP/arch-pack"
           curl --fail --location --retry 3 \
             "$ROOTFS_URL" \
-            -o "$WEKIT_ARCH_ROOTFS"
-          printf '%s  %s\n' "$ROOTFS_SHA256" "$WEKIT_ARCH_ROOTFS" | sha256sum --check --strict
-          printf '%s  %s\n' "$ROOTFS_MD5" "$WEKIT_ARCH_ROOTFS" | md5sum --check --strict
+            -o "$WCS_ARCH_ROOTFS"
+          printf '%s  %s\n' "$ROOTFS_SHA256" "$WCS_ARCH_ROOTFS" | sha256sum --check --strict
+          printf '%s  %s\n' "$ROOTFS_MD5" "$WCS_ARCH_ROOTFS" | md5sum --check --strict
           curl --fail --location --retry 3 \
             "$ROOTFS_SIGNATURE_URL" \
-            -o "$WEKIT_ARCH_ROOTFS.sig"
+            -o "$WCS_ARCH_ROOTFS.sig"
           curl --fail --location --retry 3 \
             "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x$SIGNING_FINGERPRINT" \
             -o "$RUNNER_TEMP/arch-pack/signing-key.asc"
           test "$(gpg --show-keys --with-colons "$RUNNER_TEMP/arch-pack/signing-key.asc" | awk -F: '$1 == "fpr" { print $10; exit }')" = "$SIGNING_FINGERPRINT"
           gpg --batch --import "$RUNNER_TEMP/arch-pack/signing-key.asc"
-          gpg --batch --verify "$WEKIT_ARCH_ROOTFS.sig" "$WEKIT_ARCH_ROOTFS"
+          gpg --batch --verify "$WCS_ARCH_ROOTFS.sig" "$WCS_ARCH_ROOTFS"
 
       - name: Build native library and proot
         id: native_build
@@ -570,7 +570,7 @@ jobs:
             done | sort
           )
           published_assets=$(
-            gh api "repos/Ujhhgtg/WeKit/releases/tags/Extensions" \
+            gh api "repos/sherrys8/WCS/releases/tags/Extensions" \
               --jq '.assets[] | [.name, .digest] | @tsv' 2>/dev/null | sort || true
           )
           if [[ "$current_assets" == "$published_assets" ]]; then
@@ -585,9 +585,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
-          if ! gh release view Extensions --repo Ujhhgtg/WeKit >/dev/null 2>&1; then
+          if ! gh release view Extensions --repo sherrys8/WCS >/dev/null 2>&1; then
             gh release create Extensions \
-              --repo Ujhhgtg/WeKit \
+              --repo sherrys8/WCS \
               --title "Extensions" \
               --prerelease \
               --notes "扩展包资产。manifest.json 为最新版本索引, 本体按索引下载并校验 SHA-256。"
@@ -604,10 +604,10 @@ jobs:
             [[ "$asset" == dist/extensions/manifest.json ]] || pack_assets+=("$asset")
           done
           (( ${#pack_assets[@]} > 0 ))
-          gh release upload Extensions --repo Ujhhgtg/WeKit \
+          gh release upload Extensions --repo sherrys8/WCS \
             "${pack_assets[@]}" \
             --clobber
-          gh release upload Extensions --repo Ujhhgtg/WeKit dist/extensions/manifest.json --clobber
+          gh release upload Extensions --repo sherrys8/WCS dist/extensions/manifest.json --clobber
 
       - name: Remove stale pack assets
         if: steps.published.outputs.skip == 'false'
@@ -617,7 +617,7 @@ jobs:
           shopt -s nullglob
           current_files=(dist/extensions/*)
           (( ${#current_files[@]} > 0 ))
-          published_assets=$(gh release view Extensions --repo Ujhhgtg/WeKit --json assets --jq '.assets[].name')
+          published_assets=$(gh release view Extensions --repo sherrys8/WCS --json assets --jq '.assets[].name')
 
           while IFS= read -r published_asset; do
             [[ -z "$published_asset" ]] && continue
@@ -629,14 +629,14 @@ jobs:
               fi
             done
             if [[ "$keep" == false ]]; then
-              gh release delete-asset Extensions --repo Ujhhgtg/WeKit "$published_asset" --yes
+              gh release delete-asset Extensions --repo sherrys8/WCS "$published_asset" --yes
             fi
           done <<< "$published_assets"
 
   release-ci:
     needs: build
     runs-on: ubuntu-latest
-    if: ${{ always() && needs.build.result == 'success' && github.repository == 'Ujhhgtg/WeKit-Dev' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    if: ${{ always() && needs.build.result == 'success' && github.repository == 'sherrys8/WCS' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
     permissions:
       contents: write
 
@@ -650,15 +650,15 @@ jobs:
       - name: Download APK artifact
         uses: actions/download-artifact@v8
         with:
-          name: wekit-apk
+          name: wcs-apk
           path: artifacts
 
       - name: Delete existing CI release (if exists)
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
-          gh release delete CI --repo Ujhhgtg/WeKit --yes || true
-          gh api -X DELETE repos/Ujhhgtg/WeKit/git/refs/tags/CI || true
+          gh release delete CI --repo sherrys8/WCS --yes || true
+          gh api -X DELETE repos/sherrys8/WCS/git/refs/tags/CI || true
 
       - name: Generate update.json
         run: |
@@ -676,7 +676,7 @@ jobs:
           echo "Generated update.json:"
           cat artifacts/update.json
 
-      - name: Create CI release on WeKit and upload artifacts
+      - name: Create CI release on WcS and upload artifacts
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           COMMIT_SHA: ${{ github.sha }}
@@ -694,7 +694,7 @@ jobs:
           } > "$RUNNER_TEMP/ci-notes.md"
 
           gh release create CI \
-            --repo Ujhhgtg/WeKit \
+            --repo sherrys8/WCS \
             --title "CI" \
             --notes-file "$RUNNER_TEMP/ci-notes.md" \
             artifacts/*
@@ -702,7 +702,7 @@ jobs:
   upload-telegram:
     needs: build
     runs-on: ubuntu-latest
-    if: ${{ always() && needs.build.result == 'success' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev-sherry' || github.ref == 'refs/heads/WCS' || github.ref == 'refs/heads/dev2' || (github.repository == 'Ujhhgtg/WeKit-Dev' && github.event_name == 'workflow_dispatch')) }}
+    if: ${{ always() && needs.build.result == 'success' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev-sherry' || github.ref == 'refs/heads/WCS' || github.ref == 'refs/heads/dev2' || (github.repository == 'sherrys8/WCS' && github.event_name == 'workflow_dispatch')) }}
     services:
       telegram-bot-api:
         image: aiogram/telegram-bot-api:latest
@@ -717,13 +717,13 @@ jobs:
       - name: Download APK artifact
         uses: actions/download-artifact@v8
         with:
-          name: wekit-apk
+          name: wcs-apk
           path: artifacts
 
       - name: Rename APK
         run: |
           cd artifacts
-          mv app-standard-release.apk "WeKit-${{ github.ref_name }}-${GITHUB_SHA:0:7}.apk"
+          mv app-standard-release.apk "WcS-${{ github.ref_name }}-${GITHUB_SHA:0:7}.apk"
           ls -la
 
       - name: Wait for Telegram API

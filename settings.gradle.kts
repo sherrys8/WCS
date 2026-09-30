@@ -67,7 +67,7 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-rootProject.name = "wekit"
+rootProject.name = "wcs"
 
 // Composite build: scripta code editor (not published to Maven Central; keep its own
 // toolchain, plugins and version catalog).

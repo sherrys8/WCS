@@ -56,7 +56,7 @@ from funbox_api_probe import (
 OP_PROBE = 100
 OP_CATALOG = 10
 OP_PACK_CONTENTS = 2
-USER_AGENT = "WeKit-FunBox-Sticker-Exporter/1.0"
+USER_AGENT = "WcS-FunBox-Sticker-Exporter/1.0"
 STATE_VERSION = 1
 DEFAULT_WORKERS = 4
 DEFAULT_RETRIES = 3

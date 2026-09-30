@@ -107,7 +107,7 @@ val dexKitCodegen = configurations.create("dexKitCodegen") {
 dependencies {
     // Supplied by xtask from a controlled local Maven repository; compile-only
     // prevents API classes from entering the runtime DEX.
-    val apiVersion = providers.gradleProperty("wekitPythonApiVersion").orElse(libs.versions.pythonRuntimeApiVersion)
+    val apiVersion = providers.gradleProperty("wcsPythonApiVersion").orElse(libs.versions.pythonRuntimeApiVersion)
     compileOnly("dev.sherry.wcs:python-runtime-api:${apiVersion.get()}")
     chaquopyTarget(
         "com.chaquo.python:target:${libs.versions.pythonRuntimeChaquopyTarget.get()}:" +
@@ -141,12 +141,12 @@ chaquopy {
     defaultConfig {
         version = libs.versions.pythonRuntimePython.get()
         buildPython(
-            providers.gradleProperty("wekitPythonBuildExecutable")
+            providers.gradleProperty("wcsPythonBuildExecutable")
                 .orElse("python${libs.versions.pythonRuntimePython.get()}")
                 .get(),
         )
         pip {
-            providers.gradleProperty("wekitPythonWheelDirectory").orNull?.let { directory ->
+            providers.gradleProperty("wcsPythonWheelDirectory").orNull?.let { directory ->
                 options("--find-links", directory)
             }
             install("-r", "requirements.txt")
@@ -177,12 +177,12 @@ listOf("debug", "release").forEach { variant ->
     val capitalized = variant.replaceFirstChar(Char::uppercaseChar)
     val stagePatchedBridge = tasks.register<Copy>("stage${capitalized}PatchedChaquopyBridge") {
         dependsOn("generate${capitalized}PythonMiscAssets")
-        val bridge = providers.gradleProperty("wekitPatchedChaquopyBridge").map(::file)
+        val bridge = providers.gradleProperty("wcsPatchedChaquopyBridge").map(::file)
         from(bridge)
         into(layout.buildDirectory.dir("python/assets/misc/$variant/chaquopy/bootstrap-native/arm64-v8a/java"))
         doFirst {
             require(bridge.isPresent && bridge.get().isFile) {
-                "wekitPatchedChaquopyBridge must point to the bridge built by xtask"
+                "wcsPatchedChaquopyBridge must point to the bridge built by xtask"
             }
         }
     }

@@ -61,7 +61,7 @@ class NativeTerminalBackend : TerminalBackend {
     }
 
     private object NativePty {
-        init { try { System.loadLibrary("wekit_native") } catch (_: UnsatisfiedLinkError) { } }
+        init { try { System.loadLibrary("wcs_native") } catch (_: UnsatisfiedLinkError) { } }
         external fun start(argv: Array<String>, environment: Array<String>, cwd: String, cols: Int, rows: Int): Long
         external fun write(handle: Long, bytes: ByteArray): Boolean
         external fun read(handle: Long, buffer: ByteArray): Int

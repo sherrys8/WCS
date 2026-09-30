@@ -66,7 +66,7 @@ class OwnedProcess private constructor(
     }
 
     private object Native {
-        init { try { System.loadLibrary("wekit_native") } catch (_: UnsatisfiedLinkError) { } }
+        init { try { System.loadLibrary("wcs_native") } catch (_: UnsatisfiedLinkError) { } }
         external fun start(argv: Array<String>, environment: Array<String>, cwd: String): LongArray?
         external fun pollExit(handle: Long): Int
         external fun terminateGroup(handle: Long, graceMillis: Long): Boolean

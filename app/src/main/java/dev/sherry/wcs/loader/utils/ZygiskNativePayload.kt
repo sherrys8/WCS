@@ -19,7 +19,7 @@ class ZygiskNativePayload(val apk: File, private val dataDir: File) {
     @SuppressLint("UnsafeDynamicallyLoadedCode")
     fun loadLibraries(): Map<String, File> = ZipFile(apk).use { archive ->
         val abi = currentProcessAbi(archive)
-        val libraryDir = File(dataDir, ".wekit-native/${apk.nameWithoutExtension}/$abi")
+        val libraryDir = File(dataDir, ".wcs-native/${apk.nameWithoutExtension}/$abi")
         if (!libraryDir.exists() && !libraryDir.mkdirs()) {
             error("cannot create Zygisk native-library directory: $libraryDir")
         }
@@ -30,7 +30,7 @@ class ZygiskNativePayload(val apk: File, private val dataDir: File) {
             "androidx.graphics.path",
             "dexkit",
             "mmkv",
-            "wekit_native",
+            "wcs_native",
             "invoke_tool",
             "chroot_cleanup",
         )
@@ -41,10 +41,10 @@ class ZygiskNativePayload(val apk: File, private val dataDir: File) {
             libraries[name] = extracted
             // MMKV loads through its callback; executable artifacts must never be dlopen-ed.
             when (name) {
-                "androidx.graphics.path", "dexkit", "wekit_native" -> System.load(extracted.absolutePath)
+                "androidx.graphics.path", "dexkit", "wcs_native" -> System.load(extracted.absolutePath)
             }
         }
-        for (name in listOf("dexkit", "wekit_native")) {
+        for (name in listOf("dexkit", "wcs_native")) {
             require(name in libraries) { "Zygisk payload is missing lib$name.so for $abi" }
         }
         libraries
@@ -57,7 +57,7 @@ class ZygiskNativePayload(val apk: File, private val dataDir: File) {
             Build.SUPPORTED_32_BIT_ABIS.asList()
         }
         return candidates.firstOrNull { abi ->
-            archive.getEntry("lib/$abi/libwekit_native.so") != null
+            archive.getEntry("lib/$abi/libwcs_native.so") != null
         } ?: error("Zygisk payload has no native library for this process ABI")
     }
 

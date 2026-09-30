@@ -443,7 +443,7 @@ fn ensure_linux_dexkit(root: &Path) -> Result<DexKitNative> {
         .versions
         .dexkit
         .context("versions.dexkit is missing")?;
-    let cache_root = root.join(".wekit/dex-test");
+    let cache_root = root.join(".wcs/dex-test");
     let source_dir = cache_root.join("source").join(format!("DexKit-{version}"));
     if source_dir.exists() {
         validate_dexkit_source(&source_dir, &version)?;
@@ -645,30 +645,30 @@ fn run_worker(
 ) -> Result<i32> {
     let gradle = root.join("gradlew");
     let mut properties = vec![
-        ("wekit.dexTest.apk", apk.to_string_lossy().to_string()),
+        ("wcs.dexTest.apk", apk.to_string_lossy().to_string()),
         (
-            "wekit.dexTest.nativeLibrary",
+            "wcs.dexTest.nativeLibrary",
             native.library_path.to_string_lossy().to_string(),
         ),
-        ("wekit.dexTest.report", report.to_string_lossy().to_string()),
-        ("wekit.dexTest.dexKitVersion", native.version.clone()),
-        ("wekit.dexTest.dexKitRevision", native.revision.clone()),
+        ("wcs.dexTest.report", report.to_string_lossy().to_string()),
+        ("wcs.dexTest.dexKitVersion", native.version.clone()),
+        ("wcs.dexTest.dexKitRevision", native.revision.clone()),
         (
-            "wekit.dexTest.versionCode",
+            "wcs.dexTest.versionCode",
             metadata.version_code.to_string(),
         ),
-        ("wekit.dexTest.versionName", metadata.version_name.clone()),
-        ("wekit.dexTest.buildTag", metadata.build_tag.clone()),
+        ("wcs.dexTest.versionName", metadata.version_name.clone()),
+        ("wcs.dexTest.buildTag", metadata.build_tag.clone()),
         (
-            "wekit.dexTest.isGooglePlay",
+            "wcs.dexTest.isGooglePlay",
             metadata.is_google_play.to_string(),
         ),
     ];
     if let Some(features) = features {
-        properties.push(("wekit.dexTest.features", features.to_string()));
+        properties.push(("wcs.dexTest.features", features.to_string()));
     }
     if let Some(workers) = workers {
-        properties.push(("wekit.dexTest.workers", workers.to_string()));
+        properties.push(("wcs.dexTest.workers", workers.to_string()));
     }
     let mut command = Command::new(&gradle);
     command

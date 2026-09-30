@@ -59,7 +59,7 @@ impl TestDirectory {
     fn new() -> Self {
         static NEXT_ID: AtomicU64 = AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
-            "wekit-read-receipts-{}-{}",
+            "wcs-read-receipts-{}-{}",
             std::process::id(),
             NEXT_ID.fetch_add(1, Ordering::Relaxed)
         ));
@@ -406,8 +406,8 @@ async fn authenticated_connector_metadata_counts_distinct_public_readers() {
             .oneshot(
                 Request::builder()
                     .uri(format!("/pixel?wxId=wxid_sender&id={id}"))
-                    .header("x-wekit-origin-authenticator", authenticator)
-                    .header("x-wekit-reader-ip", reader_ip)
+                    .header("x-wcs-origin-authenticator", authenticator)
+                    .header("x-wcs-reader-ip", reader_ip)
                     .extension(ConnectInfo(
                         "127.0.0.1:42000".parse::<SocketAddr>().unwrap(),
                     ))
@@ -455,8 +455,8 @@ async fn direct_callers_cannot_opt_into_trusted_reader_metadata() {
             .oneshot(
                 Request::builder()
                     .uri(format!("/pixel?wxId=wxid_sender&id={id}"))
-                    .header("x-wekit-origin-authenticator", "attacker-controlled")
-                    .header("x-wekit-reader-ip", claimed_ip)
+                    .header("x-wcs-origin-authenticator", "attacker-controlled")
+                    .header("x-wcs-reader-ip", claimed_ip)
                     .header("cf-connecting-ip", claimed_ip)
                     .extension(ConnectInfo(
                         "127.0.0.1:43000".parse::<SocketAddr>().unwrap(),

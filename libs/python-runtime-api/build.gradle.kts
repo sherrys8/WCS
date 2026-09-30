@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "dev.sherry.wcs"
-version = providers.gradleProperty("wekitPythonApiVersion")
+version = providers.gradleProperty("wcsPythonApiVersion")
     .orElse(libs.versions.pythonRuntimeApiVersion).get()
 
 java {

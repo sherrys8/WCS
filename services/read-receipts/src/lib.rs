@@ -38,8 +38,8 @@ const RATE_WINDOW: Duration = Duration::from_secs(60);
 const REGISTER_RATE_LIMIT: u32 = 30;
 const COUNT_RATE_LIMIT: u32 = 120;
 const CONNECTOR_AUTHENTICATOR_BYTES: usize = 32;
-const ORIGIN_AUTHENTICATOR_HEADER: &str = "x-wekit-origin-authenticator";
-const ORIGIN_READER_IP_HEADER: &str = "x-wekit-reader-ip";
+const ORIGIN_AUTHENTICATOR_HEADER: &str = "x-wcs-origin-authenticator";
+const ORIGIN_READER_IP_HEADER: &str = "x-wcs-reader-ip";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RouteProfile {
@@ -253,7 +253,7 @@ pub async fn bind_and_serve(
     })
 }
 
-/// Computes the deterministic ID shared by the WeKit client and server.
+/// Computes the deterministic ID shared by the WcS client and server.
 pub fn compute_msg_id(wx_id: &str, content: &str, create_time: i64) -> String {
     let mut hasher = Sha256::new();
     hasher.update(wx_id.as_bytes());

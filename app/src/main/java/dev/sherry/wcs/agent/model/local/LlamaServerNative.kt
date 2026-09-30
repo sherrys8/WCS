@@ -1,7 +1,7 @@
 package dev.sherry.wcs.agent.model.local
 
 /**
- * JNI bridge to the wekit-llama native controller shipped in the llama-native
+ * JNI bridge to the wcs-llama native controller shipped in the llama-native
  * extension pack. The library must be System.load-ed (via
  * `LlamaNativeLoader.prepareLaunch`) before parent-controller calls. Parent
  * lifecycle methods return the controller's status JSON:

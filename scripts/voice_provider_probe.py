@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PC-side behavior probe for WeKit's fixed public voice providers.
+"""PC-side behavior probe for WcS's fixed public voice providers.
 
 References:
   /home/ujhhgtg/coding/funbox_deobf_main/funbox_payload/CJq.java

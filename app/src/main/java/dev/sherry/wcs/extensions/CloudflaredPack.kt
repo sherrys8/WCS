@@ -16,7 +16,7 @@ import java.util.zip.ZipFile
 class CloudflaredPackNotInstalledException(message: String) : RuntimeException(message)
 
 /**
- * Cloudflared 扩展包：解压 arm64-v8a 的 libwekit_cloudflared.so
+ * Cloudflared 扩展包：解压 arm64-v8a 的 libwcs_cloudflared.so
  * 到应用内部存储(dlopen 要求),由 CloudflaredNativeLoader.ensureLoaded() System.load。
  */
 object CloudflaredPack : ExtensionPack {
@@ -27,7 +27,7 @@ object CloudflaredPack : ExtensionPack {
     override val descriptionRes = R.string.extensions_pack_cloudflared_desc
     override val icon: ImageVector = MaterialSymbols.Outlined.Cloud
 
-    private const val LIB_NAME = "libwekit_cloudflared.so"
+    private const val LIB_NAME = "libwcs_cloudflared.so"
     private const val ABI = "arm64-v8a"
 
     /** The error callers rethrow after showing the install dialog. */
