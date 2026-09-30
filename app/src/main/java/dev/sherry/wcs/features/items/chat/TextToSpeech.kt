@@ -284,9 +284,11 @@ object TextToSpeech :
             }
             var customVoices by remember { mutableStateOf(emptyList<TtsVoice>()) }
             var generating by remember { mutableStateOf(false) }
+            var credentialsRevision by remember { mutableIntStateOf(0) }
 
-            LaunchedEffect(backendMode) {
-                // 魔方音色列表按后端重新拉取: 从豆包切回魔方时不能沿用旧快照
+            LaunchedEffect(backendMode, credentialsRevision) {
+                // 魔方音色列表按后端重新拉取: 从豆包切回魔方时不能沿用旧快照;
+                // apiKey 是裸 MMKV 委托、不可观察, 所以填完 Key 由设置弹窗递增 revision 来触发重拉
                 if (backendMode != BACKEND_MOFA) return@LaunchedEffect
                 Thread {
                     val fetched = fetchVoices()
@@ -403,7 +405,7 @@ object TextToSpeech :
                                     }
                                     if (apiKey.isBlank()) {
                                         showToast(context, "请先在设置中填写 API Key")
-                                        showSettingsDialog(context)
+                                        showSettingsDialog(context) { credentialsRevision++ }
                                         return@Button
                                     }
                                     generating = true
@@ -475,7 +477,7 @@ object TextToSpeech :
                                 Text(if (backendMode == BACKEND_MOFA) "魔方" else "豆包")
                             }
                             Row {
-                                TextButton(onClick = { showSettingsDialog(context) }) {
+                                TextButton(onClick = { showSettingsDialog(context) { credentialsRevision++ } }) {
                                     Icon(
                                         MaterialSymbols.Outlined.Settings,
                                         contentDescription = "设置",
@@ -495,7 +497,7 @@ object TextToSpeech :
         }
     }
 
-    private fun showSettingsDialog(context: android.content.Context) {
+    private fun showSettingsDialog(context: android.content.Context, onApiKeySaved: () -> Unit = {}) {
         showComposeDialog(context) {
             var apiKeyState by remember { mutableStateOf(apiKey) }
             var cookieState by remember { mutableStateOf(doubaoCookie) }
@@ -511,6 +513,7 @@ object TextToSpeech :
                                     onValueChange = {
                                         apiKeyState = it
                                         apiKey = it
+                                        onApiKeySaved()
                                     },
                                     dialogTitle = "设置 API Key",
                                     confirmLabel = "确认",
