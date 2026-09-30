@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import kotlin.math.roundToInt
 
 data class DropdownOption<T>(val value: T, val label: String)
@@ -39,12 +40,17 @@ fun <T> ExpressiveOptionDropdown(
     value: T,
     options: List<DropdownOption<T>>,
     maxVisibleItems: Int = 6,
+    dismissOnClickOutside: Boolean = true,
     onDismissRequest: () -> Unit,
     onValueChange: (T) -> Unit,
 ) {
     DropdownMenuPopup(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
+        // Popup 窗口只要收到落在自身边界外的 ACTION_DOWN 就默认 onDismissRequest
+        // （AndroidPopup.onTouchEvent），所以手指按在卡片边缘外一点点、或想滑动长列表时，卡片会当场消失。
+        // 关掉这个开关后，卡片只由「选中一项」「再点一次宿主行」和返回键关闭。
+        properties = PopupProperties(focusable = true, dismissOnClickOutside = dismissOnClickOutside),
     ) {
         Column(
             Modifier
@@ -74,6 +80,7 @@ fun <T> DropDownMenuWidget(
     value: T,
     options: List<DropdownOption<T>>,
     enabled: Boolean = true,
+    dismissOnClickOutside: Boolean = true,
     onValueChange: (T) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -106,6 +113,7 @@ fun <T> DropDownMenuWidget(
                 expanded = expanded,
                 value = value,
                 options = options,
+                dismissOnClickOutside = dismissOnClickOutside,
                 onDismissRequest = { expanded = false },
                 onValueChange = {
                     onValueChange(it)
