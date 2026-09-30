@@ -6,6 +6,7 @@ on:
       - master
       - dev
       - dev-sherry
+      - WCS
       - dev2
     paths-ignore:
       - '**/*.txt'
@@ -18,6 +19,7 @@ on:
       - master
       - dev
       - dev-sherry
+      - WCS
     paths-ignore:
       - '**/*.txt'
       - '**/*.md'
@@ -45,6 +47,7 @@ jobs:
           github.ref == 'refs/heads/master' ||
           github.ref == 'refs/heads/dev' ||
           github.ref == 'refs/heads/dev-sherry' ||
+          github.ref == 'refs/heads/WCS' ||
           github.ref == 'refs/heads/dev2' ||
           github.event_name == 'pull_request' ||
           (github.repository == 'Ujhhgtg/WeKit-Dev' && github.ref == 'refs/heads/master')
@@ -699,7 +702,7 @@ jobs:
   upload-telegram:
     needs: build
     runs-on: ubuntu-latest
-    if: ${{ always() && needs.build.result == 'success' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev-sherry' || github.ref == 'refs/heads/dev2' || (github.repository == 'Ujhhgtg/WeKit-Dev' && github.event_name == 'workflow_dispatch')) }}
+    if: ${{ always() && needs.build.result == 'success' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev-sherry' || github.ref == 'refs/heads/WCS' || github.ref == 'refs/heads/dev2' || (github.repository == 'Ujhhgtg/WeKit-Dev' && github.event_name == 'workflow_dispatch')) }}
     services:
       telegram-bot-api:
         image: aiogram/telegram-bot-api:latest
