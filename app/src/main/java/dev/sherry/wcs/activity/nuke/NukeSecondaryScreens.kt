@@ -445,12 +445,6 @@ private fun NukeAboutIcon() {
     }
 }
 
-)
-
-private const val UNKNOWN_LIBRARY_AUTHOR_KEY = "\u0000unknown-author"
-
-        ?: UNKNOWN_LIBRARY_AUTHOR_KEY
-
 @Composable
 private fun NukeConfirmDialog(
     title: String,
