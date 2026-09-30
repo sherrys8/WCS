@@ -42,7 +42,7 @@ import dev.sherry.wcs.extensions.ExtensionPackState
 import dev.sherry.wcs.extensions.ExtensionPacks
 import dev.sherry.wcs.extensions.LlamaNativePack
 import dev.sherry.wcs.extensions.QwenModelPack
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
@@ -62,7 +62,7 @@ fun LocalLlamaProviderDetailScreen(
 ) {
     val scope = rememberCoroutineScope()
     val activity = LocalActivity.current ?: error("activity not provided")
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val state by LocalLlamaController.state.collectAsState()
     val health by LocalLlamaController.health.collectAsState()
     val nativePackState by ExtensionPacks.stateFlow(LlamaNativePack).collectAsState()

@@ -58,7 +58,7 @@ object ImageRotation : ClickableFeature() {
                     applyRotation(thisObject as View)
                 }
         } else {
-            // 现有 WeKit 逻辑
+            // 现有 WcS 逻辑
             ImageView::class.reflekt()
                 .firstConstructor { parameterCount = 4 }.hookAfter {
                     applyRotation(thisObject as View)

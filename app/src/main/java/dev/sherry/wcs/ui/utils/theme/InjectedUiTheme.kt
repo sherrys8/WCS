@@ -5,11 +5,11 @@ import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
 import dev.sherry.wcs.i18n.LocaleResourceMode
-import dev.sherry.wcs.i18n.WeKitLocaleProvider
+import dev.sherry.wcs.i18n.WcSLocaleProvider
 import dev.sherry.wcs.utils.HostInfo
 
 /**
- * Theme for WeKit UI injected INTO WeChat.
+ * Theme for WcS UI injected INTO WeChat.
  *
  * The seed is [SeedResolver.injectedSeed]: WeChat green by default, or the selected seed when
  * opted into WeChat ([ThemeSettings.applyToWechat]). This is read once when the composition
@@ -22,7 +22,7 @@ fun InjectedUiTheme(
     darkTheme: Boolean? = null,
     content: @Composable () -> Unit
 ) {
-    WeKitLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
+    WcSLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
         val dark = darkTheme ?: isSystemInDarkTheme()
         val applyCustom = ThemeSettings.applyToWechat
         val seed = SeedResolver.injectedSeed(HostInfo.application, dark)

@@ -37,7 +37,7 @@ object PythonRuntimePack : ExtensionPack {
     private var mountedRuntime: MountedPythonRuntime? = null
 
     private val baseDir: File
-        get() = File(HostInfo.application.filesDir, "wekit-extensions/$ID")
+        get() = File(HostInfo.application.filesDir, "wcs-extensions/$ID")
 
     override fun installDir(): File = baseDir
 
@@ -72,8 +72,8 @@ object PythonRuntimePack : ExtensionPack {
         }
         val sdkDirectory = File(directory, "sdk")
         require(
-            File(sdkDirectory, "wekit/__init__.py").isFile ||
-                File(sdkDirectory, "wekit/__init__.pyc").isFile,
+            File(sdkDirectory, "wcs/__init__.py").isFile ||
+                File(sdkDirectory, "wcs/__init__.pyc").isFile,
         ) { "Python runtime SDK is missing" }
         MountedPythonRuntime(manifest, directory, runtimeApk, nativeDirectory, sdkDirectory, contents.metadata)
             .also { mountedRuntime = it }

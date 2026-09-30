@@ -21,7 +21,7 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.sherry.wcs.i18n.LocaleResourceMode
-import dev.sherry.wcs.i18n.WeKitLocaleProvider
+import dev.sherry.wcs.i18n.WcSLocaleProvider
 import dev.sherry.wcs.ui.content.nuke.NukeModuleTheme
 import dev.sherry.wcs.ui.utils.theme.ModuleTheme
 import dev.sherry.wcs.ui.utils.theme.SettingsUiEngine
@@ -59,7 +59,7 @@ fun showComposeDialog(
         setContentView(
             ComposeView(context).apply {
                 setContent {
-                    WeKitLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
+                    WcSLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
                         val themedContent: @Composable () -> Unit = {
                             ModuleTheme {
                                 Box(

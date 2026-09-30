@@ -11,7 +11,7 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import kotlin.io.path.createTempDirectory
 
-@EnabledIfSystemProperty(named = "wekit.monetCorpus", matches = "true")
+@EnabledIfSystemProperty(named = "wcs.monetCorpus", matches = "true")
 class MonetMatcherCorpusTest {
     @Test
     fun `directly compare reference color targets to domestic resources`() {
@@ -55,11 +55,11 @@ class MonetMatcherCorpusTest {
             }
             DOMESTIC_SLOT_57.forEach { (version, expectedSlot57) ->
                 val target = MonetApkResourceGraphLoader.load(
-                    listOf(File(System.getProperty("wekit.monetTarget.$version") ?: "/home/ujhhgtg/coding/wechat_$version.apk")),
+                    listOf(File(System.getProperty("wcs.monetTarget.$version") ?: "/home/ujhhgtg/coding/wechat_$version.apk")),
                     "com.tencent.mm",
                 )
                 val structural = auditResources(
-                    File(System.getProperty("wekit.monetTarget.$version") ?: "/home/ujhhgtg/coding/wechat_$version.apk"),
+                    File(System.getProperty("wcs.monetTarget.$version") ?: "/home/ujhhgtg/coding/wechat_$version.apk"),
                     target,
                 )
                 val resolved = structural.filterValues { it.isNotEmpty() }.mapValues { it.value.single() }
@@ -110,7 +110,7 @@ class MonetMatcherCorpusTest {
 
     @Test
     fun `production matcher resolves the complete local APK corpus with live Dex evidence`() {
-        System.load(File("../.wekit/dex-test/native/2.2.0/x86_64/cmake/libdexkit.so").canonicalPath)
+        System.load(File("../.wcs/dex-test/native/2.2.0/x86_64/cmake/libdexkit.so").canonicalPath)
         val samples = listOf("8065", "8067", "8069", "8074", "8076", "8077", "8078", "8069_3020_play").map {
             File("/home/ujhhgtg/coding/wechat_$it.apk")
         } + listOf(File("/home/ujhhgtg/coding/wechat_8072_3084.apks"), PLAY_3085_APKS)
@@ -157,7 +157,7 @@ class MonetMatcherCorpusTest {
     }
 
     private fun auditResources(apk: File, graph: MonetResourceGraph): Map<String, List<MonetResourceNode>> {
-        System.load(File("../.wekit/dex-test/native/2.2.0/x86_64/cmake/libdexkit.so").canonicalPath)
+        System.load(File("../.wcs/dex-test/native/2.2.0/x86_64/cmake/libdexkit.so").canonicalPath)
         return DexKitBridge.create(dexBytes(apk).toTypedArray()).use { bridge ->
             MonetStructureMatcher.audit(graph) { candidates -> MonetDexEvidenceCollector.collect(bridge, candidates) }
         }
@@ -175,7 +175,7 @@ class MonetMatcherCorpusTest {
             val installedApks = extracted.second.filter { it.name in installedNames }
             assertEquals(installedNames, installedApks.map { it.name }.toSet())
             val graph = MonetApkResourceGraphLoader.load(installedApks, "com.tencent.mm")
-            System.load(File("../.wekit/dex-test/native/2.2.0/x86_64/cmake/libdexkit.so").canonicalPath)
+            System.load(File("../.wcs/dex-test/native/2.2.0/x86_64/cmake/libdexkit.so").canonicalPath)
             DexKitBridge.create(installedApks.flatMap(::dexBytes).toTypedArray()).use { bridge ->
                 val resolved = MonetStructureMatcher.resolveAll(
                     graph,

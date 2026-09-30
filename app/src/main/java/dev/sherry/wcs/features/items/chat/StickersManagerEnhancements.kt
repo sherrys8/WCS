@@ -35,7 +35,7 @@ object StickersManagerEnhancements : SwitchFeature() {
     private const val TAG = "StickersManagerEnhancements"
 
     // Tag used to detect already-injected button groups (avoids duplicates on config changes)
-    private const val INJECTED_TAG = "wekit_stickers_manager_btns"
+    private const val INJECTED_TAG = "wcs_stickers_manager_btns"
 
     override fun onEnable() {
         "com.tencent.mm.plugin.emoji.ui.EmojiCustomUI".toClass().reflekt()
@@ -314,7 +314,7 @@ object StickersManagerEnhancements : SwitchFeature() {
             selectedMd5s.forEachIndexed { index, md5 ->
                 WeMessageApi.saveStickerByMd5(md5, "sticker_${baseName}_$index.gif")
             }
-            showToastSuspend(localizedChatQuantity(R.plurals.chat_sticker_manager_exported, selectedMd5s.size, selectedMd5s.size, "/sdcard/Download/WeKit"))
+            showToastSuspend(localizedChatQuantity(R.plurals.chat_sticker_manager_exported, selectedMd5s.size, selectedMd5s.size, "/sdcard/Download/WcS"))
         }
     }
 }

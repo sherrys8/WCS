@@ -162,7 +162,7 @@ object ChatToolbar : ClickableFeature(), IResolveDex {
         "音乐" to MaterialSymbols.Outlined.Music_note
     )
 
-    // 快捷回复 and WeAgent are wekit-injected items (not backed by a WeChat grid tool), so they
+    // 快捷回复 and WeAgent are wcs-injected items (not backed by a WeChat grid tool), so they
     // live outside NAME_TO_ICON_MAP. Their icons are resolved via iconFor().
     private const val QUICK_REPLY_NAME = "快捷回复"
     private const val WEAGENT_NAME = "WeAgent"
@@ -313,7 +313,7 @@ object ChatToolbar : ClickableFeature(), IResolveDex {
 
     /**
      * The keys remain the exact host labels and legacy preference identities. Only presentation is
-     * localized, so changing WeKit's language never rewrites the saved order or host matching.
+     * localized, so changing WcS's language never rewrites the saved order or host matching.
      */
     @StringRes
     private fun labelResFor(name: String): Int = when (name) {
@@ -358,7 +358,7 @@ object ChatToolbar : ClickableFeature(), IResolveDex {
      * bursts, so snapshots are debounced. The debounce is trailing-edge: a suppressed call schedules
      * a single delayed refresh instead of being dropped, so the grid's final state always reaches the
      * toolbar. (Dropping used to lose the *only* initAppGrid of a chat when it happened to land in
-     * the window — e.g. right after WeKit loaded, when the initial baseline was still "now".)
+     * the window — e.g. right after WcS loaded, when the initial baseline was still "now".)
      */
     private val toolListDebounce = 2.seconds
 

@@ -79,8 +79,8 @@ import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.core.SwitchFeature
 import dev.sherry.wcs.i18n.LocaleResourceMode
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
-import dev.sherry.wcs.i18n.WeKitLocaleProvider
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
+import dev.sherry.wcs.i18n.WcSLocaleProvider
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.FloatingBottomBar
 import dev.sherry.wcs.ui.content.FloatingBottomBarDefaults
@@ -95,7 +95,7 @@ import dev.sherry.wcs.ui.navigation.rememberM3NavEffects
 import dev.sherry.wcs.ui.utils.theme.ModuleTheme
 import dev.sherry.wcs.ui.utils.theme.SettingsUiEngine
 import dev.sherry.wcs.ui.utils.theme.ThemeSettings
-import dev.sherry.wcs.ui.animation.predictiveback.weKitNavTransition
+import dev.sherry.wcs.ui.animation.predictiveback.wcSNavTransition
 import dev.sherry.wcs.utils.WeLogger
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -118,7 +118,7 @@ class SettingsActivity : ComponentActivity() {
             CompositionLocalProvider(
                 LocalComponentActivity provides this
             ) {
-                WeKitLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
+                WcSLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
                     when (ThemeSettings.uiEngine) {
                         SettingsUiEngine.MATERIAL3 -> ModuleTheme {
                             SettingsRoot(onFinish = { finish() })
@@ -218,7 +218,7 @@ private fun SettingsRoot(onFinish: () -> Unit) {
             onBack = {
                 if (navigator.backStackSize() <= 1) onFinish() else navigator.pop()
             },
-            transition = weKitNavTransition(ThemeSettings.pageTransitionAnimation),
+            transition = wcSNavTransition(ThemeSettings.pageTransitionAnimation),
             effects = rememberM3NavEffects(),
         ) {
             entry<SettingsRoute.Main> {
@@ -384,7 +384,7 @@ fun FeatureRow(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     val context = LocalComponentActivity.current
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     val configKey = item.technicalId
     val localizedName = item.localizedName(localizedContext)
     val localizedDescription = item.localizedDescription(localizedContext)

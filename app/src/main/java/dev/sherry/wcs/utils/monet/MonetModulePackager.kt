@@ -32,9 +32,9 @@ object MonetModulePackager {
             fun add(name: String, text: String) = add(zip, name, text.toByteArray())
             add(
                 "module.prop",
-                "id=wekit-monet-engine\nname=微信莫奈引擎 (WeKit)\n" +
+                "id=wcs-monet-engine\nname=微信莫奈引擎 (WcS)\n" +
                     "version=$versionName ($versionCode)\nversionCode=$versionCode\nauthor=Ujhhgtg\n" +
-                    "description=为微信 $versionName 启用动态壁纸取色, 由 WeKit 在运行时生成\n",
+                    "description=为微信 $versionName 启用动态壁纸取色, 由 WcS 在运行时生成\n",
             )
             add("customize.sh", CUSTOMIZE_SCRIPT)
             add("META-INF/com/google/android/update-binary", UPDATE_BINARY)
@@ -157,7 +157,7 @@ ui_print '            | | /| / / _ \/ ,<  / / __/'
 ui_print '            | |/ |/ /  __/ /| |/ / /_'
 ui_print '            |__/|__/\___/_/ |_/_/\__/'
 ui_print " "
-ui_print "       [WeKit] WeChat, now with superpowers"
+ui_print "       [WcS] WeChat, now with superpowers"
 ui_print " "
 ui_print "已安装生成时选定的莫奈覆盖。"
 ui_print " "
@@ -235,7 +235,7 @@ exit 0
 
     private const val BOOT_SCRIPT = $$"""#!/system/bin/sh
 MODDIR=${0%/*}
-LOCK=/dev/.wekit-monet-overlay-restore
+LOCK=/dev/.wcs-monet-overlay-restore
 mkdir "$LOCK" 2>/dev/null || exit 0
 trap 'rmdir "$LOCK"' EXIT
 . "$MODDIR/common.sh"

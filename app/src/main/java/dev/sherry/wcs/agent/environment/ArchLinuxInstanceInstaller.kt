@@ -100,7 +100,7 @@ object ArchLinuxInstanceInstaller {
             val deadline = System.nanoTime() + HEALTH_TIMEOUT_MILLIS * 1_000_000
             val healthOutput = ByteArrayOutputStream(MAX_HEALTH_OUTPUT_BYTES)
             val outputExceeded = AtomicBoolean()
-            val outputReader = thread(name = "wekit-proot-health-output", isDaemon = true) {
+            val outputReader = thread(name = "wcs-proot-health-output", isDaemon = true) {
                 health.inputStream.use { input ->
                     val buffer = ByteArray(8192)
                     while (true) {
@@ -153,7 +153,7 @@ object ArchLinuxInstanceInstaller {
     private const val INSTALL_HEADROOM_BYTES = 512L * 1024 * 1024
     private const val HEALTH_TIMEOUT_MILLIS = 30_000L
     private const val MAX_HEALTH_OUTPUT_BYTES = 64 * 1024
-    const val PUBLISHED_MARKER = ".wekit-arch-published"
+    const val PUBLISHED_MARKER = ".wcs-arch-published"
 
     fun disablePacmanSandbox(config: String): String {
         if (Regex("(?m)^[ \\t]*DisableSandbox[ \\t]*$").containsMatchIn(config)) return config
@@ -173,7 +173,7 @@ object ArchLinuxInstanceInstaller {
     }
 
     fun withPacmanKeyringInitialization(command: String): String =
-        "if [ ! -f /etc/pacman.d/gnupg/.wekit-initialized ]; then " +
+        "if [ ! -f /etc/pacman.d/gnupg/.wcs-initialized ]; then " +
                 "mkdir -p /etc/pacman.d/gnupg && " +
                 "chmod 700 /etc/pacman.d/gnupg && " +
                 "gpg --homedir /etc/pacman.d/gnupg --no-autostart --import " +
@@ -182,6 +182,6 @@ object ArchLinuxInstanceInstaller {
                 "68B3537F39A313B3E574D06777193F152BDBE6A6 >/dev/null && " +
                 "gpg --homedir /etc/pacman.d/gnupg --no-autostart --import-ownertrust " +
                 "/usr/share/pacman/keyrings/archlinuxarm-trusted && " +
-                "printf 'archlinuxarm\\n' > /etc/pacman.d/gnupg/.wekit-initialized; " +
+                "printf 'archlinuxarm\\n' > /etc/pacman.d/gnupg/.wcs-initialized; " +
                  "fi && $command"
 }

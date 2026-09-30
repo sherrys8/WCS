@@ -84,7 +84,7 @@ import com.composables.icons.materialsymbols.outlined.Save
 import com.composables.icons.materialsymbols.outlined.Share
 import dev.sherry.wcs.R
 import dev.sherry.wcs.activity.TransparentActivity
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.ui.content.m3.BaseItemContainer
 import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
@@ -142,7 +142,7 @@ private data class CrashSection(
 //   ts    = yyyy-MM-dd HH:mm:ss.SSS
 //   level = one of V D I W E A
 //   $TAG  = BuildConfig.TAG (the module tag), $tag = caller tag
-// e.g. "2026-07-05 14:30:22.123 E/WeKit AggregateChats: something failed"
+// e.g. "2026-07-05 14:30:22.123 E/WcS AggregateChats: something failed"
 // Groups: 1=date 2=time(+ms) 3=level 4=moduleTag 5=callerTag 6=message
 private val RUN_LOG_REGEX = Regex(
     """^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}\.\d{3}) ([VDIWEAF])/(\S+)\s+([^:]*): (.*)$""",
@@ -298,7 +298,7 @@ private val LOG_TABS = listOf(LogKind.RUN, LogKind.CRASH)
 @Composable
 fun LogsPager() {
     val context = LocalComponentActivity.current
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val scope = rememberCoroutineScope()
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
@@ -475,7 +475,7 @@ private fun LogTabContent(
     onRefreshFinished: (LogRefreshRequest) -> Unit,
     onCurrentFileChange: (Path?) -> Unit,
 ) {
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val pullToRefreshState = rememberPullToRefreshState()
     // Files available for this tab, newest first.
     var files by remember(kind) { mutableStateOf<List<Path>>(emptyList()) }

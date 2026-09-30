@@ -92,7 +92,7 @@ import com.composables.icons.materialsymbols.outlined.Stop
 import com.composables.icons.materialsymbols.outlinedfilled.Star
 import dev.sherry.wcs.activity.agent.WeAgentSettingsActivity
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.agent.environment.NATIVE_ENVIRONMENT_ID
 import dev.sherry.wcs.agent.tool.PermissionLevel
 import dev.sherry.wcs.features.api.agent.WeAgentService
@@ -853,7 +853,7 @@ private fun MessageBubble(
     prevAssistantTimestamp: java.time.Instant? = null,
 ) {
     val context = LocalContext.current
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     when (row.role) {
         ChatRow.Role.TOOL -> ToolCard(row)
         else -> {
@@ -1020,7 +1020,7 @@ private fun ToolCard(row: ChatRow) {
     var expanded by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     val caretRotation by animateFloatAsState(if (expanded) 180f else 0f, tween(220), label = "caret")
 
     Card(
@@ -1144,7 +1144,7 @@ private fun ReasoningCard(
     containerColor: Color = MaterialTheme.colorScheme.surfaceVariant,
 ) {
     val context = LocalContext.current
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     // expanded tracks the user's manual preference. effectiveExpanded also opens the body
     // automatically while streaming so reasoning text is visible as it arrives.
     var expanded by remember { mutableStateOf(false) }

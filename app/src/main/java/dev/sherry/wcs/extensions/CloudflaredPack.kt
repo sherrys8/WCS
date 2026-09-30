@@ -35,7 +35,7 @@ object CloudflaredPack : ExtensionPack {
         get() = CloudflaredPackNotInstalledException("cloudflared extension pack is not installed")
 
     private val baseDir: File
-        get() = File(HostInfo.application.filesDir, "wekit-extensions/cloudflared")
+        get() = File(HostInfo.application.filesDir, "wcs-extensions/cloudflared")
 
     override fun installDir(): File = baseDir
 

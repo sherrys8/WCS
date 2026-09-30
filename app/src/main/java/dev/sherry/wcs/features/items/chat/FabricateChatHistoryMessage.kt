@@ -38,7 +38,7 @@ import com.composables.icons.materialsymbols.outlined.Add
 import com.composables.icons.materialsymbols.outlined.Delete
 import com.composables.icons.materialsymbols.outlined.Person_search
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.core.WeMessageApi
 import dev.sherry.wcs.features.api.core.models.IWeContact
@@ -111,7 +111,7 @@ private fun ChatRecordXmlGeneratorDialog(
     }
 
     val context = LocalContext.current
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val contactsByWxId = remember(contacts) { contacts.associateBy { it.wxId } }
 
     val canGenerate by remember(rows, contacts) {

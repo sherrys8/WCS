@@ -139,7 +139,7 @@ class PythonDexHostImpl(private val scope: PythonPluginScope) : PythonDexHost {
 
     private companion object {
         val executor = Executors.newSingleThreadExecutor { task ->
-            Thread(task, "WeKit-Python-DexKit").apply { isDaemon = true }
+            Thread(task, "WcS-Python-DexKit").apply { isDaemon = true }
         }
     }
 }

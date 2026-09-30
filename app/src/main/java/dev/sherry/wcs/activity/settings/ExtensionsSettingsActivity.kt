@@ -43,8 +43,8 @@ import dev.sherry.wcs.extensions.ExtensionPackState.Verifying
 import dev.sherry.wcs.extensions.ExtensionPacks
 import dev.sherry.wcs.extensions.PythonRuntimePack
 import dev.sherry.wcs.i18n.LocaleResourceMode
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
-import dev.sherry.wcs.i18n.WeKitLocaleProvider
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
+import dev.sherry.wcs.i18n.WcSLocaleProvider
 import dev.sherry.wcs.ui.agent.settings.AgentConfirmDialog
 import dev.sherry.wcs.ui.agent.settings.AgentListActionButton
 import dev.sherry.wcs.ui.content.m3.BaseItemContainer
@@ -72,7 +72,7 @@ class ExtensionsSettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            WeKitLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
+            WcSLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
                 ModuleTheme {
                     ExtensionsRoot(
                         autoPackId = intent.getStringExtra(EXTRA_PACK_ID),
@@ -119,7 +119,7 @@ private fun PackGroup(pack: ExtensionPack) {
     val state by ExtensionPacks.stateFlow(pack).collectAsState()
     var confirmDelete by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
 
     SegmentedColumn {
         item(key = "info") {

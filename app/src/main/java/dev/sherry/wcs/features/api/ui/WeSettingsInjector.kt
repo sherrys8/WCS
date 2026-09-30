@@ -30,7 +30,7 @@ import dev.sherry.wcs.features.core.ApiFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.i18n.LocaleResourceMode
 import dev.sherry.wcs.i18n.LocalizedContextFactory
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.reflection.bool
@@ -160,7 +160,7 @@ object WeSettingsInjector : ApiFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
     private const val TAG = "WeSettingsInjector"
 
-    private const val PREFS_KEY = "wekit_settings_entry"
+    private const val PREFS_KEY = "wcs_settings_entry"
     private const val PREFERENCE_CLASS_NAME = "com.tencent.mm.ui.base.preference.Preference"
 
     @SuppressLint("NonUniqueDexKitData")
@@ -253,7 +253,7 @@ object WeSettingsInjector : ApiFeature(), IResolveDex, WeChatInputBarApi.IInputB
     }
 
     override fun onTextChanged(chatFooter: ChatFooter, text: String) {
-        if (text != "#wekit") return
+        if (text != "#wcs") return
         chatFooter.lastText = ""
         openSettingsDialog(chatFooter.context)
     }
@@ -277,12 +277,12 @@ object WeSettingsInjector : ApiFeature(), IResolveDex, WeChatInputBarApi.IInputB
                 methodSetKey.method.invoke(prefInstance, PREFS_KEY)
                 val localizedContext = LocalizedContextFactory.create(
                     context,
-                    WeKitLocaleController.resolvedLocale,
+                    WcSLocaleController.resolvedLocale,
                     LocaleResourceMode.InjectedHost,
                 )
                 methodSetTitle.method.invoke(
                     prefInstance,
-                    localizedContext.getString(R.string.noncompose_wekit_settings_entry),
+                    localizedContext.getString(R.string.noncompose_wcs_settings_entry),
                 )
 
                 val prefScreen = context.reflekt().invokeMethod("getPreferenceScreen", superclass = true)
@@ -375,21 +375,21 @@ object WeSettingsInjector : ApiFeature(), IResolveDex, WeChatInputBarApi.IInputB
         )
 
         settingsManager.createItem {
-            key = "SettingGroup_Main_WeKitTest1"
+            key = "SettingGroup_Main_WcSTest1"
             titleProvider = {
                 LocalizedContextFactory.create(
                     HostInfo.application,
-                    WeKitLocaleController.resolvedLocale,
+                    WcSLocaleController.resolvedLocale,
                     LocaleResourceMode.InjectedHost,
-                ).getString(R.string.noncompose_wekit_settings_entry)
+                ).getString(R.string.noncompose_wcs_settings_entry)
             }
             level = 1
             groupTitleProvider = {
                 LocalizedContextFactory.create(
                     HostInfo.application,
-                    WeKitLocaleController.resolvedLocale,
+                    WcSLocaleController.resolvedLocale,
                     LocaleResourceMode.InjectedHost,
-                ).getString(R.string.noncompose_wekit_settings_group)
+                ).getString(R.string.noncompose_wcs_settings_group)
             }
             pageClass = SettingGroupMain::class.java
             parentClass = SettingAdditionHeaderSearch::class.java

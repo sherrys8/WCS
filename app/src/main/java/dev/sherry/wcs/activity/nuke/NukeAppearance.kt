@@ -27,7 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.ui.content.nuke.NukeAnimatedVisibility
 import dev.sherry.wcs.ui.content.nuke.NukeButton
 import dev.sherry.wcs.ui.content.nuke.NukeCategoryIcon
@@ -67,7 +67,7 @@ private val nukePresetColors = listOf(
 fun NukeAppearancePage(onBack: (Offset) -> Unit) {
     var showColorDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val scope = rememberCoroutineScope()
     val engineLabels = mapOf(
         SettingsUiEngine.MATERIAL3 to "Material 3",

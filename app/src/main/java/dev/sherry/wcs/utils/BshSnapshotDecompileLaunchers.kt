@@ -9,7 +9,7 @@ import dev.sherry.wcs.BuildConfig
 import dev.sherry.wcs.R
 import dev.sherry.wcs.i18n.LocaleResourceMode
 import dev.sherry.wcs.i18n.LocalizedContextFactory
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.utils.android.showToast
 
 /**
@@ -32,7 +32,7 @@ fun ComponentActivity.registerBshSnapshotDecompileLaunchers(
 
     fun localizedContext() = LocalizedContextFactory.create(
         this,
-        WeKitLocaleController.resolvedLocale,
+        WcSLocaleController.resolvedLocale,
         LocaleResourceMode.ModuleApp,
     )
 

@@ -30,7 +30,7 @@ object ExtensionPacks {
     private const val TAG = "ExtensionPacks"
 
     /** The persistent "Extensions" prerelease carrying the pack assets and the index. */
-    const val BASE_URL = "https://github.com/Ujhhgtg/WeKit/releases/download/Extensions"
+    const val BASE_URL = "https://github.com/sherrys8/WCS/releases/download/Extensions"
     private const val INDEX_ASSET = "manifest.json"
 
     val packs: List<ExtensionPack> = ExtensionPacksProvider.ALL_PACKS

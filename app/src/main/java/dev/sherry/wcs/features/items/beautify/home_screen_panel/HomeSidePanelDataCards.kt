@@ -76,7 +76,7 @@ import com.composables.icons.materialsymbols.outlined.Weather_hail
 import com.composables.icons.materialsymbols.outlined.Weather_snowy
 import dev.sherry.wcs.R
 import dev.sherry.wcs.features.items.beautify.resolveBeautifyText
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.LocalDateTime
@@ -103,7 +103,7 @@ fun HomeSidePanelDateTimeCard(
         DateTimeCardContent.Runtime -> rememberHomeSidePanelNow()
         is DateTimeCardContent.Preview -> content.now
     }
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     val dateText = now.format(
         DateTimeFormatter.ofPattern(
             stringResource(R.string.home_side_panel_date_pattern),
@@ -203,7 +203,7 @@ fun HomeSidePanelWeatherCard(
     onEditCard: ((String) -> Unit)? = null,
     onDeleteCard: ((String) -> Unit)? = null,
 ) {
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     val runtime = content as? WeatherCardContent.Runtime
     val weather = runtime?.state
     val snapshot = when (content) {
@@ -523,7 +523,7 @@ fun HomeSidePanelHitokotoCard(
     onEditCard: ((String) -> Unit)? = null,
     onDeleteCard: ((String) -> Unit)? = null,
 ) {
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     val runtime = content as? HitokotoCardContent.Runtime
     val hitokoto = runtime?.state
     val snapshot = when (content) {

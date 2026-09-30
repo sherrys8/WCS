@@ -126,7 +126,7 @@ class PythonTaskHostImpl(private val scope: PythonPluginScope) : PythonTaskHost 
         private const val TAG = "PythonTaskHost"
         val mainHandler by lazy { Handler(Looper.getMainLooper()) }
         val executor = Executors.newCachedThreadPool { task ->
-            Thread(task, "WeKit-Python-Task").apply { isDaemon = true }
+            Thread(task, "WcS-Python-Task").apply { isDaemon = true }
         }
 
         fun awaitDrain(completed: CountDownLatch) {

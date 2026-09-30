@@ -50,13 +50,13 @@ import dev.sherry.wcs.agent.model.local.LocalLlama
 import dev.sherry.wcs.agent.model.local.LOCAL_LLAMA_MIN_CONTEXT_WINDOW
 import dev.sherry.wcs.agent.model.local.LocalLlamaModels
 import dev.sherry.wcs.ui.content.AlertDialogContent
-import dev.sherry.wcs.ui.content.WeKitBasicDialog
+import dev.sherry.wcs.ui.content.WcSBasicDialog
 import dev.sherry.wcs.agent.data.WeAgentRepository
 import dev.sherry.wcs.agent.data.entity.ModelEntity
 import dev.sherry.wcs.agent.data.entity.ModelProviderEntity
 import dev.sherry.wcs.agent.data.entity.ModelProviderType
 import dev.sherry.wcs.agent.model.ModelProviderManager
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
@@ -83,7 +83,7 @@ fun ModelProviderDetailScreen(
 ) {
     val creating = providerId.isBlank()
     val scope = rememberCoroutineScope()
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     var provider by remember { mutableStateOf<ModelProviderEntity?>(null) }
     var showDeleteProviderConfirm by remember { mutableStateOf(false) }
     // Creation only: the id assigned by 保存. Saveable so that re-entering this entry after the
@@ -369,7 +369,7 @@ fun ModelDetailScreen(providerId: String, modelId: String, onBack: () -> Unit) {
     val creating = modelId.isBlank()
     val locked = providerId == LocalLlama.PROVIDER_ID
     val scope = rememberCoroutineScope()
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     // Blank modelId = adding (a draft until saved); otherwise null until the entity loads.
     var model by remember { mutableStateOf<ModelEntity?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -771,7 +771,7 @@ private fun ImportModelsDialog(
         mutableStateListOf<String>().apply { addAll(candidates.filter { it !in existingRemoteIds }) }
     }
 
-    WeKitBasicDialog(show = show, title = stringResource(R.string.agent_import_models_title, candidates.size), onDismissRequest = onDismiss) {
+    WcSBasicDialog(show = show, title = stringResource(R.string.agent_import_models_title, candidates.size), onDismissRequest = onDismiss) {
         Column {
             if (candidates.isEmpty()) {
                 Text(stringResource(R.string.agent_provider_returned_no_models))

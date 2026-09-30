@@ -16,7 +16,7 @@ import dev.sherry.wcs.R
 import dev.sherry.wcs.features.api.core.models.IWeContact
 import dev.sherry.wcs.i18n.LocaleResourceMode
 import dev.sherry.wcs.i18n.LocalizedContextFactory
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.ui.content.BaseContactSelector
 import dev.sherry.wcs.ui.content.MINUTES_PER_DAY
 import dev.sherry.wcs.ui.content.TextButton
@@ -225,6 +225,6 @@ fun automationKeywordSummary(rule: AutomationKeywordRule, unrestrictedText: Stri
 private fun localizedAutomationString(resourceId: Int, vararg formatArgs: Any): String =
     LocalizedContextFactory.create(
         HostInfo.application,
-        WeKitLocaleController.resolvedLocale,
+        WcSLocaleController.resolvedLocale,
         LocaleResourceMode.InjectedHost,
     ).getString(resourceId, *formatArgs)

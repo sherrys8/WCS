@@ -86,7 +86,7 @@ import dev.sherry.wcs.features.api.ui.WeConversationListViewApi
 import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.items.contacts.HideContacts
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.Button
@@ -125,7 +125,7 @@ object ConversationGrouping : ClickableFeature(), IResolveDex {
     override val categoryIds = listOf(FeatureCategoryIds.CHAT)
     override val descriptionRes = R.string.feature_conversation_grouping_description
 
-    const val GROUP_PREFIX = "wekit_group_"
+    const val GROUP_PREFIX = "wcs_group_"
 
     // The fixed "全部" tab. It behaves like a group for ordering purposes — it can be dragged to any
     // position and that position is persisted alongside the real groups — but it can never be
@@ -232,7 +232,7 @@ object ConversationGrouping : ClickableFeature(), IResolveDex {
                 val groupsState = mutableStateOf(loadGroups())
                 setContent {
                     InjectedUiTheme {
-                        val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+                        val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
                         var selectedGroupId by selectedGroupIdState
                         var groups by groupsState
 
@@ -743,9 +743,9 @@ object ConversationGrouping : ClickableFeature(), IResolveDex {
         val lower = sql.lowercase()
         if (!lower.contains("select")) return false
         if (!lower.contains("from rconversation")) return false
-        // Don't touch AggregateChats folder-container queries (scoped to a wekit_folder_ parentRef)
+        // Don't touch AggregateChats folder-container queries (scoped to a wcs_folder_ parentRef)
         // or WeChat's own conversation-box container; the tabs only apply to the homepage list.
-        if (lower.contains("wekit_folder_") || lower.contains("conversationboxservice")) return false
+        if (lower.contains("wcs_folder_") || lower.contains("conversationboxservice")) return false
         // The homepage list query is the one carrying per-conversation display columns; ignore
         // aggregate/count/single-row lookups so we don't corrupt unrelated reads.
         return lower.contains("conversationtime") &&
@@ -917,7 +917,7 @@ object ConversationGrouping : ClickableFeature(), IResolveDex {
         modifier: Modifier = Modifier,
         containerColor: Color = if (isSystemInDarkTheme()) Color(0xFF111111) else Color(0xFFEDEDED),
     ) {
-        val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+        val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
         var menuForGroupId by remember { mutableStateOf<String?>(null) }
         // Sort (edit) mode: long-press a tab to drag-reorder.
         var sortMode by remember { mutableStateOf(false) }
@@ -1129,7 +1129,7 @@ object ConversationGrouping : ClickableFeature(), IResolveDex {
 
     @Composable
     private fun groupDisplayName(group: ChatGroup): String =
-        localizedGroupName(LocalWeKitLocalizedContext.current, group)
+        localizedGroupName(LocalWcSLocalizedContext.current, group)
 
     /**
      * Long-press a tab to drag it into a new position. The working order is persisted only when
@@ -1413,7 +1413,7 @@ object ConversationGrouping : ClickableFeature(), IResolveDex {
         onDelete: (() -> Unit)? = null,
         onSave: (ChatGroup) -> Unit
     ) {
-        val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+        val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
         val groupId = remember(group) { group?.id ?: newGroupId() }
         var name by remember(group) { mutableStateOf(group?.name ?: "") }
         var members by remember(group) { mutableStateOf(group?.members?.toSet().orEmpty()) }

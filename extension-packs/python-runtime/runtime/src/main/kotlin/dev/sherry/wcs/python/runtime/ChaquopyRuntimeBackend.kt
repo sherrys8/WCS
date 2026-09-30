@@ -13,29 +13,29 @@ internal class ChaquopyRuntimeBackend : PythonRuntimeBackend {
     override fun start(config: PythonRuntimeConfig) {
         if (this::config.isInitialized) return
         this.config = config
-        check(!Python.isStarted()) { "Chaquopy Python was started outside WeKit's runtime backend" }
-        Python.start(WeKitAndroidPlatform(config))
+        check(!Python.isStarted()) { "Chaquopy Python was started outside WcS's runtime backend" }
+        Python.start(WcSAndroidPlatform(config))
         withLookupLoader {
             Python.getInstance().getModule("java.chaquopy")
                 .callAttrThrows("set_java_class_loader", config.lookupClassLoader)
-            Python.getInstance().getModule("wekit._bootstrap")
+            Python.getInstance().getModule("wcs._bootstrap")
                 .callAttrThrows("initialize", config)
         }
     }
 
     override fun activatePlugin(request: PythonPluginRequest, host: PythonPluginHost) = withLookupLoader {
-        Python.getInstance().getModule("wekit._bootstrap")
+        Python.getInstance().getModule("wcs._bootstrap")
             .callAttrThrows("activate_plugin", request, host)
         Unit
     }
 
     override fun deactivatePlugin(pluginId: String) = withLookupLoader {
-        Python.getInstance().getModule("wekit._bootstrap").callAttrThrows("deactivate_plugin", pluginId)
+        Python.getInstance().getModule("wcs._bootstrap").callAttrThrows("deactivate_plugin", pluginId)
         Unit
     }
 
     override fun reloadPlugin(request: PythonPluginRequest, host: PythonPluginHost) = withLookupLoader {
-        Python.getInstance().getModule("wekit._bootstrap")
+        Python.getInstance().getModule("wcs._bootstrap")
             .callAttrThrows("reload_plugin", request, host)
         Unit
     }

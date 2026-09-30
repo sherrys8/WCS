@@ -100,7 +100,7 @@ import dev.sherry.wcs.features.api.core.WeConversationApi
 import dev.sherry.wcs.features.api.ui.WeMainActivityBeautifyApi
 import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.DefaultColumn
@@ -423,7 +423,7 @@ object AddMainScreenFab : ClickableFeature() {
 
                     setContent {
                         InjectedUiTheme {
-                            val localizedContext = LocalWeKitLocalizedContext.current
+                            val localizedContext = LocalWcSLocalizedContext.current
                             val menuItems = configList.map { item ->
                                 val icon = iconPool[item.iconName] ?: MaterialSymbols.OutlinedFilled.Add
                                 val action: () -> Unit = when (item.type) {
@@ -898,7 +898,7 @@ object AddMainScreenFab : ClickableFeature() {
     @OptIn(ExperimentalFoundationApi::class)
     override fun onClick(context: ComponentActivity) {
         showComposeDialog(context) {
-            val localizedContext = LocalWeKitLocalizedContext.current
+            val localizedContext = LocalWcSLocalizedContext.current
             var currentItems by remember { mutableStateOf(loadConfig()) }
 
             fun moveItem(from: Int, to: Int) {

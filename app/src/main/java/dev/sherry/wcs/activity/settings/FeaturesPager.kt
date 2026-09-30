@@ -34,8 +34,8 @@ import dev.sherry.wcs.features.core.FeaturesProvider
 import dev.sherry.wcs.features.core.NewFeatures
 import dev.sherry.wcs.features.core.SwitchFeature
 import dev.sherry.wcs.features.core.featureCategoryComparator
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.ExpressiveBackButton
@@ -63,8 +63,8 @@ private fun featureChecked(item: BaseFeature): Boolean {
 
 @Composable
 fun FeaturesPager(onOpenCategory: (String) -> Unit) {
-    val context = LocalWeKitLocalizedContext.current
-    val resolvedLocale = WeKitLocaleController.resolvedLocale
+    val context = LocalWcSLocalizedContext.current
+    val resolvedLocale = WcSLocaleController.resolvedLocale
     val revision = FeatureCategoryState.revision
     var query by remember { mutableStateOf("") }
     val searching = query.isNotBlank()
@@ -227,8 +227,8 @@ fun FeaturesPager(onOpenCategory: (String) -> Unit) {
 
 @Composable
 fun CategoryDetailScreen(categoryId: String, onBack: () -> Unit) {
-    val context = LocalWeKitLocalizedContext.current
-    val resolvedLocale = WeKitLocaleController.resolvedLocale
+    val context = LocalWcSLocalizedContext.current
+    val resolvedLocale = WcSLocaleController.resolvedLocale
     val revision = FeatureCategoryState.revision
     val featureNameCollator = remember(resolvedLocale) {
         Collator.getInstance(Locale.forLanguageTag(resolvedLocale.androidTag))

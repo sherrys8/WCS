@@ -108,9 +108,9 @@ import dev.sherry.wcs.features.api.core.WeApi
 import dev.sherry.wcs.features.items.debug.ResetDexCache
 import dev.sherry.wcs.features.items.system.SafeMode
 import dev.sherry.wcs.i18n.LanguageSelection
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.i18n.SupportedLocale
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.m3.BaseItemContainer
 import dev.sherry.wcs.ui.content.m3.BaseWidget
@@ -153,7 +153,7 @@ import android.graphics.Color as AndroidColor
 fun SettingsPager(onOpenLicense: () -> Unit) {
     val context = LocalComponentActivity.current
     val platformContext = LocalContext.current
-    val currentLocalizedContext = rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val currentLocalizedContext = rememberUpdatedState(LocalWcSLocalizedContext.current)
 
     var showClearConfirm by remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<UpdateResult.UpdateAvailable?>(null) }
@@ -351,9 +351,9 @@ fun SettingsPager(onOpenLicense: () -> Unit) {
                 item {
                     PrefArrow(
                         title = stringResource(R.string.brand_github),
-                        summary = "Ujhhgtg/WeKit",
+                        summary = "sherrys8/WCS",
                         icon = GitHubIcon,
-                        onClick = { "https://github.com/Ujhhgtg/WeKit".toUri().openInSystem(context, true) })
+                        onClick = { "https://github.com/sherrys8/WCS".toUri().openInSystem(context, true) })
                 }
                 item {
                     PrefArrow(
@@ -462,9 +462,9 @@ private fun AvatarPlaceholder() {
 
 @Composable
 private fun ThemeSection() {
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
-    val selectedLanguage = WeKitLocaleController.selection
-    val resolvedLanguage = WeKitLocaleController.resolvedLocale
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
+    val selectedLanguage = WcSLocaleController.selection
+    val resolvedLanguage = WcSLocaleController.resolvedLocale
     val languageLabels = mapOf(
         LanguageSelection.SYSTEM to stringResource(R.string.language_follow_system),
         LanguageSelection.ENGLISH to stringResource(R.string.language_english),
@@ -516,7 +516,7 @@ private fun ThemeSection() {
                 description = languageSummary,
                 value = selectedLanguage,
                 options = languageLabels.map { DropdownOption(it.key, it.value) },
-                onValueChange = WeKitLocaleController::updateSelection,
+                onValueChange = WcSLocaleController::updateSelection,
                 icon = MaterialSymbols.Outlined.Language,
             )
         }
@@ -860,7 +860,7 @@ private fun checkForUpdate(
 
 @Composable
 private fun ClearConfigDialog(show: Boolean, onDismiss: () -> Unit) {
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     ConfirmDialog(
         show = show,
         title = stringResource(R.string.clear_config_dialog_title),
@@ -884,7 +884,7 @@ private fun UpdateAvailableDialog(
     onDismiss: () -> Unit,
     context: ComponentActivity,
 ) {
-    val currentLocalizedContext = rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val currentLocalizedContext = rememberUpdatedState(LocalWcSLocalizedContext.current)
     ConfirmDialog(
         show = info != null,
         title = stringResource(R.string.update_available_title),

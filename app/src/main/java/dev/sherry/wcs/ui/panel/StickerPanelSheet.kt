@@ -102,7 +102,7 @@ import com.composables.icons.materialsymbols.outlined.Travel_explore
 import com.composables.icons.materialsymbols.outlined.Upload
 import com.composables.icons.materialsymbols.outlined.Upload_file
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.features.items.chat.panel.LocalSortMode
 import dev.sherry.wcs.features.items.chat.panel.PanelPaths
 import dev.sherry.wcs.features.items.chat.panel.PanelSettings
@@ -285,7 +285,7 @@ private fun StickerPanelContent(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     val currentLocalizedContext by rememberUpdatedState(localizedContext)
     val scope = rememberCoroutineScope()
     val rememberedNavigation = remember {

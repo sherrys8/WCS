@@ -7,7 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import dev.sherry.wcs.i18n.LocaleResourceMode
 import dev.sherry.wcs.i18n.LocalizedContextFactory
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.utils.HostInfo
 
 sealed interface PaymentUiText {
@@ -46,6 +46,6 @@ fun Context.localizedPaymentQuantityString(
 private fun Context.paymentLocalizedContext(): Context =
     LocalizedContextFactory.create(
         this,
-        WeKitLocaleController.resolvedLocale,
+        WcSLocaleController.resolvedLocale,
         LocaleResourceMode.InjectedHost,
     )

@@ -2,7 +2,7 @@ package dev.sherry.wcs.features.items.moments
 
 import android.content.Context
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -89,7 +89,7 @@ object CustomDetails : SwitchFeature(), WeMomentsContextMenuApi.IMenuItemsProvid
         showComposeDialog(context) {
             var textInput by remember { mutableStateOf(TextFieldValue(getCustomText(snsId).orEmpty())) }
             var isFocused by remember { mutableStateOf(false) }
-            val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+            val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
 
             AlertDialogContent(
                 title = { Text(stringResource(R.string.moments_custom_details_title)) },

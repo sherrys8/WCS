@@ -57,7 +57,7 @@ object ReadReceiptsTunnelRuntime {
     private val handoffGate = TunnelHandoffGate()
     private val stopCompletion = TunnelStopCompletion()
     private val credentialStore by lazy {
-        ReadReceiptsTunnelCredentialStore(File(HostInfo.application.filesDir, "wekit"))
+        ReadReceiptsTunnelCredentialStore(File(HostInfo.application.filesDir, "wcs"))
     }
     private val connectivityManager by lazy {
         HostInfo.application.getSystemService(ConnectivityManager::class.java)

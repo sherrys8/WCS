@@ -42,7 +42,7 @@ _lock: threading.RLock = threading.RLock()
 _loop: asyncio.AbstractEventLoop | None = None
 _loop_thread: threading.Thread | None = None
 _current_context: ContextVar[PluginContext | None] = ContextVar(
-    "wekit_plugin_context", default=None
+    "wcs_plugin_context", default=None
 )
 _T = TypeVar("_T")
 
@@ -450,15 +450,15 @@ def initialize(config: RuntimeConfig) -> None:
         _config = config
         _loop = asyncio.new_event_loop()
         _loop_thread = threading.Thread(
-            target=_loop.run_forever, name="WeKit-Python-Asyncio", daemon=True
+            target=_loop.run_forever, name="WcS-Python-Asyncio", daemon=True
         )
         _loop_thread.start()
         sys.stdout = _LogStream(False)
         sys.stderr = _LogStream(True)
-        if "_wekit_plugins" not in sys.modules:
-            package = types.ModuleType("_wekit_plugins")
+        if "_wcs_plugins" not in sys.modules:
+            package = types.ModuleType("_wcs_plugins")
             package.__path__ = []
-            sys.modules["_wekit_plugins"] = package
+            sys.modules["_wcs_plugins"] = package
 
 
 def activate_plugin(request: PluginRequest, host: PluginHost) -> None:
@@ -467,7 +467,7 @@ def activate_plugin(request: PluginRequest, host: PluginHost) -> None:
         if plugin_id in _instances:
             raise RuntimeError(f"plugin is already active: {plugin_id}")
         importlib.invalidate_caches()
-        namespace = "_wekit_plugins.p_" + plugin_id.encode("utf-8").hex()
+        namespace = "_wcs_plugins.p_" + plugin_id.encode("utf-8").hex()
         root = Path(request.getRoot().getAbsolutePath())
         entry = request.getEntry()
         module_path = root.joinpath(*entry.split("."))

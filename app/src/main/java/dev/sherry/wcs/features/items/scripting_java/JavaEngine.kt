@@ -641,7 +641,7 @@ object JavaEngine {
             // ===== WeChat Identity =====
 
             // getTargetTalker() → current chat partner wxid
-            // WAuxv original: hooks ChatFooter.setUserName | WeKit: same approach via XposedBridge
+            // WAuxv original: hooks ChatFooter.setUserName | WcS: same approach via XposedBridge
             setMethod(
                 BshMethod(
                     "getTargetTalker", emptyArray<Class<*>>()
@@ -797,7 +797,7 @@ object JavaEngine {
                     return@BshMethod runCatchingBsh("getAvatarUrl") { WeDatabaseApi.getAvatarUrl(wxId) }.getOrDefault("")
                 })
 
-            // getAvatarUrl(wxId, big) → 'big' param not supported by WeKit; defaults to same URL
+            // getAvatarUrl(wxId, big) → 'big' param not supported by WcS; defaults to same URL
             setMethod(
                 BshMethod(
                     "getAvatarUrl", arrayOf(BString, java.lang.Boolean.TYPE)
@@ -817,7 +817,7 @@ object JavaEngine {
 
             // ===== Messaging =====
             // WAuxv original: uses NetSceneSendMsg directly via C0452.m1780
-            // WeKit: uses methodGetSendMsgObject + methodPostToQueue (same NetSceneQueue, different entry); equivalent behavior
+            // WcS: uses methodGetSendMsgObject + methodPostToQueue (same NetSceneQueue, different entry); equivalent behavior
 
             // sendText(toUser, text) → Boolean
             setMethod(

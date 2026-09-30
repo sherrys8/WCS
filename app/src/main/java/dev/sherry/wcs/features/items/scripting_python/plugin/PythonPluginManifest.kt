@@ -11,6 +11,6 @@ data class PythonPluginManifest(
     val author: String = "",
     val description: String = "",
     val entry: String = "main",
-    val minWeKitVersionCode: Int = 0,
+    val minWcSVersionCode: Int = 0,
     val processes: List<String> = listOf("main"),
 )

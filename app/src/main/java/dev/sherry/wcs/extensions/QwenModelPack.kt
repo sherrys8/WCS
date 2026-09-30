@@ -44,7 +44,7 @@ object QwenModelPack : ModelExtensionPack {
 }"""
 
     private val baseDir: File
-        get() = File(HostInfo.application.filesDir, "wekit-extensions/$id")
+        get() = File(HostInfo.application.filesDir, "wcs-extensions/$id")
 
     override fun installDir(): File = baseDir
 

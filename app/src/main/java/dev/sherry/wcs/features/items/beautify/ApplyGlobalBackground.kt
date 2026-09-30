@@ -35,7 +35,7 @@ import coil3.load
 import coil3.request.crossfade
 import dev.ujhhgtg.reflekt.reflekt
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.ujhhgtg.reflekt.utils.Modifiers
 import dev.sherry.wcs.activity.TransparentActivity
 import dev.sherry.wcs.constants.PackageNames
@@ -95,7 +95,7 @@ object ApplyGlobalBackground : ClickableFeature(), IResolveDex {
     // persistable permission grant some custom ROMs drop after reboot.
     private val backgroundImageFile by lazy { KnownPaths.moduleAssets / BACKGROUND_IMAGE_FILE }
 
-    private const val OVERLAY_TAG = "wekit_global_bg_overlay"
+    private const val OVERLAY_TAG = "wcs_global_bg_overlay"
     private const val APPLIED_URI_TAG_KEY = 0x55020001
     private const val APPLY_STATUS_BAR_DELAY_MS = 80L
 
@@ -256,7 +256,7 @@ object ApplyGlobalBackground : ClickableFeature(), IResolveDex {
             var transparentStatusBarInput by remember { mutableStateOf(transparentStatusBar) }
             var restartRequired by remember { mutableStateOf(false) }
             val currentRestartRequired by rememberUpdatedState(restartRequired)
-            val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+            val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
 
             DisposableEffect(Unit) {
                 onDispose {

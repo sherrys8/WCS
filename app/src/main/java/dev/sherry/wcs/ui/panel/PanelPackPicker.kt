@@ -34,7 +34,7 @@ import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Add
 import com.composables.icons.materialsymbols.outlined.Close
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.utils.android.showToastSuspend
 import kotlinx.coroutines.launch
 
@@ -86,7 +86,7 @@ private fun PanelPackPickerContent(
     onDismiss: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val currentLocalizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val currentLocalizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     var creating by remember { mutableStateOf(false) }
     var prompt by remember { mutableStateOf(false) }
 

@@ -13,13 +13,13 @@ import org.json.JSONObject
 import java.io.File
 
 /** AndroidPlatform variant for an externally mounted runtime APK and preloaded native directory. */
-internal class WeKitAndroidPlatform(
+internal class WcSAndroidPlatform(
     private val config: PythonRuntimeConfig,
 ) : Python.Platform() {
     private val application = config.application
     private val assets: AssetManager = application.assets
     private val preferences: SharedPreferences =
-        application.getSharedPreferences("wekit-python-assets", Context.MODE_PRIVATE)
+        application.getSharedPreferences("wcs-python-assets", Context.MODE_PRIVATE)
     private val buildJson = JSONObject(
         assets.open("${Common.ASSET_DIR}/${Common.ASSET_BUILD_JSON}").use { it.readBytes().decodeToString() },
     )
@@ -107,6 +107,6 @@ internal class WeKitAndroidPlatform(
     }
 
     private companion object {
-        const val TAG = "WeKitPythonRuntime"
+        const val TAG = "WcSPythonRuntime"
     }
 }

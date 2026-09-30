@@ -136,7 +136,7 @@ class NativeReadReceiptsServerController : ReadReceiptsServerController {
 
         fun databaseFile(): File = File(
             HostInfo.application.filesDir,
-            "wekit-read-receipts/read_receipts.db",
+            "wcs-read-receipts/read_receipts.db",
         )
     }
 }

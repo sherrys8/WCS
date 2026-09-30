@@ -29,7 +29,7 @@ object WeContactHeaderApi : ApiFeature(), IResolveDex {
     }
 
     private val providers = CopyOnWriteArrayList<Provider>()
-    private const val ROW_TAG = "wekit_contact_header_row"
+    private const val ROW_TAG = "wcs_contact_header_row"
 
     private val bindHeader by dexMethod {
         matcher {

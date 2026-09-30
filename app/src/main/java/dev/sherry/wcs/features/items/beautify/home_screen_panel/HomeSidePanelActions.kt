@@ -77,7 +77,7 @@ fun homeSidePanelActionSpec(kind: HomeSidePanelActionKind): HomeSidePanelActionS
         MaterialSymbols.OutlinedFilled.Favorite,
     )
 
-    HomeSidePanelActionKind.WEKIT_SETTINGS -> HomeSidePanelActionSpec(
+    HomeSidePanelActionKind.WCS_SETTINGS -> HomeSidePanelActionSpec(
         kind,
         R.string.fab_default_module_settings,
         MaterialSymbols.OutlinedFilled.Extension,
@@ -163,7 +163,7 @@ class HomeSidePanelActionExecutor(
                 startWeChatActivity("com.tencent.mm.plugin.fav.ui.FavoriteIndexUI")
             }
 
-            HomeSidePanelActionKind.WEKIT_SETTINGS -> startActivity(
+            HomeSidePanelActionKind.WCS_SETTINGS -> startActivity(
                 Intent(activity, SettingsActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )

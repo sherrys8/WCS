@@ -126,12 +126,12 @@ class ReadReceiptsTunnelCredentialStore(baseDir: File) {
     }
 
     companion object {
-        private const val FILE_PATH = "wekit-read-receipts/tunnel_credential.v1"
+        private const val FILE_PATH = "wcs-read-receipts/tunnel_credential.v1"
         private const val VERSION = "2"
         private const val MAX_FILE_BYTES = 64 * 1024
         private const val IV_BYTES = 12
         private const val GCM_TAG_BYTES = 16
-        private const val KEY_ALIAS = "wekit_read_receipts_tunnel_v2"
+        private const val KEY_ALIAS = "wcs_read_receipts_tunnel_v2"
         private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
     }

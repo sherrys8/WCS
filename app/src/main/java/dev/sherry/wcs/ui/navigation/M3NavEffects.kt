@@ -10,7 +10,7 @@ import dev.sherry.wcs.ui.utils.theme.ThemeSettings
 import top.yukonga.miuix.kmp.nav.core.NavCornerClipMode
 import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
 
-/** Shared NavDisplay effects for WeKit's Material 3 settings UIs. */
+/** Shared NavDisplay effects for WcS's Material 3 settings UIs. */
 @Composable
 fun rememberM3NavEffects(): NavDisplayEffects {
     val cornerRadius = rememberDeviceCornerRadius(defaultRadius = 32.dp)

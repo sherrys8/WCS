@@ -64,7 +64,7 @@ object CenterProfileCard : ClickableFeature(), IResolveDex {
     override val descriptionRes = R.string.feature_center_profile_card_description
 
     private const val TAG = "CenterProfileCard"
-    private const val CENTER_CARD_TAG = "wekit_account_info_center_card"
+    private const val CENTER_CARD_TAG = "wcs_account_info_center_card"
 
     private const val DEFAULT_AVATAR_TOP_MARGIN_DP = 40
     private const val DEFAULT_AVATAR_SIZE_DP = 80

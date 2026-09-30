@@ -5,7 +5,7 @@ import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import dev.sherry.wcs.i18n.LocaleResourceMode
 import dev.sherry.wcs.i18n.LocalizedContextFactory
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.utils.HostInfo
 
 fun localizedChatInputString(@StringRes id: Int, vararg formatArgs: Any): String =
@@ -25,6 +25,6 @@ fun Context.localizedChatInputQuantity(
 private fun Context.chatInputLocalizedContext(): Context =
     LocalizedContextFactory.create(
         this,
-        WeKitLocaleController.resolvedLocale,
+        WcSLocaleController.resolvedLocale,
         LocaleResourceMode.InjectedHost,
     )

@@ -70,7 +70,7 @@ import dev.ujhhgtg.reflekt.reflekt
 import dev.ujhhgtg.reflekt.utils.Modifiers
 import dev.ujhhgtg.reflekt.utils.toClass
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.dexkit.abc.IResolveDex
 import dev.sherry.wcs.dexkit.dsl.dexClass
 import dev.sherry.wcs.dexkit.dsl.dexMethod
@@ -2986,7 +2986,7 @@ object Themes : ClickableFeature(), IResolveDex {
     override fun onClick(context: ComponentActivity) {
         val themes = listOf(getDefaultTheme(context)) + scanThemes()
         showComposeDialog(context) {
-            val localizedContext = LocalWeKitLocalizedContext.current
+            val localizedContext = LocalWcSLocalizedContext.current
             var selectedId by remember {
                 mutableStateOf(
                     currentThemeId.takeIf { id ->

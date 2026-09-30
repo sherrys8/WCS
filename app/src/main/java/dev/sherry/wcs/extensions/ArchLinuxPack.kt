@@ -29,7 +29,7 @@ object ArchLinuxPack : ExtensionPack {
     private const val BRIDGE = "invoke_tool"
     private const val SOURCE_MANIFEST = "source-manifest.json"
 
-    private val baseDir: File get() = File(HostInfo.application.filesDir, "wekit-extensions/$id")
+    private val baseDir: File get() = File(HostInfo.application.filesDir, "wcs-extensions/$id")
     override fun installDir(): File = baseDir
     override fun stagingDir(): File = File(baseDir, ".staging")
     override fun isInUse(): Boolean = false
@@ -67,7 +67,7 @@ object ArchLinuxPack : ExtensionPack {
             prootExecutable = NativeLoader.prootExecutable(),
             prootLoaderExecutable = NativeLoader.prootLoaderExecutable(),
             bridge = File(template, BRIDGE),
-            instancesDirectory = File(HostInfo.application.filesDir, "wekit-agent/environment/instances"),
+            instancesDirectory = File(HostInfo.application.filesDir, "wcs-agent/environment/instances"),
             maxExtractedBytes = maxExtractedBytes,
         )
     }

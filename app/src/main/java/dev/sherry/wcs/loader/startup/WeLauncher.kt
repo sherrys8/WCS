@@ -6,7 +6,7 @@ import dev.sherry.wcs.constants.PackageNames
 import dev.sherry.wcs.constants.Preferences
 import dev.sherry.wcs.dexkit.cache.DexCacheManager
 import dev.sherry.wcs.features.core.FeaturesLoader
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.loader.utils.ActivityProxy
 import dev.sherry.wcs.loader.utils.ParcelableFixer
 import dev.sherry.wcs.loader.utils.ResourcesInjector
@@ -29,7 +29,7 @@ object WeLauncher {
 
         val appContext = context.applicationContext ?: context
         ResourcesInjector.injectModuleRes(appContext.resources)
-        WeKitLocaleController.initializeInjectedHost(HostInfo.application)
+        WcSLocaleController.initializeInjectedHost(HostInfo.application)
 
         if (TargetProcesses.isInMain) {
             ActivityProxy.init(appContext)

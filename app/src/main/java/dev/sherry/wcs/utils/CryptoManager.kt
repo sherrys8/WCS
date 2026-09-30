@@ -13,7 +13,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 object CryptoManager {
 
-    private const val KEY_ALIAS = "wekit_tee_key"
+    private const val KEY_ALIAS = "wcs_tee_key"
     private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val GCM_TAG_LENGTH = 128

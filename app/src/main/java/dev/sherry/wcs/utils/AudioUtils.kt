@@ -10,7 +10,7 @@ object AudioUtils {
         val silkFile = File(silkPath).absoluteFile
         var pcmFile: File? = null
         return try {
-            val temporaryPcm = File.createTempFile("wekit-audio-", ".pcm", silkFile.parentFile)
+            val temporaryPcm = File.createTempFile("wcs-audio-", ".pcm", silkFile.parentFile)
             pcmFile = temporaryPcm
             val decoded = AndroidAudioDecoder.decodeToPcm16(sourcePath, temporaryPcm)
             val converted = pcmToSilk(

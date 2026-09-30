@@ -63,9 +63,9 @@ import dev.sherry.wcs.BuildConfig
 import dev.sherry.wcs.R
 import dev.sherry.wcs.constants.PackageNames
 import dev.sherry.wcs.i18n.LocaleResourceMode
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.i18n.LocalizedContextFactory
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.ui.content.Button
 import dev.sherry.wcs.ui.content.DefaultColumn
 import dev.sherry.wcs.ui.content.IconButton
@@ -179,7 +179,7 @@ class MainActivity : ComponentActivity() {
     private fun localizedString(@StringRes resourceId: Int, vararg formatArgs: Any): String =
         LocalizedContextFactory.create(
             this,
-            WeKitLocaleController.resolvedLocale,
+            WcSLocaleController.resolvedLocale,
             LocaleResourceMode.ModuleApp,
         ).getString(resourceId, *formatArgs)
 
@@ -310,7 +310,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun AppContent(resultLauncher: ActivityResultLauncher<String>, onUrlClick: (String) -> Unit) {
-        val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+        val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
         val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
         var showMenu by remember { mutableStateOf(false) }
@@ -733,8 +733,8 @@ class MainActivity : ComponentActivity() {
                     val paths = remember {
                         @Suppress("SdCardPath")
                         listOf(
-                            "/data/data/${PackageNames.WECHAT}/files/mmkv/wekit_prefs",
-                            "/data/data/${PackageNames.WECHAT}/files/mmkv/wekit_prefs.crc",
+                            "/data/data/${PackageNames.WECHAT}/files/mmkv/wcs_prefs",
+                            "/data/data/${PackageNames.WECHAT}/files/mmkv/wcs_prefs.crc",
                         )
                     }
 
@@ -809,8 +809,8 @@ class MainActivity : ComponentActivity() {
                 LinkCard(
                     icon = GitHubIcon,
                     title = stringResource(R.string.brand_github),
-                    subtitle = "Ujhhgtg/WeKit",
-                    onClick = { onUrlClick("https://github.com/Ujhhgtg/WeKit") }
+                    subtitle = "sherrys8/WCS",
+                    onClick = { onUrlClick("https://github.com/sherrys8/WCS") }
                 )
                 LinkCard(
                     icon = TelegramIcon,

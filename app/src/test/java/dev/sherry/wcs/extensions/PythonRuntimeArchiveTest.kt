@@ -23,7 +23,7 @@ class PythonRuntimeArchiveTest {
 
         assertEquals(listOf("classes.dex", "classes2.dex"), contents.dexEntries)
         assertEquals(listOf("lib/arm64-v8a/libprobe.so"), contents.nativeEntries)
-        assertEquals(true, File(sdk, "wekit/__init__.py").isFile)
+        assertEquals(true, File(sdk, "wcs/__init__.py").isFile)
     }
 
     @Test
@@ -59,7 +59,7 @@ class PythonRuntimeArchiveTest {
 
     private fun sdkArchive(): ByteArray = ByteArrayOutputStream().use { output ->
         ZipOutputStream(output).use { zip ->
-            zip.putNextEntry(ZipEntry("wekit/__init__.py"))
+            zip.putNextEntry(ZipEntry("wcs/__init__.py"))
             zip.write(byteArrayOf())
             zip.closeEntry()
         }

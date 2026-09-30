@@ -6,7 +6,7 @@ import androidx.compose.ui.res.stringResource
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Info
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.features.api.ui.WeChatMessageContextMenuApi
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.core.SwitchFeature
@@ -56,7 +56,7 @@ object DisplayMessageDetails : SwitchFeature(),
                     msgInfo.content
 
                 showComposeDialog(view.context) {
-                    val localizedContext = LocalWeKitLocalizedContext.current
+                    val localizedContext = LocalWcSLocalizedContext.current
                     AlertDialogContent(
                         title = { Text(stringResource(R.string.chat_message_details_title)) },
                         text = {

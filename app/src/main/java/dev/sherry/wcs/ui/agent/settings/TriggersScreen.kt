@@ -40,7 +40,7 @@ import dev.sherry.wcs.agent.trigger.TriggerConditions
 import dev.sherry.wcs.agent.trigger.TriggerConditionsJson
 import dev.sherry.wcs.agent.trigger.TriggerScope
 import dev.sherry.wcs.agent.trigger.TriggerType
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
@@ -60,7 +60,7 @@ import java.util.UUID
 @Composable
 fun TriggersScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val triggers by remember { WeAgentRepository.observeTriggers() }
         .collectAsState(initial = emptyList())
     // Session id -> title, for showing which session a SESSION-scoped trigger belongs to.

@@ -188,16 +188,16 @@ object ZygiskEntry {
                 allowDynamicLoad = false,
             )
         } catch (t: Throwable) {
-            WeLogger.e(TAG, "failed to start WeKit module", t)
+            WeLogger.e(TAG, "failed to start WcS module", t)
             false
         }
         if (started) {
-            WeLogger.i(TAG, "WeKit module started with host ClassLoader=$hostClassLoader")
+            WeLogger.i(TAG, "WcS module started with host ClassLoader=$hostClassLoader")
         } else {
             // ModuleLoader deliberately leaves its guard unset on failure.
             // Do the same here so a later app lifecycle entry can retry.
             moduleStarted.set(false)
-            WeLogger.w(TAG, "WeKit module startup failed; retry remains available")
+            WeLogger.w(TAG, "WcS module startup failed; retry remains available")
         }
     }
 

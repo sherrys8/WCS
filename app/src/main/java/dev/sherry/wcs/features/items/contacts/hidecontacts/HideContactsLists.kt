@@ -225,7 +225,7 @@ private fun stringArrayArg(arg: Any?): List<String> =
  * The `or username = 'weixin'` disjunct is reproduced too, parenthesised: it re-admits 微信团队
  * unconditionally, whatever its flags, so a hidden `weixin` really is in WeChat's total.
  *
- * The statement runs on WeKit's own database handle rather than WeChat's storage wrapper, so it
+ * The statement runs on WcS's own database handle rather than WeChat's storage wrapper, so it
  * cannot re-enter the wrapper hook. Its formatting deliberately differs from WeChat's
  * (`type & 1 != 0` vs `type & 1 !=0`, and the hidden-set predicate comes first) so it can never be
  * mistaken for the query the `group-count` rule matches either.

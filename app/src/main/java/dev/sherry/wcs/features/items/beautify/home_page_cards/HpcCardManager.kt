@@ -10,7 +10,7 @@ import java.lang.reflect.Method
 
 object HpcCardManager {
 
-    private const val TAG_INSERTED = "wekit_home_cards"
+    private const val TAG_INSERTED = "wcs_home_cards"
     private const val TAG = "HpcCardManager"
 
     private var cachedRoot: LinearLayout? = null

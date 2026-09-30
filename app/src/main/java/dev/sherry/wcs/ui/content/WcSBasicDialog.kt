@@ -18,10 +18,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import dev.sherry.wcs.i18n.LocaleResourceMode
-import dev.sherry.wcs.i18n.WeKitLocaleProvider
+import dev.sherry.wcs.i18n.WcSLocaleProvider
 
 @Composable
-fun WeKitBasicDialog(
+fun WcSBasicDialog(
     show: Boolean,
     title: String,
     onDismissRequest: () -> Unit,
@@ -47,7 +47,7 @@ fun WeKitBasicDialog(
                         .weight(1f, fill = false)
                         .verticalScroll(rememberScrollState()),
                 ) {
-                    WeKitLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
+                    WcSLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
                         content()
                     }
                 }

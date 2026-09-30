@@ -466,7 +466,7 @@ object StickerPanel : SwitchFeature() {
                         }
                         val exportedPath = WeMessageApi.saveStickerByMd5(
                             md5,
-                            ".wekit-wechat-$md5-${UUID.randomUUID()}.gif",
+                            ".wcs-wechat-$md5-${UUID.randomUUID()}.gif",
                         ) ?: error(localizedChatString(R.string.chat_wechat_sticker_export_failed))
                         try {
                             importContext.ensureActive()
@@ -534,7 +534,7 @@ object StickerPanel : SwitchFeature() {
                     when (callbackMethod.name) {
                         "hashCode" -> System.identityHashCode(proxy)
                         "equals" -> proxy === args?.getOrNull(0)
-                        "toString" -> "WeKitEmojiLoadCallback"
+                        "toString" -> "WcSEmojiLoadCallback"
                         else -> {
                             if (
                                 callbackMethod.parameterCount == 1 &&

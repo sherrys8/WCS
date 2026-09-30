@@ -26,7 +26,7 @@ import dev.sherry.wcs.features.api.ui.WeChatInputBarMenuApi
 import dev.sherry.wcs.features.api.ui.WeCurrentConversationApi
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.core.SwitchFeature
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.ContactsSelector
@@ -46,7 +46,7 @@ import dev.sherry.wcs.utils.strings.isGroupChatWxId
  * 微信服务器只看 atuserlist 里的真实 wxid CSV 推送"有人@我"提醒,
  * 不要求 content 中存在 @ 文本, 因此接收方气泡内看不到任何 @ 痕迹。
  * (来自"终极隐藏艾特"插件验证的行为; 该插件对出网 protobuf 的混淆类名/
- * 字段偏移反射在 WeKit 中由入库钩子替代, 见 SendSecMsg 的同一锚点。)
+ * 字段偏移反射在 WcS 中由入库钩子替代, 见 SendSecMsg 的同一锚点。)
  *
  * 跨版本锚点 (8.0.65–8.0.77 混淆名各不相同, 不使用类名/方法名):
  * - 消息入库方法: MsgInfoStorage 中 "Error insert message msg:%s talker:%s"
@@ -147,7 +147,7 @@ object MentionMembers : SwitchFeature(), IResolveDex {
 
                     showComposeDialog(context) {
                         val dialogContext = LocalContext.current
-                        val localizedContext = LocalWeKitLocalizedContext.current
+                        val localizedContext = LocalWcSLocalizedContext.current
                         ContactsSelector(
                             title = stringResource(R.string.feature_mention_members_name),
                             contacts = allMembers,

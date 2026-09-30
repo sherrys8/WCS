@@ -62,8 +62,8 @@ import dev.sherry.wcs.features.core.FeaturesProvider
 import dev.sherry.wcs.features.core.SwitchFeature
 import dev.sherry.wcs.features.core.featureCategoryComparator
 import dev.sherry.wcs.features.items.system.SafeMode
-import dev.sherry.wcs.i18n.WeKitLocaleController
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.WcSLocaleController
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.nuke.NukeCategoryIcon
 import dev.sherry.wcs.ui.content.nuke.NukeCountAndChevron
@@ -113,8 +113,8 @@ private data class NukeRootEntry(
 
 @Composable
 fun NukeSettingsRoot() {
-    val context = LocalWeKitLocalizedContext.current
-    val resolvedLocale = WeKitLocaleController.resolvedLocale
+    val context = LocalWcSLocalizedContext.current
+    val resolvedLocale = WcSLocaleController.resolvedLocale
     val featureNameCollator = remember(resolvedLocale) {
         Collator.getInstance(Locale.forLanguageTag(resolvedLocale.androidTag))
     }
@@ -175,7 +175,7 @@ private fun NukeHomePage(
     onOpenDestination: (NukeDestination, Offset) -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     val activity = LocalComponentActivity.current
     val revision = FeatureCategoryState.revision
     val enabledItems = remember(revision) { FeatureCategoryState.enabledItems() }
@@ -495,9 +495,9 @@ fun NukeFeatureCategoryPage(
     featureItems: List<SwitchFeature>,
     onBack: (Offset) -> Unit,
 ) {
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     val categoryTitle = localizedContext.getString(featureCategoryTitleRes(categoryId))
-    val resolvedLocale = WeKitLocaleController.resolvedLocale
+    val resolvedLocale = WcSLocaleController.resolvedLocale
     val featureNameCollator = remember(resolvedLocale) {
         Collator.getInstance(Locale.forLanguageTag(resolvedLocale.androidTag))
     }
@@ -565,7 +565,7 @@ fun NukeFeatureRow(
     feature: SwitchFeature,
     activity: androidx.activity.ComponentActivity,
 ) {
-    val context = LocalWeKitLocalizedContext.current
+    val context = LocalWcSLocalizedContext.current
     val revision = FeatureCategoryState.revision
     val checked = remember(feature.technicalId, revision) {
         WePrefs.getBoolOrDef(feature.technicalId, feature.defaultEnabled)

@@ -12,10 +12,10 @@
     <string name="dialog_confirm">確定</string>
     <string name="dialog_close">關閉</string>
     <string name="accessibility_overflow_menu">更多選項</string>
-    <string name="module_app_sticker_import_invalid_caller">只允許從微信內的 WeKit 面板啓動此操作</string>
+    <string name="module_app_sticker_import_invalid_caller">只允許從微信內的 WcS 面板啓動此操作</string>
     <string name="manager_launch_opening_title">正在打開框架管理器…</string>
     <string name="manager_launch_failed_title">無法打開管理器</string>
-    <string name="manager_launch_invalid_caller">只允許從微信內的 WeKit 面板啓動此操作</string>
+    <string name="manager_launch_invalid_caller">只允許從微信內的 WcS 面板啓動此操作</string>
     <string name="manager_launch_root_required">打開 LSPosed 或 Vector 管理器需要 Root 權限</string>
     <string name="manager_launch_failed_message">兩種受支持的管理器啓動方式均執行失敗</string>
     <string name="manager_launch_no_root_manager">未找到受支持的 Root 管理器</string>
@@ -106,7 +106,7 @@
     <string name="dex_cache_continue_local_resolution">繼續解析</string>
     <string name="dex_cache_failure_detail">%1$d. %2$s\n   錯誤: %3$s\n\n</string>
     <string name="dex_cache_copy_error_information">複製錯誤信息</string>
-    <string name="dex_error_report_title">=== WeKit DEX 掃描錯誤報告 ===</string>
+    <string name="dex_error_report_title">=== WcS DEX 掃描錯誤報告 ===</string>
     <string name="dex_error_report_entry">%1$d. %2$s\n   錯誤信息: %3$s\n   堆棧跟蹤:\n%4$s\n\n</string>
     <string name="location_picker_instruction">點擊地圖或下方座標以選擇虛擬位置</string>
     <string name="location_picker_title">地圖選點</string>
@@ -229,8 +229,8 @@
     <string name="home_module_activated">模塊已激活</string>
     <string name="home_device_info_title">裝置資訊</string>
     <string name="home_learn_more_title">瞭解更多</string>
-    <string name="home_learn_more_item_title">WeKit 文件</string>
-    <string name="home_learn_more_item_summary">瞭解如何設定和使用 WeKit</string>
+    <string name="home_learn_more_item_title">WcS 文件</string>
+    <string name="home_learn_more_item_summary">瞭解如何設定和使用 WcS</string>
     <string name="home_wechat_version">微信版本</string>
     <string name="home_module_version">模塊版本</string>
     <string name="home_build_time">構建時間</string>
@@ -386,7 +386,7 @@
     <string name="nuke_appearance_title">界面設置</string>
     <string name="nuke_about_title">關於模塊</string>
     <string name="nuke_support_us_title">讚賞我們</string>
-    <string name="nuke_settings_title">WeKit 設置</string>
+    <string name="nuke_settings_title">WcS 設置</string>
     <string name="nuke_section_security">安全</string>
     <string name="nuke_section_general">通用</string>
     <string name="nuke_wechat_account">微信賬號</string>
@@ -443,16 +443,16 @@
     <string name="nuke_update_installed">已安裝</string>
     <string name="nuke_installed_version_details">版本代碼 %1$d\n構建時間 %2$s</string>
     <string name="nuke_update_checking">正在檢查更新</string>
-    <string name="nuke_update_check_summary">檢查 WeKit 是否有可用的新版本。</string>
+    <string name="nuke_update_check_summary">檢查 WcS 是否有可用的新版本。</string>
     <string name="nuke_update_check_again">重新檢測</string>
     <string name="nuke_download_install">下載並安裝</string>
     <string name="nuke_about_project">項目</string>
-    <string name="nuke_about_description_one">WeKit 是一個免費的開源 Xposed 模塊。</string>
+    <string name="nuke_about_description_one">WcS 是一個免費的開源 Xposed 模塊。</string>
     <string name="nuke_about_description_two">它爲微信提供可選的功能增強與界面優化。</string>
     <string name="nuke_about_developers">開發者</string>
     <string name="nuke_about_links">鏈接</string>
     <string name="nuke_github_contributions">GitHub 貢獻 %1$d 次</string>
-    <string name="nuke_wekit_developer">WeKit 開發者</string>
+    <string name="nuke_wcs_developer">WcS 開發者</string>
     <string name="nuke_github_avatar">%1$s 的 GitHub 頭像</string>
     <string name="licenses_unknown_author">未知作者</string>
     <string name="licenses_version">版本 %1$s</string>
@@ -677,7 +677,7 @@
     <string name="feature_markdown_rendering_name">Markdown 渲染</string>
     <string name="feature_markdown_rendering_description">渲染 Markdown 消息</string>
     <string name="feature_merge_chat_message_context_menu_items_name">消息長按菜單項合併展示</string>
-    <string name="feature_merge_chat_message_context_menu_items_description">開啓後, 消息長按菜單隻顯示一個 WeKit 項, 點擊後在對話框中集中展示所有模塊菜單項</string>
+    <string name="feature_merge_chat_message_context_menu_items_description">開啓後, 消息長按菜單隻顯示一個 WcS 項, 點擊後在對話框中集中展示所有模塊菜單項</string>
     <string name="feature_merge_messages_into_groups_name">合併消息顯示</string>
     <string name="feature_merge_messages_into_groups_description">將同一發送者的連續多條消息合併爲一組消息顯示 (Telegram 風格)</string>
     <string name="feature_message_entrance_animation_name">消息進入動畫</string>
@@ -835,7 +835,7 @@
     <string name="feature_mark_all_as_read_name">清空未讀</string>
     <string name="feature_mark_all_as_read_description">在首頁右上角菜單添加「清空未讀」選項</string>
     <string name="feature_module_settings_name">模塊設置</string>
-    <string name="feature_module_settings_description">在首頁右上角菜單添加「WeKit」選項</string>
+    <string name="feature_module_settings_description">在首頁右上角菜單添加「WcS」選項</string>
     <string name="feature_open_conversation_menu_name">跳轉對話菜單</string>
     <string name="feature_open_conversation_menu_description">在首頁右上角菜單添加「跳轉對話」選項</string>
     <string name="feature_toggle_all_conversations_visibility_name">顯隱全部對話</string>
@@ -1615,7 +1615,7 @@
     <string name="sticker_telegram_single_title">從 Telegram 導入單個包</string>
     <string name="sticker_telegram_source_manual_description">從系統文件選擇器讀取一個 Telegram 數據庫</string>
     <string name="sticker_telegram_source_manual_title">手動選擇 Telegram 數據庫 (cache4.db)</string>
-    <string name="sticker_telegram_source_root_description">跳轉到 WeKit 模塊應用掃描實例並解析數據庫</string>
+    <string name="sticker_telegram_source_root_description">跳轉到 WcS 模塊應用掃描實例並解析數據庫</string>
     <string name="sticker_telegram_source_root_title">使用 Root 權限直接讀取 Telegram 數據庫</string>
     <string name="sticker_telegram_token_required">請先在設置中填寫 Telegram Bot Token</string>
     <string name="sticker_telegram_will_import">將導入：%1$s</string>
@@ -1930,7 +1930,7 @@
     <string name="chat_tts_menu">轉語音</string>
     <string name="ui_group_analyse_title">分析報告</string>
     <string name="ui_group_statistics_period">統計週期</string>
-    <string name="ui_group_report_footer">WeKit·聊天記錄分析-生成於%1$s</string>
+    <string name="ui_group_report_footer">WcS·聊天記錄分析-生成於%1$s</string>
     <string name="ui_group_wuhan">武漢口語</string>
     <string name="ui_group_smart_insight">智慧摘要</string>
     <string name="ui_group_summary_card_title">智能總結訊息</string>
@@ -2147,7 +2147,7 @@
     <string name="read_receipts_error_credential_save_failed">通道已驗證，但無法安全儲存憑證</string>
     <string name="read_receipts_error_start_handoff_timeout">通道服務未能及時接管啟動要求</string>
     <string name="read_receipts_error_stop_timeout">通道未能及時停止；將繼續停止內建伺服器</string>
-    <string name="read_receipts_error_service_unavailable">WeKit 通道服務無法使用，請返回可見設定畫面後重試</string>
+    <string name="read_receipts_error_service_unavailable">WcS 通道服務無法使用，請返回可見設定畫面後重試</string>
     <string name="read_receipts_error_health_check_failed">通道健康檢查失敗，請檢查內建伺服器、公網主機名稱和 ingress 設定</string>
     <string name="read_receipts_error_unexpected_failure">Cloudflare Tunnel 操作意外失敗</string>
     <string name="read_receipts_verified_public_url">已驗證公開網路位址：%1$s</string>
@@ -2961,7 +2961,7 @@
     </plurals>
     <string name="contacts_detect_stop">終止</string>
     <string name="contacts_detect_back">返回</string>
-    <string name="contacts_detect_suggested_label">WeKit_單刪好友_%1$s</string>
+    <string name="contacts_detect_suggested_label">WcS_單刪好友_%1$s</string>
     <string name="contacts_detect_mark_label">標記標籤</string>
     <string name="contacts_detect_delete_all">全部刪除</string>
     <string name="contacts_hide_restored">已恢復隱藏聯繫人</string>
@@ -3220,7 +3220,7 @@
     <string name="moments_auto_save_directory_system_folder_picked">已選擇系統文件夾</string>
     <string name="moments_auto_save_directory_not_picked">未選擇自定義目錄</string>
     <string name="moments_auto_save_directory_path">路徑</string>
-    <string name="moments_auto_save_directory_path_hint">例如 /storage/emulated/0/Download/WeKit/Moments</string>
+    <string name="moments_auto_save_directory_path_hint">例如 /storage/emulated/0/Download/WcS/Moments</string>
     <string name="moments_auto_save_directory_saved">保存目錄已更新</string>
     <string name="moments_auto_save_mode_when_seen">刷到時保存新內容</string>
     <string name="moments_auto_save_mode_all_loaded">保存本地緩存全量內容</string>
@@ -3276,11 +3276,11 @@
     <string name="shortvideos_unknown_media_type">未知的媒體類型</string>
     <string name="shortvideos_image_download_started">開始下載第 %1$d 張圖片</string>
     <string name="shortvideos_image_download_reported_success">第 %1$d 張圖片下載成功</string>
-    <string name="shortvideos_image_downloaded_to">已將圖片下載到 /sdcard/Download/WeKit/%1$s</string>
+    <string name="shortvideos_image_downloaded_to">已將圖片下載到 /sdcard/Download/WcS/%1$s</string>
     <string name="shortvideos_downloading_video">正在下載視頻…</string>
     <string name="shortvideos_decrypting_video">正在解密視頻…</string>
     <string name="shortvideos_video_download_failed">視頻下載失敗</string>
-    <string name="shortvideos_video_downloaded_to">已將視頻下載到 /sdcard/Download/WeKit/%1$s</string>
+    <string name="shortvideos_video_downloaded_to">已將視頻下載到 /sdcard/Download/WcS/%1$s</string>
     <string name="shortvideos_video_download_started">開始下載視頻</string>
     <string name="action_back">返回</string>
     <string name="action_restore_defaults">恢復默認</string>
@@ -3302,7 +3302,7 @@
     <string name="home_side_panel_moments">朋友圈</string>
     <string name="home_side_panel_channels">視頻號</string>
     <string name="home_side_panel_mark_all_read">清空未讀</string>
-    <string name="home_side_panel_wekit_settings">WeKit 設置</string>
+    <string name="home_side_panel_wcs_settings">WcS 設置</string>
     <string name="home_side_panel_open_profile">打開個人資料</string>
     <string name="home_side_panel_settings">側欄設置</string>
     <string name="home_side_panel_online">在線</string>
@@ -3900,25 +3900,25 @@
     <string name="system_api_server_auth_token">認證令牌</string>
     <string name="system_api_server_port">端口</string>
     <string name="system_api_server_invalid_port">端口格式不正確！</string>
-    <string name="noncompose_features_loaded">WeKit 加載成功！</string>
+    <string name="noncompose_features_loaded">WcS 加載成功！</string>
     <string name="noncompose_restarting_host">正在重啓…</string>
     <string name="noncompose_bsh_saved">已保存到 %1$s</string>
     <string name="noncompose_bsh_empty_result">錯誤：反編譯結果爲空。</string>
     <string name="noncompose_bsh_error">錯誤：%1$s</string>
     <string name="noncompose_bsh_selection_cancelled">已取消選擇文件。</string>
-    <string name="noncompose_update_download_title">WeKit 更新</string>
+    <string name="noncompose_update_download_title">WcS 更新</string>
     <string name="noncompose_update_downloading">正在下載更新…</string>
     <string name="noncompose_moments_thumbnail_warning">警告：正在使用縮略圖。建議先查看一次圖片以下載原圖。</string>
     <string name="noncompose_chat_input_no_actions">沒有可用的聊天輸入欄功能。</string>
     <string name="noncompose_chat_input_actions_title">聊天功能</string>
-    <string name="noncompose_message_menu_no_actions">沒有可用於所選消息的 WeKit 菜單項。</string>
+    <string name="noncompose_message_menu_no_actions">沒有可用於所選消息的 WcS 菜單項。</string>
     <plurals name="noncompose_message_menu_selected_title">
-        <item quantity="other">WeKit（%1$d 條消息）</item>
+        <item quantity="other">WcS（%1$d 條消息）</item>
     </plurals>
     <string name="noncompose_message_menu_adapted_section">已適配多選消息</string>
     <string name="noncompose_message_menu_automatic_section">自動兼容多選消息</string>
-    <string name="noncompose_wekit_settings_entry">WeKit 設置</string>
-    <string name="noncompose_wekit_settings_group">插件</string>
+    <string name="noncompose_wcs_settings_entry">WcS 設置</string>
+    <string name="noncompose_wcs_settings_group">插件</string>
     <string name="agent_panel_collapse_sessions">收起會話側欄</string>
     <string name="agent_panel_sessions">會話</string>
     <string name="agent_panel_new_session">新建會話</string>
@@ -3958,7 +3958,7 @@
     <string name="agent_panel_rejection_reason">拒絕理由（可選）</string>
     <string name="agent_panel_reject">拒絕</string>
     <string name="agent_panel_approve">同意</string>
-    <string name="telegram_root_permission_required">需要授予 WeKit 模塊應用 Root 權限。</string>
+    <string name="telegram_root_permission_required">需要授予 WcS 模塊應用 Root 權限。</string>
     <string name="telegram_database_scan_failed">掃描 Telegram 數據庫失敗：%1$s</string>
     <string name="telegram_root_command_failed">Root 命令執行失敗</string>
     <string name="telegram_database_not_found">未找到 cache4.db，請確認 Telegram 已登錄並至少啓動過一次。</string>

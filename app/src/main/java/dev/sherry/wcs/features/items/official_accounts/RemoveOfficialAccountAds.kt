@@ -26,7 +26,7 @@ import org.json.JSONObject
  * 新版微信公众号 UI 已迁移到 Flutter，但 Flutter 并不自行联网：所有 CGI 请求都通过 Pigeon
  * 通道 `dev.flutter.pigeon.mm_auto_gen.FlutterCgiHost.send` 进入 Java 层，最终经由
  * `com.tencent.mm.modelbase.g extends m1 (MicroMsg.NetSceneBase)` 的 `dispatch()` 发出。
- * WeKit 现有的 [dev.sherry.wcs.features.api.net.listener.WePacketDispatcher] 已经 hook
+ * WcS 现有的 [dev.sherry.wcs.features.api.net.listener.WePacketDispatcher] 已经 hook
  * 了 `NetSceneBase.dispatch`，并把明文 protobuf 字节交给 [WePacketManager]。因此这里只需注册
  * 一个按 URI 匹配的 [IWePacketInterceptor] 即可，无需任何额外 native hook 代码。
  *

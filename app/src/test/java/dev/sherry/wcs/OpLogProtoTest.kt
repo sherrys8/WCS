@@ -27,7 +27,7 @@ class OpLogProtoTest {
 
     @Test
     fun setNicknameUsesNativeOpType() {
-        val bytes = WeProto.encodeWithDefaults(SetNicknameProto(nickname = "WeKit"))
+        val bytes = WeProto.encodeWithDefaults(SetNicknameProto(nickname = "WcS"))
         assertArrayEquals(hex("0801120557654b6974"), bytes)
     }
 

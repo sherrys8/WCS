@@ -11,7 +11,7 @@ import dev.sherry.wcs.dexkit.dsl.dexMethod
 import dev.sherry.wcs.features.api.core.WePaymentApi
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.core.SwitchFeature
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.ui.utils.findViewByChildIndexes
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.reflection.BString
@@ -72,7 +72,7 @@ object DisplayRedPacketDetails : SwitchFeature(), IResolveDex {
                 }
                 val formatter = DateTimeFormatter.ofPattern(
                     pattern,
-                    Locale.forLanguageTag(WeKitLocaleController.resolvedLocale.androidTag),
+                    Locale.forLanguageTag(WcSLocaleController.resolvedLocale.androidTag),
                 )
                 textView.text = localDateTime.format(formatter)
             }.onFailure {

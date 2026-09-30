@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 
 private const val TAG = "NukeGitHubContributors"
 private const val CONTRIBUTORS_URL =
-    "https://api.github.com/repos/Ujhhgtg/WeKit/contributors?per_page=100"
+    "https://api.github.com/repos/sherrys8/WCS/contributors?per_page=100"
 
 data class NukeGitHubContributor(
     val login: String,
@@ -52,7 +52,7 @@ object NukeGitHubContributors {
             .url(CONTRIBUTORS_URL)
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
-            .header("User-Agent", "WeKit")
+            .header("User-Agent", "WcS")
             .build()
         val contributors = httpClient.newCall(request).execute().use { response ->
             check(response.isSuccessful) { "GitHub contributors request failed: HTTP ${response.code}" }

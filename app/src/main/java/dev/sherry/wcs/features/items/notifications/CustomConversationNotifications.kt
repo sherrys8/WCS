@@ -78,13 +78,13 @@
 //)
 //object CustomConversationNotifications : ClickableFeature(), IResolveDex {
 //
-//    // WeKit-managed notification channels for priority overrides.
+//    // WcS-managed notification channels for priority overrides.
 //    // These are created once in onEnable(); the user can further tune them in system settings.
-//    private const val CHANNEL_SILENT = "wekit_msg_silent"   // IMPORTANCE_LOW, no sound
-//    private const val CHANNEL_LOW = "wekit_msg_low"      // IMPORTANCE_LOW, no sound
-//    private const val CHANNEL_DEFAULT = "wekit_msg_default"  // IMPORTANCE_DEFAULT
-//    private const val CHANNEL_HIGH = "wekit_msg_high"     // IMPORTANCE_HIGH
-//    private const val CHANNEL_URGENT = "wekit_msg_max"      // IMPORTANCE_MAX
+//    private const val CHANNEL_SILENT = "wcs_msg_silent"   // IMPORTANCE_LOW, no sound
+//    private const val CHANNEL_LOW = "wcs_msg_low"      // IMPORTANCE_LOW, no sound
+//    private const val CHANNEL_DEFAULT = "wcs_msg_default"  // IMPORTANCE_DEFAULT
+//    private const val CHANNEL_HIGH = "wcs_msg_high"     // IMPORTANCE_HIGH
+//    private const val CHANNEL_URGENT = "wcs_msg_max"      // IMPORTANCE_MAX
 //
 //    // WeChat's own channel IDs (from iv4.a in the decompiled code)
 //    private const val WECHAT_CHANNEL_NORMAL = "message_channel_new_id"
@@ -315,18 +315,18 @@
 //            nm.createNotificationChannel(ch)
 //        }
 //
-//        createChannel(CHANNEL_SILENT, "WeKit静音通知", NotificationManager.IMPORTANCE_LOW, sound = null, vibrate = false)
-//        createChannel(CHANNEL_LOW, "WeKit 低优先级通知", NotificationManager.IMPORTANCE_LOW, sound = null, vibrate = false)
-//        createChannel(CHANNEL_DEFAULT, "WeKit 默认通知", NotificationManager.IMPORTANCE_DEFAULT)
-//        createChannel(CHANNEL_HIGH, "WeKit 高优先级通知", NotificationManager.IMPORTANCE_HIGH)
-//        createChannel(CHANNEL_URGENT, "WeKit 紧急通知", NotificationManager.IMPORTANCE_MAX)
+//        createChannel(CHANNEL_SILENT, "WcS静音通知", NotificationManager.IMPORTANCE_LOW, sound = null, vibrate = false)
+//        createChannel(CHANNEL_LOW, "WcS 低优先级通知", NotificationManager.IMPORTANCE_LOW, sound = null, vibrate = false)
+//        createChannel(CHANNEL_DEFAULT, "WcS 默认通知", NotificationManager.IMPORTANCE_DEFAULT)
+//        createChannel(CHANNEL_HIGH, "WcS 高优先级通知", NotificationManager.IMPORTANCE_HIGH)
+//        createChannel(CHANNEL_URGENT, "WcS 紧急通知", NotificationManager.IMPORTANCE_MAX)
 //    }
 //
 //    private fun ensureCustomSoundChannel(soundUri: Uri): String {
-//        val id = "wekit_msg_custom_${soundUri.hashCode()}"
+//        val id = "wcs_msg_custom_${soundUri.hashCode()}"
 //        val nm = HostInfo.application.getSystemService<NotificationManager>()
 //        if (nm.getNotificationChannel(id) == null) {
-//            val ch = NotificationChannel(id, "WeKit 自定义铃声通知", NotificationManager.IMPORTANCE_DEFAULT).apply {
+//            val ch = NotificationChannel(id, "WcS 自定义铃声通知", NotificationManager.IMPORTANCE_DEFAULT).apply {
 //                setSound(
 //                    soundUri, AudioAttributes.Builder()
 //                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)

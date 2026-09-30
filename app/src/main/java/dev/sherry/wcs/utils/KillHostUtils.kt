@@ -5,7 +5,7 @@ import dev.ujhhgtg.reflekt.utils.toClass
 import dev.sherry.wcs.R
 import dev.sherry.wcs.i18n.LocaleResourceMode
 import dev.sherry.wcs.i18n.LocalizedContextFactory
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.utils.android.showToast
 import kotlin.system.exitProcess
 
@@ -13,7 +13,7 @@ fun restartHost() {
     WeLogger.i("KillHostUtils", "restarting host")
     val context = LocalizedContextFactory.create(
         HostInfo.application,
-        WeKitLocaleController.resolvedLocale,
+        WcSLocaleController.resolvedLocale,
         LocaleResourceMode.InjectedHost,
     )
     showToast(context, context.getString(R.string.noncompose_restarting_host))

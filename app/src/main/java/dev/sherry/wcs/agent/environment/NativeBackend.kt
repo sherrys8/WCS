@@ -146,7 +146,7 @@ class NativeBackend constructor(
             } catch (error: Throwable) {
                 failure.compareAndSet(null, error)
             }
-        }.apply { name = "wekit-owned-process-output"; start() }
+        }.apply { name = "wcs-owned-process-output"; start() }
 
     override suspend fun readUtf8(path: String, maxBytes: Long): String = withContext(Dispatchers.IO) {
         require(maxBytes > 0)

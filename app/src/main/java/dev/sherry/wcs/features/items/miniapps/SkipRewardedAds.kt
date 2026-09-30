@@ -184,7 +184,7 @@ object SkipRewardedAds : SwitchFeature(), IResolveDex {
         if (!DUMP_SDK_FILES) return
         if (!dumpedNames.add(path)) return
         runCatching {
-            val dir = File(HostInfo.application.filesDir, "wekit_skip_rewarded_js").apply { mkdirs() }
+            val dir = File(HostInfo.application.filesDir, "wcs_skip_rewarded_js").apply { mkdirs() }
             val safeName = path.substringAfterLast('/').ifBlank { path.hashCode().toString() }
             val target = File(dir, safeName)
             target.writeText(content)
@@ -280,13 +280,13 @@ object SkipRewardedAds : SwitchFeature(), IResolveDex {
     private fun buildSkip(reward: String, close: String, req: String?): String {
         val marker = if (req != null) {
             "$req({apiName:\"webapi_getadvert\",reqData:{action:\"weapp_comm\"," +
-                "request_data:JSON.stringify({rpc_method:\"WEKIT_PLAYABLE_CLOSE\",traceid:id})}});"
+                "request_data:JSON.stringify({rpc_method:\"WCS_PLAYABLE_CLOSE\",traceid:id})}});"
         } else {
             ""
         }
-        return "setTimeout((()=>{try{var w=globalThis;w.__wekitPlayable=w.__wekitPlayable||{};" +
+        return "setTimeout((()=>{try{var w=globalThis;w.__wcsPlayable=w.__wcsPlayable||{};" +
             "var id=t.adProxy?.data?.traceid;" +
-            "if(!w.__wekitPlayable[id]){w.__wekitPlayable[id]=1;$marker" +
+            "if(!w.__wcsPlayable[id]){w.__wcsPlayable[id]=1;$marker" +
             "var q=t.mb;if(q&&q.mbId){t.isEnded=!0," +
             "$reward.call(this,0,!0),Promise.resolve($close.call(this)).catch(function(){})," +
             "q.destroy().catch(function(){})}}}catch(_){}}),$SKIP_DELAY_MS)"

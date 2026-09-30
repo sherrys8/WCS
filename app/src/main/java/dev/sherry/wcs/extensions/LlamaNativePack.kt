@@ -32,7 +32,7 @@ object LlamaNativePack : ExtensionPack {
     private const val LIB_OPENCL = "libwekit_llama_opencl.so"
 
     private val baseDir: File
-        get() = File(HostInfo.application.filesDir, "wekit-extensions/$id")
+        get() = File(HostInfo.application.filesDir, "wcs-extensions/$id")
 
     override fun installDir(): File = baseDir
 

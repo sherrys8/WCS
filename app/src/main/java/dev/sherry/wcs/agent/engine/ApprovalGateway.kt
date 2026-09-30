@@ -222,7 +222,7 @@ class ApprovalGateway(
         private const val TAG = "ApprovalGateway"
 
         /** Delimiter around the untrusted review payload. Random-looking so it can't be guessed/closed. */
-        private const val FENCE = "<<<WEKIT_UNTRUSTED_TOOL_CALL_9f3a1c>>>"
+        private const val FENCE = "<<<WCS_UNTRUSTED_TOOL_CALL_9f3a1c>>>"
 
         /**
          * Neutralises any attempt to close the fence from inside the payload, and keeps each field on

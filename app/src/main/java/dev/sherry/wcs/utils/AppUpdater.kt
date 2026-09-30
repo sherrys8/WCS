@@ -15,7 +15,7 @@ import dev.sherry.wcs.R
 import dev.sherry.wcs.constants.PackageNames
 import dev.sherry.wcs.i18n.LocaleResourceMode
 import dev.sherry.wcs.i18n.LocalizedContextFactory
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.loader.entry.zygisk.ZygiskLoaderService
 import dev.sherry.wcs.loader.startup.StartupInfo
 import dev.sherry.wcs.utils.android.getSystemService
@@ -51,7 +51,7 @@ sealed interface UpdateResult {
 // ─── ABI → APK mapping ───────────────────────────────────────────────────────
 
 private const val BASE_URL =
-    "https://github.com/Ujhhgtg/WeKit/releases/download/CI"
+    "https://github.com/sherrys8/WCS/releases/download/CI"
 
 // APKs are published per entry-point flavor: app-<flavor>-release.apk.
 // Stay on the same flavor the installed build was compiled for.
@@ -75,12 +75,12 @@ private fun apkUrlForDevice(): String {
 
 /** Matches the release name emitted by the Zygisk packager. */
 private fun zygiskModuleFileName(info: UpdateInfo): String =
-    "WeKit-${info.versionCode}-${info.versionName}-release.zip"
+    "WcS-${info.versionCode}-${info.versionName}-release.zip"
 
 // ─── AppUpdater ───────────────────────────────────────────────────────────────
 
 /**
- * Self-contained in-app updater for WeKit.
+ * Self-contained in-app updater for WcS.
  *
  * Usage:
  * ```
@@ -147,7 +147,7 @@ object AppUpdater {
             downloadUrl = "$BASE_URL/$fileName"
             mimeType = ZIP_MIME_TYPE
         } else {
-            fileName = "wekit-${info.versionName}.apk"
+            fileName = "wcs-${info.versionName}.apk"
             downloadUrl = apkUrlForDevice()
             mimeType = APK_MIME_TYPE
         }
@@ -192,7 +192,7 @@ object AppUpdater {
     ): Long {
         val localizedContext = LocalizedContextFactory.create(
             context,
-            WeKitLocaleController.resolvedLocale,
+            WcSLocaleController.resolvedLocale,
             LocaleResourceMode.InjectedHost,
         )
         val request = DownloadManager.Request(url.toUri()).apply {

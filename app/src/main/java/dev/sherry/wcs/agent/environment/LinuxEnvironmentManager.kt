@@ -513,7 +513,7 @@ class LinuxEnvironmentManager(
             }
 
         private fun defaultNativeSnapshot(): EnvironmentSnapshot {
-            val workingDirectory = File(HostInfo.application.filesDir, "wekit-agent/environment/native")
+            val workingDirectory = File(HostInfo.application.filesDir, "wcs-agent/environment/native")
                 .apply { mkdirs() }
             return EnvironmentSnapshot(
                 id = NATIVE_ENVIRONMENT_ID,

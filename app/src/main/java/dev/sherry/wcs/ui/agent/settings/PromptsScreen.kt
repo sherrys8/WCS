@@ -52,7 +52,7 @@ import dev.sherry.wcs.agent.data.entity.ConditionalPromptEntity
 import dev.sherry.wcs.agent.data.entity.PerTurnPromptEntity
 import dev.sherry.wcs.agent.data.entity.PresetPromptEntity
 import dev.sherry.wcs.agent.data.entity.SystemPromptEntity
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.ui.content.m3.ExpressiveBackButton
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
@@ -83,7 +83,7 @@ private val PROMPT_TAB_LABELS = listOf(
 @Composable
 fun PromptsScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val systemPrompts by WeAgentRepository.observeSystemPrompts().collectAsState(initial = emptyList())
     val perTurn by WeAgentRepository.observePerTurnPrompts().collectAsState(initial = emptyList())
     val conditionals by WeAgentRepository.observeConditionalPrompts().collectAsState(initial = emptyList())

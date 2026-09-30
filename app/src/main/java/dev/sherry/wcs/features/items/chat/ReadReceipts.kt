@@ -2167,7 +2167,7 @@ object ReadReceipts : ClickableFeature(),
         val endpoint = normalizedEndpoint(value) ?: return null
         return scope.launch {
             val request = Request.Builder()
-                .url("$endpoint/count?wxId=wekit-health-check&id=${"0".repeat(64)}")
+                .url("$endpoint/count?wxId=wcs-health-check&id=${"0".repeat(64)}")
                 .get()
                 .build()
             val result = runCatching {

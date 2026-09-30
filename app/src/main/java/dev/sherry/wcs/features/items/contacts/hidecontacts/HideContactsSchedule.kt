@@ -102,7 +102,7 @@ object HideContactsSchedule {
     private const val KEY_SCHEDULES = "hide_contacts_schedules"
 
     /**
-     * Private to WeKit and namespaced under the module's own package, so it cannot collide with any
+     * Private to WcS and namespaced under the module's own package, so it cannot collide with any
      * of WeChat's own broadcasts. The broadcast is additionally package-restricted (see
      * [pendingIntentFor]) and the receiver is registered `NOT_EXPORTED`, so nothing outside this app
      * can send or observe it.
@@ -115,7 +115,7 @@ object HideContactsSchedule {
      * `Intent.filterEquals` + request code, so without a distinguishing URI two entries would only be
      * told apart by `id.hashCode()`. The receiver's [IntentFilter] carries the matching scheme.
      */
-    private const val URI_SCHEME = "wekit"
+    private const val URI_SCHEME = "wcs"
 
     private var raw by WePrefs.prefOption(KEY_SCHEDULES, "")
 

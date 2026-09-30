@@ -12,7 +12,7 @@ object HostLocalizedStrings {
     fun get(@StringRes id: Int, vararg formatArgs: Any): String =
         LocalizedContextFactory.create(
             HostInfo.application,
-            WeKitLocaleController.resolvedLocale,
+            WcSLocaleController.resolvedLocale,
             LocaleResourceMode.InjectedHost,
         ).getString(id, *formatArgs)
 }

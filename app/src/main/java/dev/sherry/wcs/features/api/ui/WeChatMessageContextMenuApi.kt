@@ -254,7 +254,7 @@ object WeChatMessageContextMenuApi : ApiFeature(), IResolveDex {
             superclass()
         }.get()!!)
 
-        val button = bar.getTag(R.id.wekit_multi_select_button) as ImageView?
+        val button = bar.getTag(R.id.wcs_multi_select_button) as ImageView?
             ?: (bar.getChildAt(0).javaClass.reflekt().firstConstructor {
                 parameters(Context::class)
             }.newInstance(bar.context) as ImageView).apply {
@@ -262,9 +262,9 @@ object WeChatMessageContextMenuApi : ApiFeature(), IResolveDex {
                 setImageDrawable(ExtensionDrawable())
                 scaleType = ImageView.ScaleType.CENTER
                 setBackgroundResource(0)
-                contentDescription = "WeKit"
-                tooltipText = "WeKit"
-                bar.setTag(R.id.wekit_multi_select_button, this)
+                contentDescription = "WcS"
+                tooltipText = "WcS"
+                bar.setTag(R.id.wcs_multi_select_button, this)
             }
         button.setOnClickListener { view ->
             if (!view.isEnabled) return@setOnClickListener
@@ -317,9 +317,9 @@ object WeChatMessageContextMenuApi : ApiFeature(), IResolveDex {
                     .filter { it.isSupported(msgInfoWrapper) }
 
                 if (MergeChatMessageContextMenuItems.isEnabled) {
-                    // collapse everything into a single "WeKit" entry backed by a Compose dialog
+                    // collapse everything into a single "WcS" entry backed by a Compose dialog
                     if (applicableItems.isNotEmpty()) {
-                        addMenuItem.invoke(MERGED_MENU_ITEM_ID, "WeKit", ExtensionIcon)
+                        addMenuItem.invoke(MERGED_MENU_ITEM_ID, "WcS", ExtensionIcon)
                     }
                 } else {
                     for (item in applicableItems) {
@@ -393,12 +393,12 @@ object WeChatMessageContextMenuApi : ApiFeature(), IResolveDex {
         methodMultiRebuildButtons.hookAfter {
             val bar = thisObject as LinearLayout
             // The constructor rebuilds before listeners are bound; later rebuilds reuse our button.
-            val button = bar.getTag(R.id.wekit_multi_select_button) as? ImageView? ?: return@hookAfter
+            val button = bar.getTag(R.id.wcs_multi_select_button) as? ImageView? ?: return@hookAfter
             attachMultiSelectButton(bar, button)
         }
         methodMultiUpdateSelection.hookAfter {
             val bar = thisObject as LinearLayout
-            val button = bar.getTag(R.id.wekit_multi_select_button) as? ImageView? ?: return@hookAfter
+            val button = bar.getTag(R.id.wcs_multi_select_button) as? ImageView? ?: return@hookAfter
             val hasSelection = args[0] as Int > 0
             button.isEnabled = hasSelection
             button.isClickable = hasSelection

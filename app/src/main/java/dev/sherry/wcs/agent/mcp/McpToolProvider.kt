@@ -98,7 +98,7 @@ class McpToolProvider(
             t.onClose { onTransportClosed() }
             t.onError { e -> onTransportError(e) }
 
-            val c = Client(Implementation(name = "wekit-mcp-client", version = BuildConfig.VERSION_NAME))
+            val c = Client(Implementation(name = "wcs-mcp-client", version = BuildConfig.VERSION_NAME))
             c.connect(t)
             client = c
             val tools = fetchTools(c)

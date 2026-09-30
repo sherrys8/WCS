@@ -10,7 +10,7 @@ import kotlinx.serialization.json.JsonPrimitive
 /** Minimal app_process entry point for the isolated local llama server. */
 @Keep
 object LlamaServerProcess {
-    private const val TAG = "WeKit"
+    private const val TAG = "WcS"
 
     @JvmStatic
     fun main(args: Array<String>) {

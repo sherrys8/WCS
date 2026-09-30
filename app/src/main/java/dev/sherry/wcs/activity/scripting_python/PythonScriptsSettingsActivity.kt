@@ -75,14 +75,14 @@ import dev.sherry.wcs.features.items.scripting_python.plugin.PythonPluginStatus
 import dev.sherry.wcs.features.items.scripting_python.plugin.PythonCrashGuard
 import dev.sherry.wcs.features.items.scripting_python.runtime.PythonRuntimeLoader
 import dev.sherry.wcs.i18n.LocaleResourceMode
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
-import dev.sherry.wcs.i18n.WeKitLocaleProvider
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
+import dev.sherry.wcs.i18n.WcSLocaleProvider
 import dev.sherry.wcs.ui.agent.settings.AgentActionRow
 import dev.sherry.wcs.ui.agent.settings.AgentConfirmDialog
 import dev.sherry.wcs.ui.agent.settings.AgentListActionButton
 import dev.sherry.wcs.ui.agent.settings.AgentSettingsScaffold
 import dev.sherry.wcs.ui.agent.settings.rememberCreationBackGuard
-import dev.sherry.wcs.ui.animation.predictiveback.weKitNavTransition
+import dev.sherry.wcs.ui.animation.predictiveback.wcSNavTransition
 import dev.sherry.wcs.ui.content.m3.ExpressiveBackButton
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
@@ -118,7 +118,7 @@ class PythonScriptsSettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            WeKitLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
+            WcSLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
                 ModuleTheme { PythonSettingsRoot(this@PythonScriptsSettingsActivity, ::finish) }
             }
         }
@@ -142,7 +142,7 @@ private fun PythonSettingsRoot(activity: ComponentActivity, onFinish: () -> Unit
         NavDisplay(
             backStack = backStack,
             onBack = { if (navigator.backStackSize() <= 1) onFinish() else navigator.pop() },
-            transition = weKitNavTransition(ThemeSettings.pageTransitionAnimation),
+            transition = wcSNavTransition(ThemeSettings.pageTransitionAnimation),
             effects = rememberM3NavEffects(),
         ) {
             entry<PythonSettingsRoute.Home> {
@@ -186,7 +186,7 @@ private fun PythonHomeScreen(
     val runtime by PythonRuntimeLoader.status.collectAsState()
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     var pendingTrustPlugin by remember { mutableStateOf<String?>(null) }
     var showImportWarning by remember { mutableStateOf(false) }
     var importing by remember { mutableStateOf(false) }
@@ -340,7 +340,7 @@ private fun PythonPluginInfoScreen(pluginId: String?, onBack: () -> Unit) {
     val manifest = pluginId?.let(records::get)?.manifest
     if (!creating && manifest == null) return
     val scope = rememberCoroutineScope()
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     var draftId by remember { mutableStateOf("") }
     var draftName by remember { mutableStateOf("") }
     var draftVersion by remember { mutableStateOf("1.0.0") }
@@ -528,7 +528,7 @@ private fun PythonDetailScreen(
     val record = records[pluginId] ?: return
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     var pendingTrustPlugin by remember { mutableStateOf<String?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }

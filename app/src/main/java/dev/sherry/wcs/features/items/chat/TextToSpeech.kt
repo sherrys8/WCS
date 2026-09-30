@@ -666,7 +666,7 @@ object TextToSpeech :
                         val msg = root.optString("msg").ifEmpty { root.optString("message") }
                         error = "code=${root.opt("code")} ${msg.ifEmpty { "未返回音频地址" }}"
                     } else {
-                        val dir = File(HostInfo.application.cacheDir, "wekit_tts").apply { mkdirs() }
+                        val dir = File(HostInfo.application.cacheDir, "wcs_tts").apply { mkdirs() }
                         val dest = File(dir, "tts_${System.currentTimeMillis()}.wav")
                         if (download(audioUrl, dest)) {
                             wavPath = dest.absolutePath
@@ -763,7 +763,7 @@ object TextToSpeech :
             if (bytes.isEmpty()) {
                 if (error.isEmpty()) error = "未收到音频数据"
             } else {
-                val dir = File(HostInfo.application.cacheDir, "wekit_tts").apply { mkdirs() }
+                val dir = File(HostInfo.application.cacheDir, "wcs_tts").apply { mkdirs() }
                 val dest = File(dir, "doubao_${System.currentTimeMillis()}.aac")
                 dest.writeBytes(bytes)
                 path = dest.absolutePath

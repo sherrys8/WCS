@@ -6,7 +6,7 @@ import androidx.annotation.StringRes
 import dev.sherry.wcs.R
 import dev.sherry.wcs.i18n.LocaleResourceMode
 import dev.sherry.wcs.i18n.LocalizedContextFactory
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.utils.HostInfo
 
 // type=0 post
@@ -105,7 +105,7 @@ enum class MessageType(val code: Int, @StringRes val displayNameRes: Int) {
     val displayName: String
         get() = LocalizedContextFactory.create(
             HostInfo.application,
-            WeKitLocaleController.resolvedLocale,
+            WcSLocaleController.resolvedLocale,
             LocaleResourceMode.InjectedHost,
         ).getString(displayNameRes)
 

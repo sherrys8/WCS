@@ -38,7 +38,7 @@ import dev.sherry.wcs.ui.content.Button
 import dev.sherry.wcs.ui.content.TextButton
 import dev.sherry.wcs.i18n.LocaleResourceMode
 import dev.sherry.wcs.i18n.LocalizedContextFactory
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.fs.asPath
 import kotlinx.coroutines.Dispatchers
@@ -365,6 +365,6 @@ fun RootTelegramStickerSetPickerContent(
 private fun Context.moduleAppString(resourceId: Int, vararg formatArgs: Any): String =
     LocalizedContextFactory.create(
         this,
-        WeKitLocaleController.resolvedLocale,
+        WcSLocaleController.resolvedLocale,
         LocaleResourceMode.ModuleApp,
     ).getString(resourceId, *formatArgs)

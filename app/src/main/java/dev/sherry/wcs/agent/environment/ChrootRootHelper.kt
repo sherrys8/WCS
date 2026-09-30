@@ -179,7 +179,7 @@ class ChrootRootHelper(private val configuration: ChrootConfiguration) {
             executeFixed(
                 "chroot ${ChrootConfiguration.shell(configuration.rootfs.toString())} /bin/sh -c " +
                     ChrootConfiguration.shell("test -f \"\$1\" && test \$(stat -c %s \"\$1\") -le \"\$2\" && cat -- \"\$1\"") +
-                    " wekit-read ${ChrootConfiguration.shell(guestPath)} $maxBytes > ${ChrootConfiguration.shell(output.toString())}",
+                    " wcs-read ${ChrootConfiguration.shell(guestPath)} $maxBytes > ${ChrootConfiguration.shell(output.toString())}",
                 HEALTH_TIMEOUT_MILLIS,
                 "rooted file read failed",
             )
@@ -228,14 +228,14 @@ class ChrootRootHelper(private val configuration: ChrootConfiguration) {
             "cp -- ${ChrootConfiguration.shell(input.toString())} ${ChrootConfiguration.shell(stagedHost.toString())}; " +
             "trap 'rm -f -- ${ChrootConfiguration.shell(stagedHost.toString())}' EXIT HUP INT TERM; " +
             "chroot ${ChrootConfiguration.shell(configuration.rootfs.toString())} /bin/sh -c ${ChrootConfiguration.shell(script)}" +
-            " wekit-edit ${ChrootConfiguration.shell(guestPath)} ${ChrootConfiguration.shell(stagedGuest)}"
+            " wcs-edit ${ChrootConfiguration.shell(guestPath)} ${ChrootConfiguration.shell(stagedGuest)}"
     }
 
     private suspend fun pathExists(guestPath: String): Boolean = withContext(Dispatchers.IO) {
         val shell = rootShell()
         try {
             val command = "chroot ${ChrootConfiguration.shell(configuration.rootfs.toString())} /bin/sh -c " +
-                "${ChrootConfiguration.shell("test -e \"\$1\"")} wekit-exists ${ChrootConfiguration.shell(guestPath)}"
+                "${ChrootConfiguration.shell("test -e \"\$1\"")} wcs-exists ${ChrootConfiguration.shell(guestPath)}"
             val result = shell.newJob().add(command).exec()
             when (result.code) {
                 0 -> true

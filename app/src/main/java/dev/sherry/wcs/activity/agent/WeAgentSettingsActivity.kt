@@ -11,7 +11,7 @@ import androidx.compose.runtime.remember
 import dev.sherry.wcs.features.api.agent.WeAgentService
 import dev.sherry.wcs.agent.model.local.LocalLlama
 import dev.sherry.wcs.i18n.LocaleResourceMode
-import dev.sherry.wcs.i18n.WeKitLocaleProvider
+import dev.sherry.wcs.i18n.WcSLocaleProvider
 import dev.sherry.wcs.ui.agent.settings.ExternalServicesScreen
 import dev.sherry.wcs.ui.agent.settings.McpServerDetailScreen
 import dev.sherry.wcs.ui.agent.settings.McpServersScreen
@@ -28,7 +28,7 @@ import dev.sherry.wcs.ui.agent.settings.WeAgentHomeScreen
 import dev.sherry.wcs.ui.navigation.LocalNavigator
 import dev.sherry.wcs.ui.navigation.Navigator
 import dev.sherry.wcs.ui.navigation.rememberM3NavEffects
-import dev.sherry.wcs.ui.animation.predictiveback.weKitNavTransition
+import dev.sherry.wcs.ui.animation.predictiveback.wcSNavTransition
 import dev.sherry.wcs.ui.utils.theme.ModuleTheme
 import dev.sherry.wcs.ui.utils.theme.ThemeSettings
 import kotlinx.serialization.Serializable
@@ -57,7 +57,7 @@ class WeAgentSettingsActivity : ComponentActivity() {
         WeAgentService.init()
 
         setContent {
-            WeKitLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
+            WcSLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
                 val dark = ThemeSettings.themeMode.resolve()
                 ModuleTheme(darkTheme = dark) {
                     WeAgentSettingsRoot(onFinish = { finish() })
@@ -107,7 +107,7 @@ private fun WeAgentSettingsRoot(onFinish: () -> Unit) {
             onBack = {
                 if (navigator.backStackSize() <= 1) onFinish() else navigator.pop()
             },
-            transition = weKitNavTransition(ThemeSettings.pageTransitionAnimation),
+            transition = wcSNavTransition(ThemeSettings.pageTransitionAnimation),
             effects = rememberM3NavEffects(),
         ) {
             entry<AgentSettingsRoute.Home> {

@@ -86,7 +86,7 @@ class ChrootConfiguration(
         val command = listOf(
             "chroot", rootfs.toString(), "/usr/bin/env", "-i",
             *guestEnvironment.toTypedArray(), "/bin/sh", "-c",
-            "cd \"\$1\" && shift && exec \"\$@\"", "wekit-chroot", workingDirectory,
+            "cd \"\$1\" && shift && exec \"\$@\"", "wcs-chroot", workingDirectory,
             *argv.toTypedArray(),
         ).joinToString(" ", transform = ::shell)
         return """
@@ -162,7 +162,7 @@ class ChrootConfiguration(
 }
 
 class ChrootRun constructor(val nonce: String, val directory: Path) {
-    val cmdlineMarker: String = "wekit-chroot-run-$nonce"
+    val cmdlineMarker: String = "wcs-chroot-run-$nonce"
     val pidFile: Path = directory.resolve("pid")
     val startTimeFile: Path = directory.resolve("starttime")
     val bootIdFile: Path = directory.resolve("boot-id")
@@ -172,7 +172,7 @@ class ChrootRun constructor(val nonce: String, val directory: Path) {
 
 object ArchLinuxInstanceLayout {
     fun canonicalInstancesRoot(): Path =
-        HostInfo.application.filesDir.path.asPath.resolve("wekit-agent/environment/instances")
+        HostInfo.application.filesDir.path.asPath.resolve("wcs-agent/environment/instances")
 
     fun validatePublishedRootfs(rootfs: Path, instancesRoot: Path = canonicalInstancesRoot()): Path {
         require(rootfs.isAbsolute && rootfs.normalize() == rootfs && rootfs.fileName?.toString() == "rootfs") {

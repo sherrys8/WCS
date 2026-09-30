@@ -27,7 +27,7 @@ import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Add
 import dev.sherry.wcs.R
 import dev.sherry.wcs.agent.skill.SkillStore
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
 import dev.sherry.wcs.utils.android.showToast
@@ -44,7 +44,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun SkillsScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     // SkillStore is filesystem-backed (no Flow); reload via a tick after each mutation.
     var reloadTick by remember { mutableStateOf(0) }
     var skills by remember { mutableStateOf<List<SkillStore.Skill>>(emptyList()) }

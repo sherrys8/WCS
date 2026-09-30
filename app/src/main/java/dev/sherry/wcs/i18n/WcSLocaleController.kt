@@ -19,7 +19,7 @@ import dev.sherry.wcs.constants.Preferences
 import dev.sherry.wcs.preferences.WePrefs
 import java.util.Locale
 
-object WeKitLocaleController : ComponentCallbacks {
+object WcSLocaleController : ComponentCallbacks {
     private var initialized = false
     private var hostPreferencesAvailable = false
     private lateinit var application: Application

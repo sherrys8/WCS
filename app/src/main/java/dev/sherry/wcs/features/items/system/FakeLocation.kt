@@ -19,7 +19,7 @@ import dev.sherry.wcs.dexkit.dsl.dexMethod
 import dev.sherry.wcs.features.api.ui.WeChatInputBarMenuApi
 import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.OsmLocationPicker
@@ -307,7 +307,7 @@ object FakeLocation : ClickableFeature(), IResolveDex {
     private fun saveLocation(latitude: Float, longitude: Float) {
         this.latitude = latitude
         this.longitude = longitude
-        val locale = Locale.forLanguageTag(WeKitLocaleController.resolvedLocale.androidTag)
+        val locale = Locale.forLanguageTag(WcSLocaleController.resolvedLocale.androidTag)
         showToast(
             localizedSystemString(
                 R.string.system_fake_location_selected,

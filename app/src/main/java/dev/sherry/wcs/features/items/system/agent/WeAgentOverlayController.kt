@@ -20,7 +20,7 @@ import dev.sherry.wcs.features.api.agent.WeAgentService
 import dev.sherry.wcs.features.items.system.agent.WeAgentOverlayController.shouldBeVisible
 import dev.sherry.wcs.i18n.LocaleResourceMode
 import dev.sherry.wcs.i18n.LocalizedContextFactory
-import dev.sherry.wcs.i18n.WeKitLocaleController
+import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.agent.WeAgentBall
 import dev.sherry.wcs.ui.agent.WeAgentPanel
@@ -266,7 +266,7 @@ object WeAgentOverlayController {
     private fun showOverlayPermissionToast() {
         val localized = LocalizedContextFactory.create(
             HostInfo.application,
-            WeKitLocaleController.resolvedLocale,
+            WcSLocaleController.resolvedLocale,
             LocaleResourceMode.InjectedHost,
         )
         showToast(localized.getString(R.string.agent_overlay_permission_required))

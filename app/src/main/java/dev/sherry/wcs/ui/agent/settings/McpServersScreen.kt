@@ -34,7 +34,7 @@ import dev.sherry.wcs.agent.mcp.McpConnectionState
 import dev.sherry.wcs.agent.mcp.McpProviderStatus
 import dev.sherry.wcs.agent.mcp.McpToolProvider
 import dev.sherry.wcs.agent.tool.ProviderKind
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
@@ -144,7 +144,7 @@ fun McpServerDetailScreen(serverId: String, onBack: () -> Unit) {
     val server = allProviders.firstOrNull { it.id == activeId }
     val srv = server ?: draft.takeIf { creating && !editing }
     val scope = rememberCoroutineScope()
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     val liveProviders by McpClientManager.providers.collectAsState()

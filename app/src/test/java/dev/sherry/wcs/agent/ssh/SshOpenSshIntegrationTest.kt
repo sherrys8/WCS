@@ -25,18 +25,18 @@ import org.junit.jupiter.api.Test
 class SshOpenSshIntegrationTest {
     @Test
     fun `OpenSSH password exec sftp pty and reverse forwarding`() = runBlocking {
-        val port = (System.getProperty("wekit.sshTest.port") ?: System.getenv("WEKIT_SSH_TEST_PORT"))?.toIntOrNull()
-        assumeTrue(port != null, "set wekit.sshTest.port to run SSH interoperability")
+        val port = (System.getProperty("wcs.sshTest.port") ?: System.getenv("WCS_SSH_TEST_PORT"))?.toIntOrNull()
+        assumeTrue(port != null, "set wcs.sshTest.port to run SSH interoperability")
         val sshPort = requireNotNull(port)
         val fingerprint = requireNotNull(
-            System.getProperty("wekit.sshTest.fingerprint") ?: System.getenv("WEKIT_SSH_TEST_FINGERPRINT")
+            System.getProperty("wcs.sshTest.fingerprint") ?: System.getenv("WCS_SSH_TEST_FINGERPRINT")
         )
-        val algorithm = System.getProperty("wekit.sshTest.algorithm")
-            ?: System.getenv("WEKIT_SSH_TEST_ALGORITHM")
+        val algorithm = System.getProperty("wcs.sshTest.algorithm")
+            ?: System.getenv("WCS_SSH_TEST_ALGORITHM")
             ?: "ssh-ed25519"
         val rejected = SshConnectionManager(
-            SshConfiguration("127.0.0.1", sshPort, "wekit", SshHostKey(algorithm, "SHA256:wrong")),
-            SshCredentials.Password("wekit-password"),
+            SshConfiguration("127.0.0.1", sshPort, "wcs", SshHostKey(algorithm, "SHA256:wrong")),
+            SshCredentials.Password("wcs-password"),
         )
         try {
             assertTrue(runCatching { rejected.execute("true", 10_000) }.exceptionOrNull() is SshHostKeyException.Changed)
@@ -44,8 +44,8 @@ class SshOpenSshIntegrationTest {
             rejected.close()
         }
         val manager = SshConnectionManager(
-            SshConfiguration("127.0.0.1", sshPort, "wekit", SshHostKey(algorithm, fingerprint)),
-            SshCredentials.Password("wekit-password"),
+            SshConfiguration("127.0.0.1", sshPort, "wcs", SshHostKey(algorithm, fingerprint)),
+            SshCredentials.Password("wcs-password"),
         )
         try {
             val exec = manager.execute("/bin/bash -lc 'printf exec-ok'", 10_000)
@@ -115,13 +115,13 @@ class SshOpenSshIntegrationTest {
             }
             manager.execute("rm -f '$path'", 10_000)
 
-            val privateKeyPath = System.getenv("WEKIT_SSH_TEST_PRIVATE_KEY")
+            val privateKeyPath = System.getenv("WCS_SSH_TEST_PRIVATE_KEY")
             if (privateKeyPath != null) {
                 val keyManager = SshConnectionManager(
-                    SshConfiguration("127.0.0.1", sshPort, "wekit", SshHostKey(algorithm, fingerprint)),
+                    SshConfiguration("127.0.0.1", sshPort, "wcs", SshHostKey(algorithm, fingerprint)),
                     SshCredentials.PrivateKey(
                         Files.readString(privateKeyPath.asPath),
-                        System.getenv("WEKIT_SSH_TEST_PRIVATE_KEY_PASSPHRASE"),
+                        System.getenv("WCS_SSH_TEST_PRIVATE_KEY_PASSPHRASE"),
                     ),
                 )
                 try {
@@ -138,14 +138,14 @@ class SshOpenSshIntegrationTest {
 
     @Test
     fun `OpenSSH disconnect after submission is indeterminate and never replayed`() = runBlocking {
-        val container = System.getenv("WEKIT_SSH_TEST_DISCONNECT_CONTAINER")
-        assumeTrue(container != null, "set WEKIT_SSH_TEST_DISCONNECT_CONTAINER to run disconnect interoperability")
-        val port = requireNotNull(System.getenv("WEKIT_SSH_TEST_PORT")).toInt()
-        val fingerprint = requireNotNull(System.getenv("WEKIT_SSH_TEST_FINGERPRINT"))
-        val algorithm = System.getenv("WEKIT_SSH_TEST_ALGORITHM") ?: "ssh-ed25519"
+        val container = System.getenv("WCS_SSH_TEST_DISCONNECT_CONTAINER")
+        assumeTrue(container != null, "set WCS_SSH_TEST_DISCONNECT_CONTAINER to run disconnect interoperability")
+        val port = requireNotNull(System.getenv("WCS_SSH_TEST_PORT")).toInt()
+        val fingerprint = requireNotNull(System.getenv("WCS_SSH_TEST_FINGERPRINT"))
+        val algorithm = System.getenv("WCS_SSH_TEST_ALGORITHM") ?: "ssh-ed25519"
         val manager = SshConnectionManager(
-            SshConfiguration("127.0.0.1", port, "wekit", SshHostKey(algorithm, fingerprint)),
-            SshCredentials.Password("wekit-password"),
+            SshConfiguration("127.0.0.1", port, "wcs", SshHostKey(algorithm, fingerprint)),
+            SshCredentials.Password("wcs-password"),
         )
         try {
             assertEquals(0, manager.execute("true", 10_000).exitCode)

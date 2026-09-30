@@ -57,7 +57,7 @@ import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.items.chat.ConversationAggregation.syncFoldersToDatabase
 import dev.sherry.wcs.features.items.contacts.CustomLocalFriendAvatars
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.BaseContactSelector
 import dev.sherry.wcs.ui.content.Button
@@ -99,7 +99,7 @@ object ConversationAggregation : ClickableFeature(),
     override val descriptionRes = R.string.feature_conversation_aggregation_description
 
     private const val TAG = "AggregateChats"
-    const val FOLDER_PREFIX = "wekit_folder_"
+    const val FOLDER_PREFIX = "wcs_folder_"
     private const val FOLDER_CONFIG_MENU_ID = 0x0721C0DE
     private const val REMOVE_FROM_FOLDER_MENU_ID = 777020
 
@@ -133,7 +133,7 @@ object ConversationAggregation : ClickableFeature(),
     // SelectConversationUI#doClickUser(username) — the single entry point for all conversation
     // taps in the "share to conversation" picker. WeChat only intercepts known virtual usernames
     // ("conversationboxservice", "opencustomerservicemsg") before forwarding to its share logic.
-    // Our folder rows (wekit_folder_XXX) pass those guards and reach the share machinery, which
+    // Our folder rows (wcs_folder_XXX) pass those guards and reach the share machinery, which
     // tries to open a chat thread for a non-existent contact → crash.
     private val methodSelectConversationDoClickUser by dexMethod(allowFailure = true) {
         matcher {
@@ -147,7 +147,7 @@ object ConversationAggregation : ClickableFeature(),
     // forwarding routes every row tap through its list item-click listener cj5.g2#g(View, item, int)
     // (interface in5.u). A tap on a normal conversation dispatches wi5.c0(listOf(username)) to the
     // state center, which sets the "Select_Conv_User" result extra and finishes. Our folder rows
-    // (wekit_folder_XXX) reach that same path with a non-existent username → crash downstream.
+    // (wcs_folder_XXX) reach that same path with a non-existent username → crash downstream.
     // We match the two concrete listeners (main list + search results) by their unique log tags.
     private val methodMvvmMainListItemClick by dexMethod {
         matcher {
@@ -261,7 +261,7 @@ object ConversationAggregation : ClickableFeature(),
         CustomLocalFriendAvatars.fallbackUsernameProvider = null
         stopRefreshThread()
 
-        // Release every folder back to the homepage — unmap members and delete all wekit_folder_*
+        // Release every folder back to the homepage — unmap members and delete all wcs_folder_*
         // rows — so disabling doesn't leave ghost aggregate conversations behind, exactly as if the
         // user had deleted every folder. The saved config is left untouched so onEnable can restore.
         releaseAllFolders()
@@ -479,7 +479,7 @@ object ConversationAggregation : ClickableFeature(),
     }
 
     private fun startRefreshThread() {
-        val thread = HandlerThread("wekit-folder-refresh").also {
+        val thread = HandlerThread("wcs-folder-refresh").also {
             it.start()
             refreshThread = it
         }
@@ -1233,7 +1233,7 @@ object ConversationAggregation : ClickableFeature(),
             INSERT OR IGNORE INTO img_flag (username, imgflag, lastupdatetime, reserved1, reserved2)
             VALUES (?, 3, ?, 0, ?)
             """.trimIndent(),
-            arrayOf(folderId, System.currentTimeMillis() / 1000, "http://wekit.local/avatar/$folderId")
+            arrayOf(folderId, System.currentTimeMillis() / 1000, "http://wcs.local/avatar/$folderId")
         )
     }
 
@@ -1709,7 +1709,7 @@ object ConversationAggregation : ClickableFeature(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 val context = LocalContext.current
-                                val localizedContext = LocalWeKitLocalizedContext.current
+                                val localizedContext = LocalWcSLocalizedContext.current
                                 Button(
                                     modifier = Modifier.weight(1f),
                                     onClick = {

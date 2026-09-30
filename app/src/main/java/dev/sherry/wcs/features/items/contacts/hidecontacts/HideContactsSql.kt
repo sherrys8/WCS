@@ -193,8 +193,8 @@ private fun looksLikeConversationListQuery(lower: String): Boolean {
     // Match only the homepage list query, which spells out per-conversation display columns.
     // Folder-container / single-row lookups use `select *` (no such columns) and aggregate/count
     // reads lack them too, so they're skipped and left untouched. NB: we deliberately do NOT bail
-    // on the substring "wekit_folder_" — when AggregateChats is enabled it appends its own
-    // `NOT LIKE 'wekit_folder_%'` clause to this very query, and bailing on it would skip hiding.
+    // on the substring "wcs_folder_" — when AggregateChats is enabled it appends its own
+    // `NOT LIKE 'wcs_folder_%'` clause to this very query, and bailing on it would skip hiding.
     return lower.contains("conversationtime") &&
             lower.contains("unreadcount") &&
             lower.contains("digestuser")

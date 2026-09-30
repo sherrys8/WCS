@@ -58,7 +58,7 @@ import dev.sherry.wcs.features.api.ui.WeContactPrefsScreenApi.IContactInfoProvid
 import dev.sherry.wcs.features.api.ui.WeContactPrefsScreenApi.PreferenceItem
 import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.BaseContactSelector
@@ -657,7 +657,7 @@ object CustomLocalFriendAvatars : ClickableFeature(), IContactInfoProvider, IRes
     ) {
         var searchQuery by remember { mutableStateOf("") }
         val chinaCollator = remember { Collator.getInstance(Locale.CHINA) }
-        val localizedContext = LocalWeKitLocalizedContext.current
+        val localizedContext = LocalWcSLocalizedContext.current
 
         val fullContactsList = remember(contacts, entries) {
             val entryContacts = entries.keys.map { wxId ->

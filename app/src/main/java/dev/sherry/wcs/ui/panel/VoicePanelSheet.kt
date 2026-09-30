@@ -76,7 +76,7 @@ import com.composables.icons.materialsymbols.outlined.Text_to_speech
 import com.composables.icons.materialsymbols.outlined.Travel_explore
 import com.composables.icons.materialsymbols.outlined.Upload_file
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.features.items.chat.panel.CloneExample
 import dev.sherry.wcs.features.items.chat.panel.CloneVoice
 import dev.sherry.wcs.features.items.chat.panel.LocalSortMode
@@ -227,7 +227,7 @@ private fun VoicePanelContent(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     val currentLocalizedContext by rememberUpdatedState(localizedContext)
     val scope = rememberCoroutineScope()
     val rememberedNavigation = remember {

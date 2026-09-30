@@ -32,7 +32,7 @@ data class CloudDexResolutionResult(
 object CloudDexResolver {
     private const val TAG = "CloudDexResolver"
     private const val RELEASE_BASE_URL =
-        "https://github.com/Ujhhgtg/WeKit/releases/download/Dex-Test"
+        "https://github.com/sherrys8/WCS/releases/download/Dex-Test"
     private const val MAX_REPORT_BYTES = 8 * 1024 * 1024
 
     private val httpClient by lazy {

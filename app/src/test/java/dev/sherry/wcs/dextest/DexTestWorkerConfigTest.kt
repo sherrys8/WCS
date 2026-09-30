@@ -20,7 +20,7 @@ class DexTestWorkerConfigTest {
     @Test
     fun parsesFeatureSelectors() {
         val properties = properties().apply {
-            setProperty("wekit.dexTest.features", "AntiReadReceipts, AntiSecMsg")
+            setProperty("wcs.dexTest.features", "AntiReadReceipts, AntiSecMsg")
         }
 
         assertEquals(
@@ -31,25 +31,25 @@ class DexTestWorkerConfigTest {
 
     @Test
     fun rejectsInvalidBooleanAndNumber() {
-        val booleanProperties = properties().apply { setProperty("wekit.dexTest.isGooglePlay", "maybe") }
+        val booleanProperties = properties().apply { setProperty("wcs.dexTest.isGooglePlay", "maybe") }
         assertThrows(IllegalStateException::class.java) {
             DexTestWorkerConfig.fromSystemProperties(booleanProperties)
         }
-        val numberProperties = properties().apply { setProperty("wekit.dexTest.versionCode", "not-a-number") }
+        val numberProperties = properties().apply { setProperty("wcs.dexTest.versionCode", "not-a-number") }
         assertThrows(IllegalStateException::class.java) {
             DexTestWorkerConfig.fromSystemProperties(numberProperties)
         }
     }
 
     private fun properties() = Properties().apply {
-        setProperty("wekit.dexTest.apk", "/tmp/wechat.apk")
-        setProperty("wekit.dexTest.nativeLibrary", "/tmp/libdexkit.so")
-        setProperty("wekit.dexTest.report", "/tmp/report.json")
-        setProperty("wekit.dexTest.dexKitVersion", "2.2.0")
-        setProperty("wekit.dexTest.dexKitRevision", "revision")
-        setProperty("wekit.dexTest.versionCode", "3040")
-        setProperty("wekit.dexTest.versionName", "8.0.69")
-        setProperty("wekit.dexTest.buildTag", "Android_Wechat_RELEASE")
-        setProperty("wekit.dexTest.isGooglePlay", "false")
+        setProperty("wcs.dexTest.apk", "/tmp/wechat.apk")
+        setProperty("wcs.dexTest.nativeLibrary", "/tmp/libdexkit.so")
+        setProperty("wcs.dexTest.report", "/tmp/report.json")
+        setProperty("wcs.dexTest.dexKitVersion", "2.2.0")
+        setProperty("wcs.dexTest.dexKitRevision", "revision")
+        setProperty("wcs.dexTest.versionCode", "3040")
+        setProperty("wcs.dexTest.versionName", "8.0.69")
+        setProperty("wcs.dexTest.buildTag", "Android_Wechat_RELEASE")
+        setProperty("wcs.dexTest.isGooglePlay", "false")
     }
 }

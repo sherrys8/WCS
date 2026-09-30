@@ -51,7 +51,7 @@ object RemoveChatMessageContextMenuItems : ClickableFeature() {
 
             @Suppress("UNCHECKED_CAST")
             (list as MutableList<Any?>).removeAll { item ->
-                // WeKit's own injected items carry a " [K]" suffix so they never match here
+                // WcS's own injected items carry a " [K]" suffix so they never match here
                 val title = (item as? MenuItem)?.title?.toString()?.trim()
                 title != null && removedNames.contains(title)
             }

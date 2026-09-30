@@ -252,7 +252,7 @@ class ProotBackend constructor(
             } catch (error: Throwable) {
                 failure.compareAndSet(null, error)
             }
-        }.apply { name = "wekit-owned-process-output"; start() }
+        }.apply { name = "wcs-owned-process-output"; start() }
 
     companion object {
         private const val TAG = "ProotBackend"
@@ -288,4 +288,4 @@ object ProotCommand {
 }
 
 fun processWithPidFile(pidFile: Path, argv: List<String>): List<String> =
-    listOf("/system/bin/sh", "-c", "echo \$\$ > \"\$1\"; shift; exec \"\$@\"", "wekit-proot", pidFile.toString()) + argv
+    listOf("/system/bin/sh", "-c", "echo \$\$ > \"\$1\"; shift; exec \"\$@\"", "wcs-proot", pidFile.toString()) + argv

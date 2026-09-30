@@ -65,8 +65,8 @@ import dev.sherry.wcs.extensions.CloudflaredPack
 import dev.sherry.wcs.extensions.ExtensionPackDialogs
 import dev.sherry.wcs.extensions.ExtensionPacks
 import dev.sherry.wcs.i18n.LocaleResourceMode
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
-import dev.sherry.wcs.i18n.WeKitLocaleProvider
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
+import dev.sherry.wcs.i18n.WcSLocaleProvider
 import dev.sherry.wcs.ui.content.m3.BaseItemContainer
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.ExpressiveBackButton
@@ -79,7 +79,7 @@ import dev.sherry.wcs.ui.content.m3.lazySegmentedItems
 import dev.sherry.wcs.ui.navigation.LocalNavigator
 import dev.sherry.wcs.ui.navigation.Navigator
 import dev.sherry.wcs.ui.navigation.rememberM3NavEffects
-import dev.sherry.wcs.ui.animation.predictiveback.weKitNavTransition
+import dev.sherry.wcs.ui.animation.predictiveback.wcSNavTransition
 import dev.sherry.wcs.ui.utils.theme.ModuleTheme
 import dev.sherry.wcs.ui.utils.theme.ThemeSettings
 import dev.sherry.wcs.utils.android.copyToClipboard
@@ -103,7 +103,7 @@ class ReadReceiptsSettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            WeKitLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
+            WcSLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
                 ModuleTheme {
                     ReadReceiptsSettingsRoot(
                         activity = this@ReadReceiptsSettingsActivity,
@@ -137,7 +137,7 @@ private fun ReadReceiptsSettingsRoot(
         NavDisplay(
             backStack = backStack,
             onBack = { if (navigator.backStackSize() <= 1) onFinish() else navigator.pop() },
-            transition = weKitNavTransition(ThemeSettings.pageTransitionAnimation),
+            transition = wcSNavTransition(ThemeSettings.pageTransitionAnimation),
             effects = rememberM3NavEffects(),
         ) {
             entry<ReadReceiptsRoute.Home> {
@@ -303,7 +303,7 @@ private fun ReadReceiptsHomeScreen(
     onOpen: (ReadReceiptsRoute) -> Unit,
 ) {
     val context = LocalContext.current
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val initial = remember { ReadReceipts.configuration() }
     var sendMode by rememberSaveable { mutableIntStateOf(ReadReceipts.sendMode) }
     var triggerPrefix by rememberSaveable { mutableStateOf(ReadReceipts.triggerPrefix) }
@@ -593,7 +593,7 @@ private fun ThirdPartyScreen(
     operationCoordinator: SettingsOperationCoordinator,
     onBack: () -> Unit,
 ) {
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val initial = remember { ReadReceipts.configuration() }
     var url by rememberSaveable { mutableStateOf(initial.thirdPartyUrl) }
     val operationState = operationCoordinator.state(ReadReceiptsRoute.ThirdParty)
@@ -671,7 +671,7 @@ private fun QuickTunnelScreen(
     operationCoordinator: SettingsOperationCoordinator,
     onBack: () -> Unit,
 ) {
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val initial = remember { ReadReceipts.configuration() }
     var automaticPort by rememberSaveable { mutableStateOf(initial.automaticPort) }
     var port by rememberSaveable { mutableStateOf(initial.builtInPort.toString()) }
@@ -714,7 +714,7 @@ private fun TokenTunnelScreen(
     operationCoordinator: SettingsOperationCoordinator,
     onBack: () -> Unit,
 ) {
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val initial = remember { ReadReceipts.configuration() }
     var automaticPort by rememberSaveable { mutableStateOf(initial.automaticPort) }
     var port by rememberSaveable { mutableStateOf(initial.builtInPort.toString()) }
@@ -866,7 +866,7 @@ private fun BrowserTunnelScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val initial = remember { ReadReceipts.configuration() }
     var port by rememberSaveable { mutableStateOf(initial.builtInPort.toString()) }
     var selectedTunnelId by rememberSaveable { mutableStateOf(initial.selectedTunnelId) }

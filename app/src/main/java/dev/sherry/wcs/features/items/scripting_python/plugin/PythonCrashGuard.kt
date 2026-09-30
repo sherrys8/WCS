@@ -25,7 +25,7 @@ object PythonCrashGuard {
     private val json = Json
     private val activeMarkers = LinkedHashMap<Long, PythonCrashMarker>()
     private val tokens = AtomicLong()
-    private val directory: File get() = File(HostInfo.application.filesDir, "wekit-python")
+    private val directory: File get() = File(HostInfo.application.filesDir, "wcs-python")
     private val markerFile: File get() = File(directory, "execution-marker.json")
 
     fun begin(pluginId: String, phase: String): Long = synchronized(lock) {

@@ -37,7 +37,7 @@ object MonitorGroupMemberOperations : SwitchFeature(), IResolveDex, WeDatabaseLi
                 type = BString
                 modifiers(Modifiers.FINAL)
             }.get()!! as String
-            if (!url.startsWith("weixin://weixinhongbao/wekit/chatroom_userinfo/")) return@hookBefore
+            if (!url.startsWith("weixin://weixinhongbao/wcs/chatroom_userinfo/")) return@hookBefore
 
             val wxId = url.substringAfterLast('/')
             val context = (args[0] as View).context
@@ -111,7 +111,7 @@ object MonitorGroupMemberOperations : SwitchFeature(), IResolveDex, WeDatabaseLi
             val displayName = (origDisplayNames[wxId] ?: "").ifEmpty { WeDatabaseApi.getDisplayName(wxId) }
             val displayString = if (displayName.isNotEmpty()) "$displayName ($wxId)" else wxId
 
-            val href = "weixin://weixinhongbao/wekit/chatroom_userinfo/$wxId"
+            val href = "weixin://weixinhongbao/wcs/chatroom_userinfo/$wxId"
             val content = """<_wc_custom_link_ color="#28C445" href="$href">$displayString</_wc_custom_link_> ${localizedChatString(R.string.chat_group_member_left)}"""
 
             WeMessageApi.createSimpleMsgInfoAndInsert(
@@ -139,7 +139,7 @@ object MonitorGroupMemberOperations : SwitchFeature(), IResolveDex, WeDatabaseLi
             val oldShow = oldName.ifEmpty { localizedChatString(R.string.chat_group_member_no_nickname) }
             val newShow = newName.ifEmpty { localizedChatString(R.string.chat_group_member_no_nickname) }
 
-            val href = "weixin://weixinhongbao/wekit/chatroom_userinfo/$wxId"
+            val href = "weixin://weixinhongbao/wcs/chatroom_userinfo/$wxId"
             val content = """<_wc_custom_link_ color="#28C445" href="$href">$displayString</_wc_custom_link_> ${localizedChatString(R.string.chat_group_member_nickname_changed, oldShow, newShow)}"""
 
             WeMessageApi.createSimpleMsgInfoAndInsert(

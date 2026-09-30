@@ -156,7 +156,7 @@ abstract class WeAgentDatabase : RoomDatabase() {
 
         private fun build(): WeAgentDatabase {
             val external = KnownPaths.moduleData.resolve("agent/weagent.db").toFile()
-            val private = File(HostInfo.application.filesDir, "wekit-agent/weagent.db")
+            val private = File(HostInfo.application.filesDir, "wcs-agent/weagent.db")
             val relocator = WeAgentDatabaseRelocator(external, private) { source ->
                 android.database.sqlite.SQLiteDatabase.openDatabase(
                     source.absolutePath,

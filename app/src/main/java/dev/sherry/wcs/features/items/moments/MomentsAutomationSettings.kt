@@ -3,7 +3,7 @@ package dev.sherry.wcs.features.items.moments
 import android.content.Context
 import androidx.annotation.StringRes
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -258,7 +258,7 @@ class MomentsAutomationSettings private constructor(
         showComposeDialog(context) {
             var draft by remember { mutableStateOf(store.get().global) }
             var editText by remember { mutableStateOf<PaymentTextEditMode?>(null) }
-            val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+            val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
             val validationError = validate(localizedContext, draft)
             val editMode = editText
             if (editMode != null) {
@@ -302,7 +302,7 @@ class MomentsAutomationSettings private constructor(
         showComposeDialog(context) {
             var revision by remember { mutableIntStateOf(0) }
             val contacts = remember { loadContacts() }
-            val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+            val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
             AutomationContactSettingsSelector(
                 title = stringResource(R.string.moments_automation_contact_settings),
                 contacts = contacts,
@@ -351,7 +351,7 @@ class MomentsAutomationSettings private constructor(
             var draft by remember { mutableStateOf(initial) }
             var editText by remember { mutableStateOf<PaymentTextEditMode?>(null) }
             val effective = parent.apply(draft)
-            val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+            val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
             val validationError = validate(localizedContext, effective, draft.keys())
             val editMode = editText
             if (editMode != null) {

@@ -316,8 +316,8 @@ object PythonPluginManager {
         require(manifest.name.isNotBlank() && manifest.version.isNotBlank()) { "Plugin name and version are required" }
         require(entryPattern.matches(manifest.entry)) { "Invalid plugin entry: ${manifest.entry}" }
         require(manifest.processes == listOf("main")) { "Only the main process is supported" }
-        require(manifest.minWeKitVersionCode >= 0) { "Invalid minWeKitVersionCode" }
-        require(manifest.minWeKitVersionCode <= BuildConfig.VERSION_CODE) { "Plugin requires a newer WeKit" }
+        require(manifest.minWcSVersionCode >= 0) { "Invalid minWcSVersionCode" }
+        require(manifest.minWcSVersionCode <= BuildConfig.VERSION_CODE) { "Plugin requires a newer WcS" }
         val entry = File(root, manifest.entry.replace('.', File.separatorChar))
         require(File(entry.path + ".py").isFile || File(entry, "__init__.py").isFile) {
             "Plugin entry module does not exist: ${manifest.entry}"
@@ -350,7 +350,7 @@ object PythonPluginManager {
 
     private const val ENTRY_SKELETON = """from __future__ import annotations
 
-from wekit.runtime import PluginContext
+from wcs.runtime import PluginContext
 
 
 def setup(ctx: PluginContext) -> None:

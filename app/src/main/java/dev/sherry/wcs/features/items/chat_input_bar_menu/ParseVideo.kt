@@ -640,7 +640,7 @@ object ParseVideo : ClickableFeature() {
 
     // ==================== 群聊抖音链接自动解析回复 ====================
 
-    /** 临时发送用目录：外部存储 Download/WeKit/ParseVideoTemp（不再落微信内部 cache，便于用户查看与清理） */
+    /** 临时发送用目录：外部存储 Download/WcS/ParseVideoTemp（不再落微信内部 cache，便于用户查看与清理） */
     private fun tempSendDir(): java.io.File =
         (KnownPaths.downloads / "ParseVideoTemp").toFile()
 

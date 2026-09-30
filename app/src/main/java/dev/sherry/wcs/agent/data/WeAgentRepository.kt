@@ -84,14 +84,14 @@ object WeAgentRepository {
      * Stores a model provider. Its API key is persisted **as-is** (unencrypted), matching
      * [ExternalServiceEntity].
      *
-     * There is deliberately no encryption layer: running WeKit at all requires root, and any key
-     * WeKit could decrypt on its own it would also have to keep unlockable on-device, so a root
+     * There is deliberately no encryption layer: running WcS at all requires root, and any key
+     * WcS could decrypt on its own it would also have to keep unlockable on-device, so a root
      * holder could recover it from the module's own storage, the request headers, memory, or a
      * dozen other surfaces. Encrypting here would only obscure the key from its owner.
      */
     suspend fun upsertModelProvider(provider: ModelProviderEntity) {
         check(provider.id != LocalLlama.PROVIDER_ID && provider.type != ModelProviderType.LOCAL_LLAMA) {
-            "the local llama provider is managed by WeKit and cannot be created or edited manually"
+            "the local llama provider is managed by WcS and cannot be created or edited manually"
         }
         db.modelProviderDao().upsert(provider)
     }

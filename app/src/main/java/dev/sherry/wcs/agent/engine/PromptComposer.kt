@@ -90,7 +90,7 @@ class PromptComposer(
         return buildString {
             append(
                 """
-                你是 WeAgent，一个运行在微信 App 内部的智能体，通过 WeKit 模块以 Xposed Hook 方式获得对微信客户端的操作能力。
+                你是 WeAgent，一个运行在微信 App 内部的智能体，通过 WcS 模块以 Xposed Hook 方式获得对微信客户端的操作能力。
 
                 # 当前环境
                 - 会话创建时间：$dateTime（$tz）。注意：这是本会话开始时的时间，不会随对话推进而更新；需要获取「真实的当前时间」时，请调用 get-current-time 工具，不要依赖此处的时间。

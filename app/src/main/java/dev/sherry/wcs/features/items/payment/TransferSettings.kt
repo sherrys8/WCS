@@ -21,7 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.core.models.IWeContact
 import dev.sherry.wcs.features.items.AtomicJsonConfigStore
@@ -198,7 +198,7 @@ object TransferSettings {
 
     private fun showGlobalDialog(context: Context) {
         showComposeDialog(context) {
-            val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+            val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
             var draft by remember { mutableStateOf(store.get().global) }
             var editText by remember { mutableStateOf<PaymentTextEditMode?>(null) }
             val validationError = validate(localizedContext, draft)
@@ -243,7 +243,7 @@ object TransferSettings {
 
     private fun showContactSelector(context: Context) {
         showComposeDialog(context) {
-            val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+            val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
             var revision by remember { mutableIntStateOf(0) }
             val contacts = remember { loadContacts() }
             AutomationContactSettingsSelector(
@@ -358,7 +358,7 @@ object TransferSettings {
 
     private fun showGroupMemberSelector(context: Context, groupId: String, onUpdated: () -> Unit) {
         showComposeDialog(context) {
-            val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+            val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
             var revision by remember { mutableIntStateOf(0) }
             val members = remember(groupId) {
                 runCatching { WeDatabaseApi.getGroupMembers(groupId) }
@@ -413,7 +413,7 @@ object TransferSettings {
         onSave: (RuleOverrides) -> Unit
     ) {
         showComposeDialog(context) {
-            val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+            val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
             var draft by remember { mutableStateOf(initial) }
             var editText by remember { mutableStateOf<PaymentTextEditMode?>(null) }
             val effective = parent.apply(draft)

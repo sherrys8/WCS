@@ -227,10 +227,10 @@ object NotificationsEvolved : ClickableFeature(), IResolveDex {
     private val messageHistory = LinkedHashMap<String, ArrayDeque<HistoryEntry>>()
     private const val MAX_HISTORY = 7
 
-    private const val ACTION_REPLY = "${PackageNames.WECHAT}.ACTION_WEKIT_REPLY"
-    private const val ACTION_MARK_READ = "${PackageNames.WECHAT}.ACTION_WEKIT_MARK_READ"
-    private const val ACTION_NOTIFICATION_OPENED = "${PackageNames.WECHAT}.ACTION_WEKIT_NOTIFICATION_OPENED"
-    private const val ACTION_NOTIFICATION_DISMISSED = "${PackageNames.WECHAT}.ACTION_WEKIT_NOTIFICATION_DISMISSED"
+    private const val ACTION_REPLY = "${PackageNames.WECHAT}.ACTION_WCS_REPLY"
+    private const val ACTION_MARK_READ = "${PackageNames.WECHAT}.ACTION_WCS_MARK_READ"
+    private const val ACTION_NOTIFICATION_OPENED = "${PackageNames.WECHAT}.ACTION_WCS_NOTIFICATION_OPENED"
+    private const val ACTION_NOTIFICATION_DISMISSED = "${PackageNames.WECHAT}.ACTION_WCS_NOTIFICATION_DISMISSED"
     private const val MAX_PENDING_MESSAGES = 16
     private const val PENDING_MESSAGE_TTL_MILLIS = 30_000L
     private const val AVATAR_CACHE_TTL_MILLIS = 5 * 60 * 1000L

@@ -68,8 +68,8 @@ import dev.sherry.wcs.features.core.FeaturesProvider
 import dev.sherry.wcs.features.core.SwitchFeature
 import dev.sherry.wcs.features.items.debug.ResetDexCache
 import dev.sherry.wcs.i18n.LanguageSelection
-import dev.sherry.wcs.i18n.WeKitLocaleController
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.WcSLocaleController
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.nuke.NukeButton
 import dev.sherry.wcs.ui.content.nuke.NukeCategoryIcon
@@ -129,8 +129,8 @@ fun NukeDestinationPage(
 
 @Composable
 private fun NukeModuleDebugPage(onBack: (Offset) -> Unit) {
-    val context = LocalWeKitLocalizedContext.current
-    val resolvedLocale = WeKitLocaleController.resolvedLocale
+    val context = LocalWcSLocalizedContext.current
+    val resolvedLocale = WcSLocaleController.resolvedLocale
     val featureNameCollator = remember(resolvedLocale) {
         Collator.getInstance(Locale.forLanguageTag(resolvedLocale.androidTag))
     }
@@ -206,7 +206,7 @@ private fun NukeModuleDebugPage(onBack: (Offset) -> Unit) {
 
 @Composable
 private fun NukeFeatureStatusRow(feature: BaseFeature, onClick: () -> Unit) {
-    val context = LocalWeKitLocalizedContext.current
+    val context = LocalWcSLocalizedContext.current
     NukePreferenceRow(
         title = feature.localizedName(context),
         description = feature.categoryIds
@@ -222,7 +222,7 @@ private fun NukeFeatureStatusRow(feature: BaseFeature, onClick: () -> Unit) {
 
 @Composable
 private fun NukeFeatureStatusDialog(feature: BaseFeature, onDismiss: () -> Unit) {
-    val context = LocalWeKitLocalizedContext.current
+    val context = LocalWcSLocalizedContext.current
     val kind = when (feature) {
         is ClickableFeature -> stringResource(R.string.nuke_feature_kind_configurable)
         is SwitchFeature -> stringResource(R.string.nuke_feature_kind_switch)
@@ -250,13 +250,13 @@ private fun NukeFeatureStatusDialog(feature: BaseFeature, onDismiss: () -> Unit)
 private fun NukeGeneralSettingsPage(onBack: (Offset) -> Unit) {
     val context = LocalContext.current
     val activity = LocalComponentActivity.current
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     var showClearConfirmation by remember { mutableStateOf(false) }
 
     NukePageScaffold(title = stringResource(R.string.settings_general_title), onBack = onBack) {
         item(key = "language") {
-            val selectedLanguage = WeKitLocaleController.selection
-            val resolvedLanguage = WeKitLocaleController.resolvedLocale
+            val selectedLanguage = WcSLocaleController.selection
+            val resolvedLanguage = WcSLocaleController.resolvedLocale
             val languageLabels = mapOf(
                 LanguageSelection.SYSTEM to stringResource(R.string.language_follow_system),
                 LanguageSelection.ENGLISH to stringResource(R.string.language_english),
@@ -280,7 +280,7 @@ private fun NukeGeneralSettingsPage(onBack: (Offset) -> Unit) {
                     options = LanguageSelection.entries,
                     selected = selectedLanguage,
                     optionLabel = languageLabels::getValue,
-                    onSelected = WeKitLocaleController::updateSelection,
+                    onSelected = WcSLocaleController::updateSelection,
                 )
             }
         }
@@ -417,7 +417,7 @@ private fun NukeBooleanPreference(
 @Composable
 private fun NukeUpdatePage(onBack: (Offset) -> Unit) {
     val activity = LocalComponentActivity.current
-    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
     val scope = rememberCoroutineScope()
     var updateInfo by remember { mutableStateOf<UpdateResult.UpdateAvailable?>(null) }
     var updateError by remember { mutableStateOf<String?>(null) }
@@ -574,11 +574,11 @@ private fun NukeAboutPage(
             NukeSettingGroup(title = stringResource(R.string.nuke_about_links)) {
                 NukePreferenceRow(
                     title = stringResource(R.string.brand_github),
-                    description = "Ujhhgtg/WeKit",
+                    description = "sherrys8/WCS",
                     leading = { NukeVectorCategoryIcon(GitHubIcon) },
                     trailing = { NukeCountAndChevron(text = null) },
                     onClick = {
-                        "https://github.com/Ujhhgtg/WeKit".toUri().openInSystem(context, true)
+                        "https://github.com/sherrys8/WCS".toUri().openInSystem(context, true)
                     },
                 )
                 NukeDivider()
@@ -613,7 +613,7 @@ private fun NukeDeveloperRow(
         title = contributor.login,
         description = contributor.contributionCount?.let {
             stringResource(R.string.nuke_github_contributions, it)
-        } ?: stringResource(R.string.nuke_wekit_developer),
+        } ?: stringResource(R.string.nuke_wcs_developer),
         leading = { NukeDeveloperAvatar(contributor) },
         trailing = { NukeCountAndChevron(text = null) },
         onClick = { onClick() },

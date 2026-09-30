@@ -233,15 +233,15 @@ object MonetCustomOverlays {
         val adaptive = XmlNode(
             "adaptive-icon",
             children = listOf(
-                XmlNode("background", listOf(android("drawable", ATTR_DRAWABLE, XmlValue.NamedReference("drawable", "wekit_icon_bg")))),
-                XmlNode("foreground", listOf(android("drawable", ATTR_DRAWABLE, XmlValue.NamedReference("drawable", "wekit_icon_fg")))),
-                XmlNode("monochrome", listOf(android("drawable", ATTR_DRAWABLE, XmlValue.NamedReference("drawable", "wekit_icon_mono")))),
+                XmlNode("background", listOf(android("drawable", ATTR_DRAWABLE, XmlValue.NamedReference("drawable", "wcs_icon_bg")))),
+                XmlNode("foreground", listOf(android("drawable", ATTR_DRAWABLE, XmlValue.NamedReference("drawable", "wcs_icon_fg")))),
+                XmlNode("monochrome", listOf(android("drawable", ATTR_DRAWABLE, XmlValue.NamedReference("drawable", "wcs_icon_mono")))),
             ),
         )
         return listOf(
-            DrawableTarget("wekit_icon_bg", solid(0xfff4fbf5.toInt()), solid(palette.surfaceDark)),
-            DrawableTarget("wekit_icon_fg", foregroundIcon()),
-            DrawableTarget("wekit_icon_mono", monochromeIcon()),
+            DrawableTarget("wcs_icon_bg", solid(0xfff4fbf5.toInt()), solid(palette.surfaceDark)),
+            DrawableTarget("wcs_icon_fg", foregroundIcon()),
+            DrawableTarget("wcs_icon_mono", monochromeIcon()),
             DrawableTarget(targetName, adaptive, type = "mipmap", lightQualifiers = "-anydpi-v26"),
         )
     }

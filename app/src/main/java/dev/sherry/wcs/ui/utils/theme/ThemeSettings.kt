@@ -171,7 +171,7 @@ object ThemeSettings {
         private set
 
     /**
-     * Whether the selected color also applies to WeChat itself (injected WeKit ComposeUI + native
+     * Whether the selected color also applies to WeChat itself (injected WcS ComposeUI + native
      * recoloring via [dev.sherry.wcs.features.items.beautify.MonetEngine]). Does NOT take effect live — requires restarting WeChat.
      */
     var applyToWechat by mutableStateOf(WePrefs.getBoolOrFalse(Preferences.THEME_APPLY_TO_WECHAT))

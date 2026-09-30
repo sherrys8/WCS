@@ -72,7 +72,7 @@ object SettingsConfigActions {
                     withContext(Dispatchers.Main) { finish() }
                 }
             }
-            exportLauncher.launch("wekit_prefs_backup.json")
+            exportLauncher.launch("wcs_prefs_backup.json")
         }
     }
 

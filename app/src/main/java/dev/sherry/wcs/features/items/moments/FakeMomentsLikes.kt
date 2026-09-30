@@ -1,7 +1,7 @@
 package dev.sherry.wcs.features.items.moments
 
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import android.content.ContentValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -90,7 +90,7 @@ object FakeMomentsLikes : SwitchFeature(), WeMomentsContextMenuApi.IMenuItemsPro
 
                 showComposeDialog(moment.activity) {
                     var countInput by remember { mutableStateOf("") }
-                    val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+                    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
 
                     AlertDialogContent(
                         title = { Text(stringResource(R.string.moments_fake_likes_method_title)) },

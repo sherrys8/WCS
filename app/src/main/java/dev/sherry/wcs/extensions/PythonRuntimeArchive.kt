@@ -138,7 +138,7 @@ object PythonRuntimeArchive {
             ZipInputStream(zip.getInputStream(archive)).use { sdk ->
                 while (true) {
                     val entry = sdk.nextEntry ?: break
-                    if (entry.isDirectory || !entry.name.startsWith("wekit/")) continue
+                    if (entry.isDirectory || !entry.name.startsWith("wcs/")) continue
                     requireSafeName(entry.name)
                     val output = File(destination, entry.name).canonicalFile
                     require(output.path.startsWith(canonicalDestination.path + File.separator)) {
@@ -150,8 +150,8 @@ object PythonRuntimeArchive {
             }
         }
         require(
-            File(destination, "wekit/__init__.py").isFile ||
-                File(destination, "wekit/__init__.pyc").isFile,
+            File(destination, "wcs/__init__.py").isFile ||
+                File(destination, "wcs/__init__.pyc").isFile,
         ) { "Python runtime SDK is incomplete" }
     }
 

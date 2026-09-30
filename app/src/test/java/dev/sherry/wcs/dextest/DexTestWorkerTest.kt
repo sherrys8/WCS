@@ -29,33 +29,33 @@ internal data class DexTestWorkerConfig(
         fun fromSystemProperties(properties: Properties): DexTestWorkerConfig {
             fun required(key: String) = properties.getProperty(key)?.takeIf(String::isNotBlank)
                 ?: error("missing required system property: $key")
-            val isGooglePlay = required("wekit.dexTest.isGooglePlay").let { raw ->
+            val isGooglePlay = required("wcs.dexTest.isGooglePlay").let { raw ->
                 raw.toBooleanStrictOrNull()
-                    ?: error("wekit.dexTest.isGooglePlay must be true or false, was $raw")
+                    ?: error("wcs.dexTest.isGooglePlay must be true or false, was $raw")
             }
             return DexTestWorkerConfig(
-                apk = required("wekit.dexTest.apk").asPath.toAbsolutePath().normalize(),
-                nativeLibrary = required("wekit.dexTest.nativeLibrary").asPath.toAbsolutePath().normalize(),
-                report = required("wekit.dexTest.report").asPath.toAbsolutePath().normalize(),
-                dexKitVersion = required("wekit.dexTest.dexKitVersion"),
-                dexKitRevision = required("wekit.dexTest.dexKitRevision"),
-                versionCode = required("wekit.dexTest.versionCode").toLongOrNull()
-                    ?: error("wekit.dexTest.versionCode must be a long"),
-                versionName = required("wekit.dexTest.versionName"),
-                buildTag = required("wekit.dexTest.buildTag"),
+                apk = required("wcs.dexTest.apk").asPath.toAbsolutePath().normalize(),
+                nativeLibrary = required("wcs.dexTest.nativeLibrary").asPath.toAbsolutePath().normalize(),
+                report = required("wcs.dexTest.report").asPath.toAbsolutePath().normalize(),
+                dexKitVersion = required("wcs.dexTest.dexKitVersion"),
+                dexKitRevision = required("wcs.dexTest.dexKitRevision"),
+                versionCode = required("wcs.dexTest.versionCode").toLongOrNull()
+                    ?: error("wcs.dexTest.versionCode must be a long"),
+                versionName = required("wcs.dexTest.versionName"),
+                buildTag = required("wcs.dexTest.buildTag"),
                 isGooglePlay = isGooglePlay,
-                workers = properties.getProperty("wekit.dexTest.workers")?.takeIf(String::isNotBlank)?.let {
+                workers = properties.getProperty("wcs.dexTest.workers")?.takeIf(String::isNotBlank)?.let {
                     requireNotNull(it.toIntOrNull()?.takeIf { count -> count > 0 }) {
-                        "wekit.dexTest.workers must be a positive integer"
+                        "wcs.dexTest.workers must be a positive integer"
                     }
                 },
-                featureSelectors = properties.getProperty("wekit.dexTest.features")
+                featureSelectors = properties.getProperty("wcs.dexTest.features")
                     ?.takeIf(String::isNotBlank)
                     ?.split(',')
                     ?.map { selector ->
                         selector.trim().also {
                             require(it.isNotEmpty()) {
-                                "wekit.dexTest.features contains an empty feature name"
+                                "wcs.dexTest.features contains an empty feature name"
                             }
                         }
                     },

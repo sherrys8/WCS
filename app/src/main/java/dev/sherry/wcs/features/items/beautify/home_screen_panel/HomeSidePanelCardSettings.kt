@@ -51,7 +51,7 @@ import com.composables.icons.materialsymbols.outlined.My_location
 import com.composables.icons.materialsymbols.outlined.Person_pin
 import dev.sherry.wcs.R
 import dev.sherry.wcs.features.items.beautify.resolveBeautifyText
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.ui.content.m3.BaseItemContainer
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.IntNumberPickerWidget
@@ -379,7 +379,7 @@ fun HomeSidePanelHitokotoSettings(
         }
         if (runtime is HitokotoUiState.Error) {
             Text(
-                LocalWeKitLocalizedContext.current.resolveBeautifyText(runtime.message),
+                LocalWcSLocalizedContext.current.resolveBeautifyText(runtime.message),
                 color = MaterialTheme.colorScheme.error,
             )
         }

@@ -13,7 +13,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowInsetsControllerCompat
 import dev.sherry.wcs.i18n.LocaleResourceMode
-import dev.sherry.wcs.i18n.WeKitLocaleProvider
+import dev.sherry.wcs.i18n.WcSLocaleProvider
 import dev.sherry.wcs.ui.utils.theme.ModuleTheme
 import dev.sherry.wcs.utils.android.isDarkMode
 
@@ -41,7 +41,7 @@ class GroupSummaryActivity : ComponentActivity() {
 
         val talker = intent.getStringExtra(EXTRA_TALKER)!!
         setContent {
-            WeKitLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
+            WcSLocaleProvider(mode = LocaleResourceMode.InjectedHost) {
                 ModuleTheme {
                     // 状态栏/导航栏着色为页面背景色：背景视觉上延伸到系统栏，内容从状态栏下方开始
                     val barColor = MaterialTheme.colorScheme.surface.toArgb()
@@ -59,7 +59,7 @@ class GroupSummaryActivity : ComponentActivity() {
     }
 
     companion object {
-        private const val EXTRA_TALKER = "wekit_group_summary_talker"
+        private const val EXTRA_TALKER = "wcs_group_summary_talker"
 
         fun launch(context: Context, talker: String) {
             context.startActivity(

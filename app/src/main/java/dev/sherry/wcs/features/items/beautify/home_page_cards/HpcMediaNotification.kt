@@ -25,7 +25,7 @@ object HpcMediaNotification {
     private val M = HpcMusicCard
     private val mh = Handler(Looper.getMainLooper())
 
-    private const val CHANNEL_ID = "wekit_music_playback"
+    private const val CHANNEL_ID = "wcs_music_playback"
     private const val NOTI_ID = 888
     private const val ACTION_PREV = "dev.sherry.wcs.media.PREV"
     private const val ACTION_TOGGLE = "dev.sherry.wcs.media.TOGGLE"
@@ -92,7 +92,7 @@ object HpcMediaNotification {
                 }
             }
 
-            mediaSession = MediaSession(ctx, "WeKitMusic").apply {
+            mediaSession = MediaSession(ctx, "WcSMusic").apply {
                 setCallback(object : MediaSession.Callback() {
                     override fun onPlay() { M.handlePlayButtonClick() }
                     override fun onPause() { M.toggle() }
@@ -160,7 +160,7 @@ object HpcMediaNotification {
             val builder = Notification.Builder(ctx, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_media_play)
                 .setContentTitle(song.title)
-                .setContentText(song.artist + " · WeKit 音乐")
+                .setContentText(song.artist + " · WcS 音乐")
                 .setSubText(formatTime(pos) + " / " + formatTime(duration))
                 .setStyle(
                     Notification.MediaStyle()

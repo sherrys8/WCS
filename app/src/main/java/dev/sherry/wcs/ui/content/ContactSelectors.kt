@@ -74,7 +74,7 @@ import com.composables.icons.materialsymbols.outlined.Sort_by_alpha
 import com.composables.icons.materialsymbols.outlined.Swap_vert
 import com.composables.icons.materialsymbols.outlined.Tag
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.features.api.core.WeContactLabelApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.core.models.IWeContact
@@ -162,7 +162,7 @@ fun BaseContactSelector(
     onInvertSelection: ((List<IWeContact>) -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val localizedContext = LocalWeKitLocalizedContext.current
+    val localizedContext = LocalWcSLocalizedContext.current
     val currentLocalizedContext = rememberUpdatedState(localizedContext)
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()

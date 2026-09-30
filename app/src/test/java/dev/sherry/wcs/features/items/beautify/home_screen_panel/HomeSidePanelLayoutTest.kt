@@ -48,7 +48,7 @@ class HomeSidePanelLayoutTest {
                 HomeSidePanelActionKind.MOMENTS,
                 HomeSidePanelActionKind.CHANNELS,
                 HomeSidePanelActionKind.MARK_ALL_READ,
-                HomeSidePanelActionKind.WEKIT_SETTINGS,
+                HomeSidePanelActionKind.WCS_SETTINGS,
             ),
             (layout.cards[3] as VerticalActionsCardConfig).actions.map { it.kind },
         )

@@ -1,7 +1,7 @@
 package dev.sherry.wcs.features.items.moments
 
 import dev.sherry.wcs.R
-import dev.sherry.wcs.i18n.LocalWeKitLocalizedContext
+import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -244,7 +244,7 @@ object AutoRefresh : ClickableFeature(), IResolveDex {
                 mutableFloatStateOf(minutesToSliderPosition(initialInterval))
             }
             var intervalInput by remember { mutableIntStateOf(initialInterval) }
-            val localizedContext by rememberUpdatedState(LocalWeKitLocalizedContext.current)
+            val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
 
             AlertDialogContent(
                 title = { Text(stringResource(R.string.moments_auto_refresh_title)) },
