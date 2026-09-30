@@ -1,1 +1,1 @@
-group = "dev.ujhhgtg.wekit.python.runtime"
+group = "dev.sherry.wcs.python.runtime"

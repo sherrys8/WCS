@@ -436,7 +436,7 @@ fn build_python_runtime(root: &Path, dist: &Path) -> Result<PackIndexEntry> {
         .context("failed to build Python runtime API")?;
     anyhow::ensure!(status.success(), "Python runtime API build failed");
     let api_dir = api_repo
-        .join("dev/ujhhgtg/wekit/python-runtime-api")
+        .join("dev/sherry/wcs/python-runtime-api")
         .join(api_version);
     fs::create_dir_all(&api_dir)?;
     let api_name = format!("python-runtime-api-{api_version}");
@@ -447,7 +447,7 @@ fn build_python_runtime(root: &Path, dist: &Path) -> Result<PackIndexEntry> {
     fs::write(
         api_dir.join(format!("{api_name}.pom")),
         format!(
-            "<project><modelVersion>4.0.0</modelVersion><groupId>dev.ujhhgtg.wekit</groupId><artifactId>python-runtime-api</artifactId><version>{api_version}</version><packaging>aar</packaging></project>"
+            "<project><modelVersion>4.0.0</modelVersion><groupId>dev.sherry.wcs</groupId><artifactId>python-runtime-api</artifactId><version>{api_version}</version><packaging>aar</packaging></project>"
         ),
     )?;
 
@@ -969,7 +969,7 @@ fn build_runtime_multidex_probe(root: &Path, catalog: &toml::Value) -> Result<Pa
         Command::new(d8)
             .args(["--min-api", min_sdk, "--output"])
             .arg(&dex)
-            .arg(classes.join("dev/ujhhgtg/wekit/python/runtime/RuntimeMultidexProbe.class")),
+            .arg(classes.join("dev/sherry/wcs/python/runtime/RuntimeMultidexProbe.class")),
         "build runtime classes2.dex probe",
     )?;
     let output = dex.join("classes.dex");

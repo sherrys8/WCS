@@ -64,7 +64,7 @@ pythonRuntimeMaxManifestBytes = "262144"
 pythonRuntimeMaxPluginFileBytes = "8388608"
 
 # noinspection UnusedVersionCatalogEntry
-namespace = "dev.ujhhgtg.wekit"
+namespace = "dev.sherry.wcs"
 # noinspection UnusedVersionCatalogEntry
 minSdk = "28"
 # noinspection UnusedVersionCatalogEntry

@@ -7,7 +7,7 @@ plugins {
     id("org.jetbrains.kotlin.android") version libs.versions.kotlin
 }
 
-group = "dev.ujhhgtg.wekit.python.runtime"
+group = "dev.sherry.wcs.python.runtime"
 version = libs.versions.pythonRuntimeVersion.get()
 
 val nativeLibraries = listOf(
@@ -68,11 +68,11 @@ val generateRuntimeManifest = tasks.register("generateRuntimeManifest") {
 }
 
 configure<ApplicationExtension> {
-    namespace = "dev.ujhhgtg.wekit.python.runtime"
+    namespace = "dev.sherry.wcs.python.runtime"
     compileSdk = libs.versions.compileSdk.get().toInt()
     ndkVersion = libs.versions.pythonRuntimeNdk.get()
     defaultConfig {
-        applicationId = "dev.ujhhgtg.wekit.python.runtime.container"
+        applicationId = "dev.sherry.wcs.python.runtime.container"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = libs.versions.pythonRuntimeVersionCode.get().toInt()
@@ -108,7 +108,7 @@ dependencies {
     // Supplied by xtask from a controlled local Maven repository; compile-only
     // prevents API classes from entering the runtime DEX.
     val apiVersion = providers.gradleProperty("wekitPythonApiVersion").orElse(libs.versions.pythonRuntimeApiVersion)
-    compileOnly("dev.ujhhgtg.wekit:python-runtime-api:${apiVersion.get()}")
+    compileOnly("dev.sherry.wcs:python-runtime-api:${apiVersion.get()}")
     chaquopyTarget(
         "com.chaquo.python:target:${libs.versions.pythonRuntimeChaquopyTarget.get()}:" +
             "${libs.versions.pythonRuntimeAbi.get()}@zip",

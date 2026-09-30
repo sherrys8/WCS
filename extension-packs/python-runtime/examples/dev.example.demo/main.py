@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from java import dynamic_proxy  # ty: ignore[unresolved-import]
 
-from dev.ujhhgtg.wekit.features.api.core import WeDatabaseListenerApi  # ty: ignore[unresolved-import]
+from dev.sherry.wcs.features.api.core import WeDatabaseListenerApi  # ty: ignore[unresolved-import]
 from wekit.dexkit import MethodMatcher, eq
 from wekit.runtime import PluginContext
 

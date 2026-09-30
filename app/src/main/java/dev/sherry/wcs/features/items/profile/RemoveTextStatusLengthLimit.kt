@@ -1,0 +1,59 @@
+package dev.sherry.wcs.features.items.profile
+
+import dev.ujhhgtg.reflekt.reflekt
+import dev.sherry.wcs.R
+import dev.sherry.wcs.dexkit.abc.IResolveDex
+import dev.sherry.wcs.dexkit.dsl.data
+import dev.sherry.wcs.dexkit.dsl.dexField
+import dev.sherry.wcs.dexkit.dsl.dexMethod
+import dev.sherry.wcs.features.core.FeatureCategoryIds
+import dev.sherry.wcs.features.core.SwitchFeature
+import org.luckypray.dexkit.DexKitBridge
+import org.luckypray.dexkit.result.FieldUsingType
+
+object RemoveTextStatusLengthLimit : SwitchFeature(), IResolveDex {
+
+    override val technicalId = "解除状态词长度限制"
+    override val nameRes = R.string.feature_remove_text_status_length_limit_name
+    override val categoryIds = listOf(FeatureCategoryIds.PROFILE)
+    override val descriptionRes = R.string.feature_remove_text_status_length_limit_description
+
+    private val methodStatusTextChanged by dexMethod {
+        searchPackages("com.tencent.mm.plugin.textstatus.ui")
+        matcher {
+            name = "afterTextChanged"
+            paramTypes("android.text.Editable")
+            returnType = "void"
+            usingEqStrings(
+                "MicroMsg.TextStatus.TextStatusDoWhatActivityV2",
+                "afterTextChanged inputCount:",
+            )
+        }
+    }
+    private val fieldStatusTextLengthLimit by dexField()
+
+    override fun resolveDex(dexKit: DexKitBridge) {
+        fieldStatusTextLengthLimit.setDescriptor(
+            methodStatusTextChanged.data.usingFields
+                .filter { it.usingType == FieldUsingType.Read }
+                .map { it.field }
+                .distinctBy { it.descriptor }
+                .single {
+                    it.className == STATUS_EDITOR_CLASS && it.typeName == "int"
+                }
+        )
+    }
+
+    override fun onEnable() {
+        val limitField = fieldStatusTextLengthLimit.field
+        limitField.declaringClass.reflekt().constructors().forEach { constructor ->
+            constructor.hookAfter {
+                limitField.setInt(thisObject!!, MAX_STATUS_TEXT_LENGTH)
+            }
+        }
+    }
+
+    private const val STATUS_EDITOR_CLASS =
+        "com.tencent.mm.plugin.textstatus.ui.TextStatusDoWhatActivityV2"
+    private const val MAX_STATUS_TEXT_LENGTH = 2000
+}

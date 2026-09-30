@@ -10,7 +10,7 @@
 //!
 //! JNI surface (Android only, hand-written exports mirroring
 //! `wekit-native/src/lib.rs`): `startServer`/`runServerProcess`/`stopServer`/
-//! `serverStatus` on `dev.ujhhgtg.wekit.agent.model.local.LlamaServerNative`.
+//! `serverStatus` on `dev.sherry.wcs.agent.model.local.LlamaServerNative`.
 //! The parent exports never panic: every failure maps to the JSON status string
 //! `{"state":"stopped|starting|running|failed","port":N,"pid":N,"error":"…"}`.
 

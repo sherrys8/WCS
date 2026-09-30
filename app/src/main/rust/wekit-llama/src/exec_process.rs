@@ -21,7 +21,7 @@ use crate::server::HttpServerConfig;
 
 pub const APP_PROCESS_PATH: &str = "/system/bin/app_process64";
 pub const APP_PROCESS_PARENT_DIR: &str = "/system/bin";
-pub const SERVER_MAIN_CLASS: &str = "dev.ujhhgtg.wekit.agent.model.local.LlamaServerProcess";
+pub const SERVER_MAIN_CLASS: &str = "dev.sherry.wcs.agent.model.local.LlamaServerProcess";
 
 #[derive(Clone, Debug)]
 pub struct ExecServerConfig {
@@ -950,7 +950,7 @@ mod tests {
                 "/system/bin",
                 "--application",
                 "--nice-name=com.tencent.mm:wekit_llama",
-                "dev.ujhhgtg.wekit.agent.model.local.LlamaServerProcess",
+                "dev.sherry.wcs.agent.model.local.LlamaServerProcess",
                 "1",
                 "47",
                 "/data/user/0/com.tencent.mm/files/libwekit_llama.so",

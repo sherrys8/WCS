@@ -1,4 +1,4 @@
-module dev.ujhhgtg.wekit/cloudflared-bridge
+module dev.sherry.wcs/cloudflared-bridge
 
 go 1.26
 

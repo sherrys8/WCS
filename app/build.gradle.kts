@@ -422,7 +422,7 @@ tasks.withType<Test>().configureEach {
     maxHeapSize = "4g"
     if (dexTestWorker.get()) {
         filter {
-            includeTestsMatching("dev.ujhhgtg.wekit.dextest.DexTestWorkerTest")
+            includeTestsMatching("dev.sherry.wcs.dextest.DexTestWorkerTest")
         }
         dexTestWorkerProperties.forEach { propertyName ->
             systemProperty(propertyName, providers.gradleProperty(propertyName).orNull.orEmpty())
@@ -430,7 +430,7 @@ tasks.withType<Test>().configureEach {
         outputs.upToDateWhen { false }
     } else {
         filter {
-            excludeTestsMatching("dev.ujhhgtg.wekit.dextest.DexTestWorkerTest")
+            excludeTestsMatching("dev.sherry.wcs.dextest.DexTestWorkerTest")
         }
     }
 }
