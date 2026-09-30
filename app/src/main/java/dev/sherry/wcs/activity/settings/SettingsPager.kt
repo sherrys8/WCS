@@ -63,7 +63,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
-import androidx.lifecycle.lifecycleScope
 import coil3.compose.AsyncImage
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Account_circle
@@ -132,13 +131,9 @@ import dev.sherry.wcs.ui.utils.theme.AppThemeMode
 import dev.sherry.wcs.ui.utils.theme.PageTransitionAnimation
 import dev.sherry.wcs.ui.utils.theme.SettingsUiEngine
 import dev.sherry.wcs.ui.utils.theme.ThemeSettings
-import dev.sherry.wcs.utils.AppUpdater
-import dev.sherry.wcs.utils.UpdateResult
-import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.showToastSuspend
 import dev.sherry.wcs.utils.formatEpoch
 import dev.sherry.wcs.utils.openInSystem
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -156,12 +151,8 @@ fun SettingsPager(onOpenLicense: () -> Unit) {
     val currentLocalizedContext = rememberUpdatedState(LocalWcSLocalizedContext.current)
 
     var showClearConfirm by remember { mutableStateOf(false) }
-    var updateInfo by remember { mutableStateOf<UpdateResult.UpdateAvailable?>(null) }
-    var updateError by remember { mutableStateOf<String?>(null) }
 
     ClearConfigDialog(show = showClearConfirm, onDismiss = { showClearConfirm = false })
-    UpdateAvailableDialog(info = updateInfo, onDismiss = { updateInfo = null }, context = context)
-    UpdateErrorDialog(message = updateError, onDismiss = { updateError = null })
 
     M3ListScaffold(title = stringResource(R.string.settings_title)) {
         // Account info card.
@@ -278,20 +269,6 @@ fun SettingsPager(onOpenLicense: () -> Unit) {
         // 更新
         item {
             SegmentedColumn(title = stringResource(R.string.settings_section_update)) {
-                item {
-                    PrefArrow(
-                        title = stringResource(R.string.settings_check_update_title),
-                        summary = stringResource(R.string.settings_check_update_summary),
-                        icon = MaterialSymbols.Outlined.Update,
-                        onClick = {
-                            checkForUpdate(
-                                context = { currentLocalizedContext.value },
-                                onAvailable = { updateInfo = it },
-                                onError = { updateError = it },
-                            )
-                        },
-                    )
-                }
                 item {
                     val actCtx = LocalComponentActivity.current
                     PrefArrow(
@@ -833,28 +810,6 @@ private fun SecuritySwitch(context: Context) {
     )
 }
 // ---------------------------------------------------------------------------
-//  Update checks
-// ---------------------------------------------------------------------------
-
-private fun checkForUpdate(
-    context: () -> Context,
-    onAvailable: (UpdateResult.UpdateAvailable) -> Unit,
-    onError: (String) -> Unit,
-) {
-    CoroutineScope(Dispatchers.Main).launch {
-        showToastSuspend(context().getString(R.string.update_checking))
-        when (val result = AppUpdater.checkForUpdate()) {
-            UpdateResult.UpToDate -> showToastSuspend(context().getString(R.string.update_up_to_date))
-            is UpdateResult.UpdateAvailable -> onAvailable(result)
-            is UpdateResult.Error -> {
-                WeLogger.e("AppUpdater", "failed to check for updates", result.cause)
-                onError(result.cause.message ?: context().getString(R.string.error_unknown))
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 //  Dialogs (Material 3 AlertDialog)
 // ---------------------------------------------------------------------------
 
@@ -875,62 +830,6 @@ private fun ClearConfigDialog(show: Boolean, onDismiss: () -> Unit) {
                 showToastSuspend(localizedContext.getString(R.string.config_clear_success))
             }
         },
-    )
-}
-
-@Composable
-private fun UpdateAvailableDialog(
-    info: UpdateResult.UpdateAvailable?,
-    onDismiss: () -> Unit,
-    context: ComponentActivity,
-) {
-    val currentLocalizedContext = rememberUpdatedState(LocalWcSLocalizedContext.current)
-    ConfirmDialog(
-        show = info != null,
-        title = stringResource(R.string.update_available_title),
-        message = if (info != null) {
-            stringResource(
-                R.string.update_available_message,
-                BuildConfig.VERSION_NAME,
-                info.info.versionName,
-            )
-        } else "",
-        confirmText = stringResource(R.string.dialog_confirm),
-        onDismiss = onDismiss,
-        onConfirm = {
-            val target = info ?: return@ConfirmDialog
-            onDismiss()
-            // The activity's scope, so closing settings mid-download cancels the download wait
-            // (and with it the BroadcastReceiver it keeps registered on this activity).
-            // This UI is proxied into WeChat's process: an escaping exception here would take
-            // WeChat down with it, so nothing may leave this coroutine.
-            context.lifecycleScope.launch(Dispatchers.Default) {
-                runCatching { AppUpdater.downloadAndInstall(context, target.info) }
-                    .onFailure { e ->
-                        if (e is CancellationException) throw e
-                        WeLogger.e("AppUpdater", "failed to download update", e)
-                        val localizedContext = currentLocalizedContext.value
-                        showToastSuspend(
-                            context,
-                            localizedContext.getString(
-                                R.string.update_download_failed,
-                                e.message ?: localizedContext.getString(R.string.error_unknown),
-                            ),
-                        )
-                    }
-            }
-        },
-    )
-}
-
-@Composable
-private fun UpdateErrorDialog(message: String?, onDismiss: () -> Unit) {
-    MessageDialog(
-        show = message != null,
-        title = stringResource(R.string.update_check_failed_title),
-        message = stringResource(R.string.update_error_message, message.orEmpty()),
-        dismissText = stringResource(R.string.dialog_close),
-        onDismiss = onDismiss,
     )
 }
 
@@ -955,26 +854,6 @@ private fun ConfirmDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(dismissText ?: stringResource(R.string.dialog_cancel)) }
-        },
-    )
-}
-
-/** Single-button (dismiss only) dialog. */
-@Composable
-private fun MessageDialog(
-    show: Boolean,
-    title: String,
-    message: String,
-    dismissText: String,
-    onDismiss: () -> Unit,
-) {
-    if (!show) return
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(message) },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(dismissText) }
         },
     )
 }

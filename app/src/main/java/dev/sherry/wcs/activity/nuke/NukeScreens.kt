@@ -95,7 +95,6 @@ import java.util.Locale
 sealed interface NukeDestination {
     data class Category(val id: String) : NukeDestination
     data object ModuleDebug : NukeDestination
-    data object Update : NukeDestination
     data object GeneralSettings : NukeDestination
     data object Appearance : NukeDestination
     data object About : NukeDestination
@@ -222,11 +221,6 @@ private fun NukeHomePage(
         )
     }
     val secondaryEntries = listOf(
-        NukeRootEntry(
-            stringResource(R.string.nuke_update_title),
-            imageVector = MaterialSymbols.Outlined.Update,
-            destination = NukeDestination.Update,
-        ),
         NukeRootEntry(
             stringResource(R.string.nuke_general_settings_title),
             imageVector = MaterialSymbols.Outlined.Settings,

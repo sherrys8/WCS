@@ -20,9 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,8 +37,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import androidx.lifecycle.lifecycleScope
-import coil3.compose.AsyncImage
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Auto_delete
 import com.composables.icons.materialsymbols.outlined.Block
@@ -56,7 +52,6 @@ import com.composables.icons.materialsymbols.outlined.Update
 import com.composables.icons.materialsymbols.outlined.Upload
 import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.entity.Library
-import dev.sherry.wcs.BuildConfig
 import dev.sherry.wcs.R
 import dev.sherry.wcs.activity.settings.LocalComponentActivity
 import dev.sherry.wcs.activity.settings.SettingsConfigActions
@@ -93,14 +88,9 @@ import dev.sherry.wcs.ui.content.nuke.NukeVectorCategoryIcon
 import dev.sherry.wcs.ui.content.nuke.nukeGroupedCardItem
 import dev.sherry.wcs.ui.utils.GitHubIcon
 import dev.sherry.wcs.ui.utils.TelegramIcon
-import dev.sherry.wcs.utils.AppUpdater
-import dev.sherry.wcs.utils.UpdateResult
 import dev.sherry.wcs.utils.WeLogger
-import dev.sherry.wcs.utils.formatEpoch
 import dev.sherry.wcs.utils.openInSystem
 import dev.sherry.wcs.utils.restartHost
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
 import java.text.Collator
 import java.util.Locale
 
@@ -119,7 +109,6 @@ fun NukeDestinationPage(
         )
 
         NukeDestination.ModuleDebug -> NukeModuleDebugPage(onBack)
-        NukeDestination.Update -> NukeUpdatePage(onBack)
         NukeDestination.GeneralSettings -> NukeGeneralSettingsPage(onBack)
         NukeDestination.Appearance -> NukeAppearancePage(onBack)
         NukeDestination.About -> NukeAboutPage(onBack, onOpenDestination)
@@ -415,123 +404,11 @@ private fun NukeBooleanPreference(
 }
 
 @Composable
-private fun NukeUpdatePage(onBack: (Offset) -> Unit) {
-    val activity = LocalComponentActivity.current
-    val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
-    val scope = rememberCoroutineScope()
-    var updateInfo by remember { mutableStateOf<UpdateResult.UpdateAvailable?>(null) }
-    var updateError by remember { mutableStateOf<String?>(null) }
-    var checking by remember { mutableStateOf(false) }
-    var resultSummaryRes by remember { mutableIntStateOf(R.string.nuke_update_not_checked) }
-    var availableVersion by remember { mutableStateOf<String?>(null) }
-
-    fun checkForUpdate() {
-        if (checking) return
-        scope.launch {
-            checking = true
-            when (val result = AppUpdater.checkForUpdate()) {
-                UpdateResult.UpToDate -> {
-                    availableVersion = null
-                    resultSummaryRes = R.string.update_up_to_date
-                }
-                is UpdateResult.UpdateAvailable -> {
-                    availableVersion = result.info.versionName
-                    resultSummaryRes = R.string.nuke_update_available_summary
-                    updateInfo = result
-                }
-                is UpdateResult.Error -> {
-                    WeLogger.e("AppUpdater", "failed to check for updates", result.cause)
-                    updateError = result.cause.message ?: localizedContext.getString(R.string.error_unknown)
-                    availableVersion = null
-                    resultSummaryRes = R.string.update_check_failed_title
-                }
-            }
-            checking = false
-        }
-    }
-
-    NukePageScaffold(title = stringResource(R.string.nuke_update_title), onBack = onBack) {
-        item(key = "installed") {
-            NukeSettingGroup(title = stringResource(R.string.nuke_update_installed)) {
-                NukePreferenceRow(
-                    title = BuildConfig.VERSION_NAME,
-                    description = stringResource(
-                        R.string.nuke_installed_version_details,
-                        BuildConfig.VERSION_CODE,
-                        formatEpoch(BuildConfig.BUILD_TIMESTAMP, true),
-                    ),
-                    leading = { NukeVectorCategoryIcon(MaterialSymbols.Outlined.Label) },
-                )
-            }
-        }
-        item(key = "update") {
-            NukeSettingGroup(title = stringResource(R.string.settings_section_update)) {
-                NukePreferenceRow(
-                    title = when {
-                        checking -> stringResource(R.string.nuke_update_checking)
-                        availableVersion != null -> stringResource(resultSummaryRes, availableVersion!!)
-                        else -> stringResource(resultSummaryRes)
-                    },
-                    description = stringResource(R.string.nuke_update_check_summary),
-                    leading = { NukeVectorCategoryIcon(MaterialSymbols.Outlined.Update) },
-                )
-                NukeDivider()
-                NukePreferenceRow(
-                    title = stringResource(R.string.nuke_update_check_again),
-                    leading = { NukeVectorCategoryIcon(MaterialSymbols.Outlined.Update) },
-                    trailing = { NukeCountAndChevron(text = null) },
-                    enabled = !checking,
-                    onClick = { checkForUpdate() },
-                )
-            }
-        }
-    }
-    updateInfo?.let { result ->
-        NukeConfirmDialog(
-            title = stringResource(R.string.update_available_title),
-            message = stringResource(
-                R.string.update_available_message,
-                BuildConfig.VERSION_NAME,
-                result.info.versionName,
-            ),
-            confirmText = stringResource(R.string.nuke_download_install),
-            onDismiss = { updateInfo = null },
-            onConfirm = {
-                updateInfo = null
-                activity.lifecycleScope.launch {
-                    runCatching { AppUpdater.downloadAndInstall(activity, result.info) }
-                        .onFailure { error ->
-                            if (error is CancellationException) throw error
-                            WeLogger.e("AppUpdater", "failed to download update", error)
-                            updateError = localizedContext.getString(
-                                R.string.update_download_failed,
-                                error.message ?: localizedContext.getString(R.string.error_unknown),
-                            )
-                        }
-                }
-            },
-        )
-    }
-    updateError?.let { message ->
-        NukeMessageDialog(
-            title = stringResource(R.string.update_check_failed_title),
-            message = stringResource(R.string.update_error_message, message),
-            onDismiss = { updateError = null },
-        )
-    }
-}
-
-@Composable
 private fun NukeAboutPage(
     onBack: (Offset) -> Unit,
     onOpenDestination: (NukeDestination, Offset) -> Unit,
 ) {
     val context = LocalContext.current
-    val contributors by produceState(
-        initialValue = NukeGitHubContributors.fallbackContributors,
-    ) {
-        value = NukeGitHubContributors.fetchOrFallback()
-    }
     NukePageScaffold(title = stringResource(R.string.nuke_about_title), onBack = onBack) {
         item(key = "avatar") { NukeAboutIcon() }
         item(key = "project") {
@@ -554,19 +431,6 @@ private fun NukeAboutPage(
                         fontSize = 13,
                         lineHeight = 19,
                     )
-                }
-            }
-        }
-        item(key = "developers") {
-            NukeSettingGroup(title = stringResource(R.string.nuke_about_developers)) {
-                contributors.forEachIndexed { index, contributor ->
-                    NukeDeveloperRow(
-                        contributor = contributor,
-                        onClick = {
-                            contributor.profileUrl.toUri().openInSystem(context, true)
-                        },
-                    )
-                    if (index < contributors.lastIndex) NukeDivider()
                 }
             }
         }
@@ -601,46 +465,6 @@ private fun NukeAboutPage(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun NukeDeveloperRow(
-    contributor: NukeGitHubContributor,
-    onClick: () -> Unit,
-) {
-    NukePreferenceRow(
-        title = contributor.login,
-        description = contributor.contributionCount?.let {
-            stringResource(R.string.nuke_github_contributions, it)
-        } ?: stringResource(R.string.nuke_wcs_developer),
-        leading = { NukeDeveloperAvatar(contributor) },
-        trailing = { NukeCountAndChevron(text = null) },
-        onClick = { onClick() },
-    )
-}
-
-@Composable
-private fun NukeDeveloperAvatar(contributor: NukeGitHubContributor) {
-    Box(
-        Modifier
-            .size(34.dp)
-            .clip(NukeSquircleShape(11.dp))
-            .background(NukeTheme.colors.accent.copy(alpha = 0.12f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        // Keep a Nuke-native placeholder visible while Coil loads or if the avatar fails.
-        NukeGlyph(
-            kind = NukeGlyphKind.Person,
-            color = NukeTheme.colors.accent,
-            modifier = Modifier.size(18.dp),
-        )
-        AsyncImage(
-            model = contributor.avatarUrl,
-            contentDescription = stringResource(R.string.nuke_github_avatar, contributor.login),
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-        )
     }
 }
 
