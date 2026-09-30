@@ -162,7 +162,7 @@ android {
 
     @Suppress("UnstableApiUsage")
     androidResources {
-        localeFilters += setOf("zh-rCN", "zh-rTW")
+        localeFilters += setOf("zh-rCN")
         additionalParameters += listOf("--allow-reserved-package-id", "--package-id", "0x69")
     }
 

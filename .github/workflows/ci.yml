@@ -14,6 +14,7 @@ on:
       - '.editorconfig'
       - '.gitignore'
       - '.idea/**'
+      - '.github/**'
   pull_request:
     branches:
       - master
@@ -26,6 +27,7 @@ on:
       - '.editorconfig'
       - '.gitignore'
       - '.idea/**'
+      - '.github/**'
   workflow_dispatch:
     inputs:
       publish_extensions:
@@ -382,44 +384,12 @@ jobs:
           done < dist/dex-test-release/assets.txt
           gh release upload Dex-Test --repo sherrys8/WCS "${upload[@]}" --clobber
 
-  extensions-changes:
-    runs-on: ubuntu-latest
-    if: github.repository == 'sherrys8/WCS' && github.event_name == 'push'
-    outputs:
-      changed: ${{ steps.filter.outputs.extensions }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Detect extension pack input changes
-        uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            extensions:
-              - 'extension-packs/**'
-              - 'extensions/**'
-              - 'libs/python-runtime-api/**'
-              - 'app/src/main/go/**'
-              - 'app/src/main/rust/**'
-              - 'patches/proot/**'
-              - 'third_party/proot-static'
-              - 'xtask/**'
-              - 'buildSrc/**'
-              - 'gradle/**'
-              - 'settings.gradle.kts'
-              - 'app/build.gradle.kts'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - '.github/workflows/ci.yml'
-
   build-extensions:
-    needs: extensions-changes
     runs-on: ubuntu-latest
     # This dedicated publishing job is the only path that downloads the Arch rootfs.
-    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.publish_extensions) || needs.extensions-changes.outputs.changed == 'true' || needs.extensions-changes.result == 'failure') }}
+    # 只在显式请求时构建并发布扩展包：这条路会下载约 792 MB 的 Arch rootfs，
+    # 不应被普通 push 触发。需要发新包时 `gh workflow run ci.yml -f publish_extensions=true`。
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_extensions }}
     concurrency:
       group: extensions-release
       cancel-in-progress: false

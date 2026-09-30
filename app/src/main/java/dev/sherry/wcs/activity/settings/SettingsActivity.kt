@@ -201,8 +201,6 @@ sealed interface SettingsRoute : NavKey {
     data object Main : SettingsRoute
     @Serializable
     data class Category(val id: String) : SettingsRoute
-    @Serializable
-    data object License : SettingsRoute
 }
 
 @Composable
@@ -225,14 +223,10 @@ private fun SettingsRoot(onFinish: () -> Unit) {
                 MainPagerScreen(
                     pagerState = pagerState,
                     onOpenCategory = { navigator.push(SettingsRoute.Category(it)) },
-                    onOpenLicense = { navigator.push(SettingsRoute.License) },
                 )
             }
             entry<SettingsRoute.Category>(swipeDismiss = NavSwipeDirection.LeftToRight) { key ->
                 CategoryDetailScreen(categoryId = key.id, onBack = { navigator.pop() })
-            }
-            entry<SettingsRoute.License>(swipeDismiss = NavSwipeDirection.LeftToRight) {
-                LicenseScreen(onBack = { navigator.pop() })
             }
         }
     }
@@ -247,7 +241,6 @@ private fun SettingsRoot(onFinish: () -> Unit) {
 private fun MainPagerScreen(
     pagerState: PagerState,
     onOpenCategory: (String) -> Unit,
-    onOpenLicense: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val backdrop = rememberLayerBackdrop()
@@ -272,7 +265,7 @@ private fun MainPagerScreen(
                     0 -> HomePager()
                     1 -> FeaturesPager(onOpenCategory = onOpenCategory)
                     2 -> LogsPager()
-                    else -> SettingsPager(onOpenLicense = onOpenLicense)
+                    else -> SettingsPager()
                 }
             }
         }

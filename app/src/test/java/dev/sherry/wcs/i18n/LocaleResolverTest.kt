@@ -23,10 +23,6 @@ class LocaleResolverTest {
             LocaleResolver.resolve(LanguageSelection.SIMPLIFIED_CHINESE, emptyList()),
         )
         assertEquals(
-            SupportedLocale.TRADITIONAL_CHINESE,
-            LocaleResolver.resolve(LanguageSelection.TRADITIONAL_CHINESE, system),
-        )
-        assertEquals(
             SupportedLocale.MEOW_CHINESE,
             LocaleResolver.resolve(LanguageSelection.MEOW_CHINESE, emptyList()),
         )
@@ -35,7 +31,7 @@ class LocaleResolverTest {
     @Test
     fun followSystemUsesTheFirstSupportedLocale() {
         assertEquals(
-            SupportedLocale.TRADITIONAL_CHINESE,
+            SupportedLocale.SIMPLIFIED_CHINESE,
             LocaleResolver.resolve(
                 LanguageSelection.SYSTEM,
                 listOf(Locale.JAPAN, Locale.forLanguageTag("zh-HK"), Locale.ENGLISH),
@@ -51,20 +47,12 @@ class LocaleResolverTest {
     }
 
     @Test
-    fun chineseScriptAndRegionMappingIsExplicit() {
-        val simplified = listOf("zh-Hans", "zh-CN", "zh-SG", "zh-MY", "zh")
-        val traditional = listOf("zh-Hant", "zh-TW", "zh-HK", "zh-MO")
+    fun allChineseSystemLocalesResolveToSimplifiedChinese() {
+        val tags = listOf("zh-Hans", "zh-CN", "zh-SG", "zh-MY", "zh", "zh-Hant", "zh-TW", "zh-HK", "zh-MO")
 
-        simplified.forEach { tag ->
+        tags.forEach { tag ->
             assertEquals(
                 SupportedLocale.SIMPLIFIED_CHINESE,
-                LocaleResolver.resolve(LanguageSelection.SYSTEM, listOf(Locale.forLanguageTag(tag))),
-                tag,
-            )
-        }
-        traditional.forEach { tag ->
-            assertEquals(
-                SupportedLocale.TRADITIONAL_CHINESE,
                 LocaleResolver.resolve(LanguageSelection.SYSTEM, listOf(Locale.forLanguageTag(tag))),
                 tag,
             )

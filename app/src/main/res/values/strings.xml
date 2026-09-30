@@ -12,15 +12,12 @@
     <string name="language_english" translatable="false">English</string>
     <string name="language_simplified_chinese" translatable="false">简体中文</string>
     <string name="language_meow_chinese" translatable="false">喵体中文</string>
-    <string name="language_traditional_chinese" translatable="false">繁體中文</string>
 
     <!-- Shared module UI -->
     <string name="dialog_cancel">Cancel</string>
     <string name="dialog_confirm">Confirm</string>
     <string name="dialog_close">Close</string>
     <string name="accessibility_overflow_menu">More options</string>
-    <string name="brand_github" translatable="false">GitHub</string>
-    <string name="brand_telegram" translatable="false">Telegram</string>
     <string name="module_app_sticker_import_invalid_caller">This action can only be started from the WcS panel inside WeChat.</string>
     <string name="manager_launch_opening_title">Opening framework manager…</string>
     <string name="manager_launch_failed_title">Unable to open manager</string>
@@ -357,10 +354,6 @@
     <string name="settings_section_about">About</string>
     <string name="settings_version_title">Version</string>
     <string name="settings_build_commit_time_title">Build commit time</string>
-    <string name="settings_donate_title">Donate</string>
-    <string name="settings_donate_summary">Support project development (the module is completely free and open source; donations grant no privileges)</string>
-    <string name="settings_open_source_licenses_title">Open-source licenses</string>
-    <string name="settings_open_source_licenses_summary">Licenses of the open-source libraries used by this project</string>
     <string name="settings_ui_engine_title">UI component engine</string>
     <string name="settings_theme_mode_title">Theme mode</string>
     <string name="theme_mode_system">Follow system</string>
@@ -396,13 +389,6 @@
     <string name="clear_config_dialog_message">Clear all module configuration? This action cannot be undone.</string>
     <string name="config_clearing">Clearing…</string>
     <string name="config_clear_success">Cleared successfully!</string>
-    <string name="licenses_title">Open-source libraries</string>
-    <string name="licenses_search_hint">Search libraries</string>
-    <string name="licenses_visit_home_page">Visit home page</string>
-    <string name="licenses_no_license_text">No license text available</string>
-    <string name="licenses_count">%1$d libraries</string>
-    <string name="licenses_filtered_count">%1$d/%2$d libraries</string>
-    <string name="licenses_no_results">No results for “%1$s”</string>
     <string name="nuke_module_debug_title">Module settings and debugging</string>
     <string name="nuke_general_settings_title">General settings</string>
     <string name="nuke_appearance_title">Appearance</string>
@@ -465,10 +451,6 @@
     <string name="nuke_about_project">Project</string>
     <string name="nuke_about_description_one">WcS is a free and open-source Xposed module.</string>
     <string name="nuke_about_description_two">It provides optional feature enhancements and interface improvements for WeChat.</string>
-    <string name="nuke_about_links">Links</string>
-    <string name="licenses_unknown_author">Unknown author</string>
-    <string name="licenses_version">Version %1$s</string>
-    <string name="licenses_license_names">Licenses: %1$s</string>
     <string name="nuke_features_heading" translatable="false">FEATURES</string>
 
     <!-- Feature categories -->
@@ -964,8 +946,6 @@
     <string name="feature_remove_comment_ads_description">Hide advertising cards in the comment area of the Channels</string>
     <string name="feature_auto_approve_device_login_name">Automatically approve device logins</string>
     <string name="feature_auto_approve_device_login_description">Automatically check options and click buttons when other devices request login</string>
-    <string name="feature_auto_clean_cache_name">Clean cache</string>
-    <string name="feature_auto_clean_cache_description">Automatically or manually clear WeChat’s cache</string>
     <string name="feature_custom_dpi_name">Custom DPI</string>
     <string name="feature_custom_dpi_description">Customize WeChat screen density</string>
     <string name="feature_disable_high_brightness_name">Disable forced high brightness</string>
@@ -3792,8 +3772,6 @@
     <string name="system_auto_approve_auto_login_summary">Automatically approve login requests from other devices</string>
     <string name="system_auto_approve_sync">Auto-approve sync</string>
     <string name="system_auto_approve_sync_summary">Automatically approve message-history sync requests</string>
-    <string name="system_auto_clean_complete">Cleanup complete: %1$s%2$s</string>
-    <string name="system_auto_clean_next">\nNext cleanup: %1$s</string>
     <string name="system_custom_dpi_width">Display width (dp)</string>
     <string name="system_failure">Failed</string>
     <string name="system_fake_location_launch_failed">Failed to open location picker: %1$s</string>

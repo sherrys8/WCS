@@ -61,9 +61,9 @@ class ReadReceiptRenderingTest {
 
     @Test
     fun `uses retained native text when rerendering after locale changes`() {
-        val renderedInTraditionalChinese =
+        val renderedWithRetainedNativeText =
             renderReadReceiptText("12:00", "已讀 2 人", enhancementActive = false)
-        val nativeText = readReceiptNativeText(renderedInTraditionalChinese, "12:00")
+        val nativeText = readReceiptNativeText(renderedWithRetainedNativeText, "12:00")
 
         assertEquals(
             "12:00 | Read by 2",

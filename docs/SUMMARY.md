@@ -105,7 +105,6 @@
 
 * [API 服务器](features/system/api-server.md)
 * [自动批准设备登录](features/system/auto-approve-device-login.md)
-* [清理缓存垃圾](features/system/auto-clean-cache.md)
 * [禁止屏幕高亮度](features/system/disable-high-brightness.md)
 * [禁用微信热更新](features/system/disable-host-hot-updates.md)
 * [禁用存储空间不足检测](features/system/disable-low-available-storage-detection.md)

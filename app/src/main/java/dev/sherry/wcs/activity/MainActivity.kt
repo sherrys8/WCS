@@ -27,7 +27,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -44,13 +43,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
-import androidx.core.net.toUri
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Open_in_new
 import com.composables.icons.materialsymbols.outlined.Settings
@@ -70,8 +66,6 @@ import dev.sherry.wcs.ui.content.Button
 import dev.sherry.wcs.ui.content.DefaultColumn
 import dev.sherry.wcs.ui.content.IconButton
 import dev.sherry.wcs.ui.content.TextButton
-import dev.sherry.wcs.ui.utils.GitHubIcon
-import dev.sherry.wcs.ui.utils.TelegramIcon
 import dev.sherry.wcs.ui.utils.theme.ModuleAppTheme
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.androidUserId
@@ -80,7 +74,6 @@ import dev.sherry.wcs.utils.android.setEnabled
 import dev.sherry.wcs.utils.android.showToast
 import dev.sherry.wcs.utils.formatEpoch
 import dev.sherry.wcs.utils.hook_status.HookStatus
-import dev.sherry.wcs.utils.openInSystem
 import dev.sherry.wcs.utils.registerBshSnapshotDecompileLaunchers
 import dev.sherry.wcs.utils.serialization.DefaultJson
 
@@ -166,12 +159,7 @@ class MainActivity : ComponentActivity() {
         Shell.getShell()
         setContent {
             ModuleAppTheme {
-                AppContent(
-                    selectFileLauncher,
-                    onUrlClick = { url ->
-                        url.toUri().openInSystem(this, true)
-                    }
-                )
+                AppContent(selectFileLauncher)
             }
         }
     }
@@ -309,7 +297,7 @@ class MainActivity : ComponentActivity() {
     )
 
     @Composable
-    private fun AppContent(resultLauncher: ActivityResultLauncher<String>, onUrlClick: (String) -> Unit) {
+    private fun AppContent(resultLauncher: ActivityResultLauncher<String>) {
         val localizedContext by rememberUpdatedState(LocalWcSLocalizedContext.current)
         val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
@@ -798,26 +786,6 @@ class MainActivity : ComponentActivity() {
                             }) { Text(stringResource(R.string.dialog_confirm)) }
                         })
                 }
-
-                HorizontalDivider(
-                    modifier = Modifier
-                        .padding(vertical = 4.dp)
-                        .alpha(0.1f),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                LinkCard(
-                    icon = GitHubIcon,
-                    title = stringResource(R.string.brand_github),
-                    subtitle = "sherrys8/WCS",
-                    onClick = { onUrlClick("https://github.com/sherrys8/WCS") }
-                )
-                LinkCard(
-                    icon = TelegramIcon,
-                    title = stringResource(R.string.brand_telegram),
-                    subtitle = "https://t.me/+7j5dJ6g16B43OWVl",
-                    onClick = { onUrlClick("https://t.me/+7j5dJ6g16B43OWVl") }
-                )
             }
 
             if (showAboutDialog) {
@@ -859,36 +827,4 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @Composable
-    private fun LinkCard(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
-        ElevatedCard(
-            onClick = onClick,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                Column {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
 }

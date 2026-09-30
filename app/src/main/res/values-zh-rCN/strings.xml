@@ -327,10 +327,6 @@
     <string name="settings_section_about">关于</string>
     <string name="settings_version_title">版本</string>
     <string name="settings_build_commit_time_title">构建提交时间</string>
-    <string name="settings_donate_title">捐赠</string>
-    <string name="settings_donate_summary">支持项目开发（模块完全开源免费，捐赠无特权）</string>
-    <string name="settings_open_source_licenses_title">开放源代码许可</string>
-    <string name="settings_open_source_licenses_summary">本项目使用的开放源代码库许可</string>
     <string name="settings_ui_engine_title">UI 组件引擎</string>
     <string name="settings_theme_mode_title">主题模式</string>
     <string name="theme_mode_system">跟随系统</string>
@@ -364,13 +360,6 @@
     <string name="clear_config_dialog_message">确定清除全部模块配置吗？此操作不可逆。</string>
     <string name="config_clearing">正在清除…</string>
     <string name="config_clear_success">清除成功!</string>
-    <string name="licenses_title">开放源代码库</string>
-    <string name="licenses_search_hint">搜索库</string>
-    <string name="licenses_visit_home_page">访问主页</string>
-    <string name="licenses_no_license_text">暂无许可证文本</string>
-    <string name="licenses_count">%1$d 个库</string>
-    <string name="licenses_filtered_count">%1$d/%2$d 个库</string>
-    <string name="licenses_no_results">找不到「%1$s」的结果</string>
     <string name="nuke_module_debug_title">模块设置及调试</string>
     <string name="nuke_general_settings_title">通用设置</string>
     <string name="nuke_appearance_title">界面设置</string>
@@ -431,10 +420,6 @@
     <string name="nuke_about_project">项目</string>
     <string name="nuke_about_description_one">WcS 是一个免费的开源 Xposed 模块。</string>
     <string name="nuke_about_description_two">它为微信提供可选的功能增强与界面优化。</string>
-    <string name="nuke_about_links">链接</string>
-    <string name="licenses_unknown_author">未知作者</string>
-    <string name="licenses_version">版本 %1$s</string>
-    <string name="licenses_license_names">许可：%1$s</string>
     <!-- Feature categories -->
     <string name="feature_category_chat_title">聊天</string>
     <string name="feature_category_contacts_groups_title">联系人与群组</string>
@@ -927,8 +912,6 @@
     <string name="feature_remove_comment_ads_description">隐藏视频号评论区中的广告卡片</string>
     <string name="feature_auto_approve_device_login_name">自动批准设备登录</string>
     <string name="feature_auto_approve_device_login_description">其他设备请求登录时自动勾选选项并点击按钮</string>
-    <string name="feature_auto_clean_cache_name">清理缓存垃圾</string>
-    <string name="feature_auto_clean_cache_description">自动或手动清理微信的缓存</string>
     <string name="feature_custom_dpi_name">DPI 修改</string>
     <string name="feature_custom_dpi_description">自定义微信屏幕密度</string>
     <string name="feature_disable_high_brightness_name">禁止屏幕高亮度</string>
@@ -3827,8 +3810,6 @@
     <string name="system_auto_approve_auto_login_summary">自动批准其他设备的登录请求</string>
     <string name="system_auto_approve_sync">自动批准同步</string>
     <string name="system_auto_approve_sync_summary">自动批准聊天记录同步请求</string>
-    <string name="system_auto_clean_complete">清理完成：%1$s%2$s</string>
-    <string name="system_auto_clean_next">\n下次清理：%1$s</string>
     <string name="system_custom_dpi_width">显示宽度（dp）</string>
     <string name="system_failure">失败</string>
     <string name="system_fake_location_launch_failed">打开位置选择器失败：%1$s</string>

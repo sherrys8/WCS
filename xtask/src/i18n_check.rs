@@ -193,10 +193,7 @@ pub fn check_repository(root: &Path) -> Result<()> {
         }
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if (name == "values-zh" || name.starts_with("values-zh-"))
-            && name != "values-zh-rCN"
-            && name != "values-zh-rTW"
-        {
+        if (name == "values-zh" || name.starts_with("values-zh-")) && name != "values-zh-rCN" {
             errors.push(format!("unexpected Chinese resource directory: {name}"));
         }
     }
@@ -221,10 +218,7 @@ pub fn check_repository(root: &Path) -> Result<()> {
             None
         }
     };
-    for (locale, relative_path) in [
-        ("zh-rCN", "values-zh-rCN/strings.xml"),
-        ("zh-rTW", "values-zh-rTW/strings.xml"),
-    ] {
+    for (locale, relative_path) in [("zh-rCN", "values-zh-rCN/strings.xml")] {
         let target_path = res.join(relative_path);
         let target_xml = match read_catalog(&target_path) {
             Ok(target) => Some(target),
@@ -459,11 +453,11 @@ mod tests {
             r#"<resources><string name="styled"><b>Hello</b> <i>%1$s</i></string></resources>"#;
         let compatible =
             r#"<resources><string name="styled"><b>你好</b> <i>%1$s</i></string></resources>"#;
-        validate_pair(source, compatible, "zh-rTW").unwrap();
+        validate_pair(source, compatible, "zh-rCN").unwrap();
 
         let reordered =
             r#"<resources><string name="styled"><i>%1$s</i> <b>你好</b></string></resources>"#;
-        let error = validate_pair(source, reordered, "zh-rTW")
+        let error = validate_pair(source, reordered, "zh-rCN")
             .unwrap_err()
             .to_string();
         assert!(error.contains("markup mismatch: styled"), "{error}");
@@ -614,31 +608,27 @@ mod tests {
         let root = temporary_root("aggregate-errors");
         write_catalog(&root, "values", source);
         write_catalog(&root, "values-zh-rCN", target);
-        write_catalog(
-            &root,
-            "values-zh-rTW",
-            r#"<resources><string name="hello">你好</resources>"#,
-        );
+        write_catalog(&root, "values-zh-rTW", r#"<resources/>"#);
         let error = check_repository(&root).unwrap_err().to_string();
         assert!(error.contains("values-zh-rCN/strings.xml"), "{error}");
         assert!(error.contains("zh-rCN"), "{error}");
         assert!(error.contains("target-only resource: extra"), "{error}");
-        assert!(error.contains("values-zh-rTW/strings.xml"), "{error}");
-        assert!(error.contains("zh-rTW"), "{error}");
-        assert!(error.contains("malformed XML"), "{error}");
+        assert!(
+            error.contains("unexpected Chinese resource directory: values-zh-rTW"),
+            "{error}"
+        );
 
-        write_catalog(&root, "values-zh-rCN", r#"<resources/>"#);
         write_catalog(
             &root,
-            "values-zh-rTW",
+            "values-zh-rCN",
             r#"<resources>
                 <string name="hello">你好</string>
                 <string name="hello">嗨</string>
             </resources>"#,
         );
         let error = check_repository(&root).unwrap_err().to_string();
-        assert!(error.contains("values-zh-rTW/strings.xml"), "{error}");
-        assert!(error.contains("zh-rTW"), "{error}");
+        assert!(error.contains("values-zh-rCN/strings.xml"), "{error}");
+        assert!(error.contains("zh-rCN"), "{error}");
         assert!(error.contains("duplicate resource: hello"), "{error}");
         fs::remove_dir_all(root).unwrap();
     }
@@ -656,7 +646,6 @@ mod tests {
             "values-zh-rCN",
             r#"<resources><string name="hello">你好</string></resources>"#,
         );
-        write_catalog(&root, "values-zh-rTW", r#"<resources/>"#);
         check_repository(&root).unwrap();
 
         write_catalog(&root, "values-zh-rHK", r#"<resources/>"#);
@@ -677,7 +666,6 @@ mod tests {
             r#"<resources><string name="hello">Hello</string></resources>"#,
         );
         write_catalog(&root, "values-zh-rCN", r#"<resources/>"#);
-        write_catalog(&root, "values-zh-rTW", r#"<resources/>"#);
         write_catalog(&root, "values-zh", r#"<resources/>"#);
         let error = check_repository(&root).unwrap_err().to_string();
         assert!(
@@ -696,14 +684,12 @@ mod tests {
             r#"<resources><string name="hello">Hello</resources>"#,
         );
         write_catalog(&root, "values-zh-rCN", r#"<resources/>"#);
-        write_catalog(&root, "values-zh-rTW", r#"<resources/>"#);
 
         let error = check_repository(&root).unwrap_err().to_string();
         assert!(error.contains("values/strings.xml"), "{error}");
         assert!(error.contains("English source"), "{error}");
         assert_eq!(error.matches("English source").count(), 1, "{error}");
         assert!(!error.contains("values-zh-rCN/strings.xml"), "{error}");
-        assert!(!error.contains("values-zh-rTW/strings.xml"), "{error}");
         fs::remove_dir_all(root).unwrap();
     }
 

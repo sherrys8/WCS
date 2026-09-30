@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,7 +17,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -31,12 +29,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Auto_delete
 import com.composables.icons.materialsymbols.outlined.Block
@@ -44,14 +39,9 @@ import com.composables.icons.materialsymbols.outlined.Build_circle
 import com.composables.icons.materialsymbols.outlined.Delete_forever
 import com.composables.icons.materialsymbols.outlined.Download
 import com.composables.icons.materialsymbols.outlined.Frame_bug
-import com.composables.icons.materialsymbols.outlined.Label
-import com.composables.icons.materialsymbols.outlined.License
 import com.composables.icons.materialsymbols.outlined.Notifications
 import com.composables.icons.materialsymbols.outlined.Rule_settings
-import com.composables.icons.materialsymbols.outlined.Update
 import com.composables.icons.materialsymbols.outlined.Upload
-import com.mikepenz.aboutlibraries.Libs
-import com.mikepenz.aboutlibraries.entity.Library
 import dev.sherry.wcs.R
 import dev.sherry.wcs.activity.settings.LocalComponentActivity
 import dev.sherry.wcs.activity.settings.SettingsConfigActions
@@ -71,25 +61,18 @@ import dev.sherry.wcs.ui.content.nuke.NukeCategoryIcon
 import dev.sherry.wcs.ui.content.nuke.NukeCountAndChevron
 import dev.sherry.wcs.ui.content.nuke.NukeDialogSurface
 import dev.sherry.wcs.ui.content.nuke.NukeDivider
-import dev.sherry.wcs.ui.content.nuke.NukeGlyph
 import dev.sherry.wcs.ui.content.nuke.NukeGlyphKind
 import dev.sherry.wcs.ui.content.nuke.NukePageScaffold
 import dev.sherry.wcs.ui.content.nuke.NukePreferenceRow
-import dev.sherry.wcs.ui.content.nuke.NukeSearchField
 import dev.sherry.wcs.ui.content.nuke.NukeSelectPreference
 import dev.sherry.wcs.ui.content.nuke.NukeSettingGroup
 import dev.sherry.wcs.ui.content.nuke.NukeSettingGroupTitle
-import dev.sherry.wcs.ui.content.nuke.NukeSquircleShape
 import dev.sherry.wcs.ui.content.nuke.NukeStatusPill
 import dev.sherry.wcs.ui.content.nuke.NukeSwitch
 import dev.sherry.wcs.ui.content.nuke.NukeText
 import dev.sherry.wcs.ui.content.nuke.NukeTheme
 import dev.sherry.wcs.ui.content.nuke.NukeVectorCategoryIcon
 import dev.sherry.wcs.ui.content.nuke.nukeGroupedCardItem
-import dev.sherry.wcs.ui.utils.GitHubIcon
-import dev.sherry.wcs.ui.utils.TelegramIcon
-import dev.sherry.wcs.utils.WeLogger
-import dev.sherry.wcs.utils.openInSystem
 import dev.sherry.wcs.utils.restartHost
 import java.text.Collator
 import java.util.Locale
@@ -112,7 +95,6 @@ fun NukeDestinationPage(
         NukeDestination.GeneralSettings -> NukeGeneralSettingsPage(onBack)
         NukeDestination.Appearance -> NukeAppearancePage(onBack)
         NukeDestination.About -> NukeAboutPage(onBack, onOpenDestination)
-        NukeDestination.Licenses -> NukeLicensesPage(onBack)
     }
 }
 
@@ -251,7 +233,6 @@ private fun NukeGeneralSettingsPage(onBack: (Offset) -> Unit) {
                 LanguageSelection.ENGLISH to stringResource(R.string.language_english),
                 LanguageSelection.SIMPLIFIED_CHINESE to stringResource(R.string.language_simplified_chinese),
                 LanguageSelection.MEOW_CHINESE to stringResource(R.string.language_meow_chinese),
-                LanguageSelection.TRADITIONAL_CHINESE to stringResource(R.string.language_traditional_chinese),
             )
             val languageSummary = if (selectedLanguage == LanguageSelection.SYSTEM) {
                 stringResource(
@@ -434,37 +415,6 @@ private fun NukeAboutPage(
                 }
             }
         }
-        item(key = "links") {
-            NukeSettingGroup(title = stringResource(R.string.nuke_about_links)) {
-                NukePreferenceRow(
-                    title = stringResource(R.string.brand_github),
-                    description = "sherrys8/WCS",
-                    leading = { NukeVectorCategoryIcon(GitHubIcon) },
-                    trailing = { NukeCountAndChevron(text = null) },
-                    onClick = {
-                        "https://github.com/sherrys8/WCS".toUri().openInSystem(context, true)
-                    },
-                )
-                NukeDivider()
-                NukePreferenceRow(
-                    title = stringResource(R.string.brand_telegram),
-                    description = "https://t.me/+7j5dJ6g16B43OWVl",
-                    leading = { NukeVectorCategoryIcon(TelegramIcon) },
-                    trailing = { NukeCountAndChevron(text = null) },
-                    onClick = {
-                        "https://t.me/+7j5dJ6g16B43OWVl".toUri().openInSystem(context, true)
-                    },
-                )
-                NukeDivider()
-                NukePreferenceRow(
-                    title = stringResource(R.string.settings_open_source_licenses_title),
-                    description = stringResource(R.string.settings_open_source_licenses_summary),
-                    leading = { NukeVectorCategoryIcon(MaterialSymbols.Outlined.License) },
-                    trailing = { NukeCountAndChevron(text = null) },
-                    onClick = { origin -> onOpenDestination(NukeDestination.Licenses, origin) },
-                )
-            }
-        }
     }
 }
 
@@ -495,126 +445,10 @@ private fun NukeAboutIcon() {
     }
 }
 
-@Composable
-private fun NukeLicensesPage(onBack: (Offset) -> Unit) {
-    val resources = LocalResources.current
-    val libraries = remember(resources) {
-        resources.openRawResource(R.raw.aboutlibraries)
-            .bufferedReader()
-            .use { Libs.Builder().withJson(it.readText()).build().libraries }
-            .sortedWith(compareBy(::nukeLibraryAuthor, Library::name))
-    }
-    var query by remember { mutableStateOf("") }
-    val filtered = remember(query, libraries) {
-        if (query.isBlank()) libraries else libraries.filter { library ->
-            library.name.contains(query, ignoreCase = true) ||
-                nukeLibraryAuthor(library).contains(query, ignoreCase = true) ||
-                library.description?.contains(query, ignoreCase = true) == true
-        }
-    }
-    val libraryGroups = remember(filtered) {
-        filtered
-            .groupBy(::nukeLibraryAuthor)
-            .toSortedMap()
-            .map { (author, authorLibraries) ->
-                NukeLibraryGroup(
-                    author = author,
-                    libraries = authorLibraries.sortedBy(Library::name),
-                )
-            }
-    }
-
-    NukePageScaffold(title = stringResource(R.string.settings_open_source_licenses_title), onBack = onBack) {
-        item(key = "search") {
-            NukeSearchField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = stringResource(R.string.licenses_search_hint),
-            )
-        }
-        item(key = "count") {
-            NukeText(
-                text = if (query.isBlank()) {
-                    stringResource(R.string.licenses_count, libraries.size)
-                } else {
-                    stringResource(R.string.licenses_filtered_count, filtered.size, libraries.size)
-                },
-                color = NukeTheme.colors.textSecondary,
-                fontSize = 12,
-                lineHeight = 16,
-                modifier = Modifier.padding(horizontal = 2.dp),
-            )
-        }
-        if (filtered.isEmpty()) {
-            item(key = "empty") {
-                NukeSettingGroup(title = null) {
-                    NukeText(
-                        text = stringResource(R.string.licenses_no_results, query),
-                        color = NukeTheme.colors.textSecondary,
-                        fontSize = 13,
-                        lineHeight = 18,
-                        modifier = Modifier.padding(18.dp),
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            }
-        } else {
-            items(libraryGroups, key = NukeLibraryGroup::author) { group ->
-                NukeLibraryGroup(group)
-            }
-        }
-    }
-}
-
-@Composable
-private fun NukeLibraryGroup(group: NukeLibraryGroup) {
-    NukeSettingGroup(
-        title = if (group.author == UNKNOWN_LIBRARY_AUTHOR_KEY) {
-            stringResource(R.string.licenses_unknown_author)
-        } else group.author,
-    ) {
-        group.libraries.forEachIndexed { index, library ->
-            NukeLibraryRow(library)
-            if (index < group.libraries.lastIndex) NukeDivider()
-        }
-    }
-}
-
-@Composable
-private fun NukeLibraryRow(library: Library) {
-    val licenseNames = library.licenses.joinToString("、") { it.name }
-    val versionLabel = library.artifactVersion?.let {
-        stringResource(R.string.licenses_version, it)
-    }
-    val licensesLabel = licenseNames.takeIf(String::isNotBlank)?.let {
-        stringResource(R.string.licenses_license_names, it)
-    }
-    NukePreferenceRow(
-        title = library.name,
-        description = buildString {
-            versionLabel?.let(::append)
-            library.description?.takeIf { it.isNotBlank() }?.let {
-                if (isNotEmpty()) append('\n')
-                append(it)
-            }
-            if (licensesLabel != null) {
-                if (isNotEmpty()) append('\n')
-                append(licensesLabel)
-            }
-        }.ifBlank { null },
-    )
-}
-
-private data class NukeLibraryGroup(
-    val author: String,
-    val libraries: List<Library>,
 )
 
 private const val UNKNOWN_LIBRARY_AUTHOR_KEY = "\u0000unknown-author"
 
-private fun nukeLibraryAuthor(library: Library): String =
-    library.developers.firstOrNull()?.name?.takeIf(String::isNotBlank)
-        ?: library.organization?.name?.takeIf(String::isNotBlank)
         ?: UNKNOWN_LIBRARY_AUTHOR_KEY
 
 @Composable

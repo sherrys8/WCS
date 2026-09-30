@@ -1,6 +1,6 @@
 # WcS 翻译贡献指南
 
-WcS 使用英语作为源语言，并维护简体中文和繁体中文翻译。项目通过
+WcS 使用英语作为源语言，并只维护简体中文翻译。项目通过
 [Hosted Weblate](https://hosted.weblate.org/projects/wcs/wcs/) 接收社区翻译；GitHub
 `dev` 分支始终是最终源代码和资源目录的权威来源。
 
@@ -10,7 +10,6 @@ WcS 使用英语作为源语言，并维护简体中文和繁体中文翻译。�
 | --- | --- | --- |
 | 英语 | 开发者维护的源语言与 fallback | `app/src/main/res/values/strings.xml` |
 | 简体中文 | 翻译目标 | `app/src/main/res/values-zh-rCN/strings.xml` |
-| 繁体中文 | 翻译目标 | `app/src/main/res/values-zh-rTW/strings.xml` |
 
 开发者在普通代码 PR 中新增或修改英语源字符串。翻译贡献者通常通过 Hosted Weblate
 更新两个中文目标；Weblate 不可用或贡献者明确偏好 Git 时，也接受直接修改 XML 的 PR。
@@ -41,7 +40,7 @@ WcS 使用英语作为源语言，并维护简体中文和繁体中文翻译。�
 6. 维护者等待 CI 和人工审查通过后，以普通 merge commit 合并。
 
 Weblate 不得直接推送或 force-push `dev`，也不得自动合并 PR。翻译 PR 不使用 squash 或
-rebase，以免破坏 Weblate 的 Git 同步历史。简体和繁体资源在首次导入后独立维护；不得用
+rebase，以免破坏 Weblate 的 Git 同步历史。简体中文资源独立维护；不得用
 周期性 OpenCC 转换覆盖人工审核结果。
 
 ## 本地校验

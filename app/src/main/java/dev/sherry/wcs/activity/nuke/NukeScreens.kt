@@ -43,7 +43,6 @@ import com.composables.icons.materialsymbols.outlined.Info
 import com.composables.icons.materialsymbols.outlined.Settings
 import com.composables.icons.materialsymbols.outlined.Shield
 import com.composables.icons.materialsymbols.outlined.Style
-import com.composables.icons.materialsymbols.outlined.Update
 import com.composables.icons.materialsymbols.outlined.Volunteer_activism
 import dev.sherry.wcs.activity.settings.FEATURE_CATEGORIES
 import dev.sherry.wcs.R
@@ -98,7 +97,6 @@ sealed interface NukeDestination {
     data object GeneralSettings : NukeDestination
     data object Appearance : NukeDestination
     data object About : NukeDestination
-    data object Licenses : NukeDestination
 }
 
 private data class NukeRootEntry(
