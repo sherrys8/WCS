@@ -185,7 +185,7 @@ jobs:
 
   dex-test:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.repository == 'sherrys8/WCS'
+    if: github.event_name == 'pull_request'
     outputs:
       reports-available: ${{ steps.report-check.outputs.available }}
     steps:

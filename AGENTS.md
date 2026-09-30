@@ -284,7 +284,8 @@ Prefer these over raw Compose controls:
 
 - GitHub Actions: builds on push/PR to `master`/`dev`/`dev-sherry`/`WCS`/`dev2`。纯文档变更（`*.md`/`*.txt` 等 paths-ignore 列表内文件）不会触发 CI；修改 AGENTS.md 无需构建，不会跑 CI
 - `WCS` 分支自 `7cede8ea` 起与 `dev-sherry` 同一条流水线（`build` + `upload-telegram`，其余 job skipped），实测 push 到新分支确实自动排 run
-- 仓库守卫 `github.repository == 'Ujhhgtg/WeKit-Dev'` 在 `a5a5c390` 统一改成 `sherrys8/WCS`。**但 GitHub 上的仓库仍叫 `sherrys8/WeKit`**（`git remote get-url origin` 可核对），所以这些守卫现在永远不匹配：`dex-test`/`build-extensions`/`extensions-changes`/`release-dex-test`/`release-ci` 继续 skipped，`build`/`upload-telegram` 只按 `refs/heads/*` 判断、不受影响。把远端仓库改名成 `WCS` 之后它们才会活过来
+- 仓库守卫 `github.repository == 'Ujhhgtg/WeKit-Dev'` 在 `a5a5c390` 统一改成 `sherrys8/WCS`。**新仓库 `sherrys8/WCS` 已建好且是 PRIVATE**，所以那些守卫在它的 run 里真的会命中（实测：改名后的 push 让 `dex-test` 与 `extensions-changes` 开始执行，`dex-test` 单独耗时 28m40s、与 `build` 并行，而私有仓的 Actions 分钟是计费的）。因此 `dex-test` 的条件已在本次收紧回 **`github.event_name == 'pull_request'`**：push 不再跑它，需要桌面 Dex 校验时按 AGENTS 用 `./x dex-test`，或开 PR。其余不变：`build`/`upload-telegram` 只看 `refs/heads/*`；`release-ci` 与 `release-dex-test` 还额外要求 `refs/heads/master`，而 `sherrys8/WCS` 目前**没有 master 分支**，所以不会发布 release；`build-extensions` 只在 `extension-packs/**` 真有改动时才下载 792 MB rootfs 并上传 `Extensions`，且需要新仓还没有的 `RELEASE_TOKEN` secret
+- 同一个克隆里 `origin` = 公开的 `sherrys8/WeKit`（那里的 push 依旧只有 `build` + `upload-telegram`），`wcs` = 私有的 `sherrys8/WCS`。改名内容只推 `wcs`，不要顺手推 `origin`
 - `build` job 自 `684cb3d2` 起**只构建 standard 一个 flavor**（`./x build --release --flavor standard`）：不带 `--flavor` 会走 `assembleRelease` 把 standard/legacy 各编一遍，实测 21m32s → 13m48s。legacy 需要时本地 `./x build --release --flavor legacy`
 - 产物只经 `upload-telegram` 发到 Telegram 频道；本 fork 的 `dev-sherry` **不建 GitHub release**（`gh release list` 只有 Extensions / Dex Test），AGENTS 旧述的「release named CI」在本分支不成立
 - APK 仍是双格式：同一个包可直接装为 APK，或改后缀 `.zip` 经 root 管理器装为 Zygisk 模块，flavor 只决定 libxposed 入口有无（standard 有、legacy 无），与双格式无关
