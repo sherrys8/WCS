@@ -25,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
@@ -55,7 +54,6 @@ fun HomePager() {
             ) {
                 StatusCard()
                 DeviceInformation()
-                LearnMore()
                 Spacer(Modifier.height(CONTENT_BOTTOM_INSET))
             }
         }
@@ -212,21 +210,6 @@ private fun DeviceInformation() {
                     loaderName,
                     StartupInfo.hookBridge?.hookBridgeName ?: stringResource(R.string.common_not_provided),
                 ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun LearnMore() {
-    val uriHandler = LocalUriHandler.current
-    SegmentedColumn(title = stringResource(R.string.home_learn_more_title)) {
-        item {
-            BaseWidget(
-                iconPlaceholder = false,
-                title = stringResource(R.string.home_learn_more_item_title),
-                description = stringResource(R.string.home_learn_more_item_summary),
-                onClick = { uriHandler.openUri("https://docs.wcs.ujhhgtg.dev") },
             )
         }
     }

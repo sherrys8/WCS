@@ -4,7 +4,6 @@
 
 <img alt="fabric" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/supported/fabric_vector.svg"> <img alt="forge" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/unsupported/forge_vector.svg">
 
-<a href="https://ifdian.net/a/ujhhgtg"><img alt="buymeacoffee-plural" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/donate/buymeacoffee-plural_vector.svg"></a>
 <a href="https://docs.wcs.ujhhgtg.dev"><img alt="文档" height="56" src="https://img.shields.io/badge/文档-WcS-3451b2?style=for-the-badge"></a>
 
 ## 文档
@@ -27,8 +26,6 @@
 ## 联系
 
 [Telegram 超级群组](https://t.me/+7j5dJ6g16B43OWVl)
-
-[爱发电](https://ifdian.net/a/ujhhgtg)
 
 ## 致谢
 

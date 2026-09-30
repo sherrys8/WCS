@@ -228,9 +228,6 @@
     <string name="features_new_summary">最近 %1$d 天新增 %2$d 个功能</string>
     <string name="home_module_activated">模块已激活</string>
     <string name="home_device_info_title">设备信息</string>
-    <string name="home_learn_more_title">了解更多</string>
-    <string name="home_learn_more_item_title">WcS 文档</string>
-    <string name="home_learn_more_item_summary">了解如何配置和使用 WcS</string>
     <string name="home_wechat_version">微信版本</string>
     <string name="home_module_version">模块版本</string>
     <string name="home_build_time">构建时间</string>
@@ -364,7 +361,6 @@
     <string name="nuke_general_settings_title">通用设置</string>
     <string name="nuke_appearance_title">界面设置</string>
     <string name="nuke_about_title">关于模块</string>
-    <string name="nuke_support_us_title">赞赏我们</string>
     <string name="nuke_settings_title">WcS 设置</string>
     <string name="nuke_section_security">安全</string>
     <string name="nuke_section_general">通用</string>

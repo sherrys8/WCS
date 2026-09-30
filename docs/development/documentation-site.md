@@ -1,6 +1,6 @@
 # 文档站维护
 
-文档位于代码仓库的 `docs/`，使用 VitePress 2 alpha 和 Bun。生产站点为 [docs.wcs.ujhhgtg.dev](https://docs.wcs.ujhhgtg.dev)，跟随 `sherrys8/WCS` 的 `master`，内容对应开发版。
+文档位于代码仓库的 `docs/`，使用 VitePress 2 alpha 和 Bun。本 fork 不部署线上文档站，页面在 GitHub 上直接阅读，本地用下面的命令预览。
 
 ## 本地命令
 
@@ -16,11 +16,10 @@ bun run dev
 
 ```bash
 bun run build
-bun run deploy:check
 git diff --check
 ```
 
-`bun run preview` 预览构建结果；`bunx wrangler dev --local` 检查 Workers 静态资源路由。依赖固定精确版本，更新时提交 `bun.lock`，不要提交其他包管理器的锁文件、缓存或站点产物。
+`bun run preview` 预览构建结果。依赖固定精确版本，更新时提交 `bun.lock`，不要提交其他包管理器的锁文件、缓存或站点产物。
 
 ## 新增和更新页面
 
@@ -38,28 +37,12 @@ git diff --check
 
 代码围栏使用正确语言，纯文本使用 `text`。本地搜索通过中文分词支持短词检索，不需要配置外部搜索账户。
 
-## Cloudflare 自动构建
+## 构建产物与部署
 
-部署使用纯 Workers Static Assets，不需要 Worker JS 或 `main`。资源目录为 `.vitepress/dist`；未知路径返回真实 404，不回退到首页。
-
-| Workers Builds 设置 | 值 |
-| --- | --- |
-| Repository | `sherrys8/WCS` |
-| Production branch | `master` |
-| Root directory | `docs` |
-| Build command | `bun install --frozen-lockfile && bun run build` |
-| Deploy command | `bun run deploy` |
-| Build variables | `BUN_VERSION=1.4.0`、`NODE_VERSION=24.15.0`、`SKIP_DEPENDENCY_INSTALL=1` |
-| Build watch includes | `docs/*` |
-| Build watch excludes | 空 |
-| Non-production branch builds | 关闭 |
-
-GitHub App 必须有仓库访问权限，构建使用独立的部署凭据。不要把本地 OAuth token 写入配置。Watch paths 属于 Cloudflare 控制面设置，不写进 wrangler.jsonc。正常 docs 变更触发构建；空 push、极大的文件/提交批次存在 Cloudflare 的路径匹配例外。
-
-必要时可在 docs 中执行 `bun run deploy` 手工发布。回退内容时撤销有问题的文档提交，再经相同构建链部署。自动构建失败时先查看 Git 访问、Bun 安装和 build 日志，不跳过锁文件或死链检查。
+`bun run build` 产出 `.vitepress/dist`；未知路径返回真实 404，不回退到首页。本 fork 不带部署配置（原 Workers Static Assets 的 `wrangler.jsonc` 已随上游文档域名一并移除），要发布站点需自备域名与构建链。
 
 ## 人工检查
 
-在桌面和窄屏浏览器检查首页、目录、中文短词搜索、编辑链接、上一页/下一页及直接刷新深层链接。开发服务器运行时新增、改名或删除一篇功能页，确认目录同步；删除测试文件后再提交。线上同时检查 HTTPS、图片加载和不存在页面的 404。
+在桌面和窄屏浏览器检查首页、目录、中文短词搜索、编辑链接、上一页/下一页及直接刷新深层链接。开发服务器运行时新增、改名或删除一篇功能页，确认目录同步；删除测试文件后再提交。本地构建产物同样检查图片加载和不存在页面的 404。
 
-参考：[Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/)、[构建路径规则](https://developers.cloudflare.com/workers/ci-cd/builds/build-watch-paths/)、[VitePress](https://vitepress.dev/)。
+参考：[VitePress](https://vitepress.dev/)。

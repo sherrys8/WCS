@@ -251,9 +251,6 @@
     <string name="features_new_summary">%2$d features added in the last %1$d days</string>
     <string name="home_module_activated">Module activated</string>
     <string name="home_device_info_title">Device information</string>
-    <string name="home_learn_more_title">Learn more</string>
-    <string name="home_learn_more_item_title">WcS documentation</string>
-    <string name="home_learn_more_item_summary">Learn how to configure and use WcS</string>
     <string name="home_wechat_version">WeChat version</string>
     <string name="home_module_version">Module version</string>
     <string name="home_build_time">Build time</string>
@@ -393,7 +390,6 @@
     <string name="nuke_general_settings_title">General settings</string>
     <string name="nuke_appearance_title">Appearance</string>
     <string name="nuke_about_title">About the module</string>
-    <string name="nuke_support_us_title">Support us</string>
     <string name="nuke_settings_title">WcS Settings</string>
     <string name="nuke_section_security">Security</string>
     <string name="nuke_section_general">General</string>

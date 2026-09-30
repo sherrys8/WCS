@@ -43,7 +43,6 @@ import com.composables.icons.materialsymbols.outlined.Info
 import com.composables.icons.materialsymbols.outlined.Settings
 import com.composables.icons.materialsymbols.outlined.Shield
 import com.composables.icons.materialsymbols.outlined.Style
-import com.composables.icons.materialsymbols.outlined.Volunteer_activism
 import dev.sherry.wcs.activity.settings.FEATURE_CATEGORIES
 import dev.sherry.wcs.R
 import dev.sherry.wcs.activity.settings.ENABLED_FEATURES_CATEGORY
@@ -84,10 +83,8 @@ import dev.sherry.wcs.ui.content.nuke.nukeGroupedCardItem
 import dev.sherry.wcs.ui.content.nuke.rememberNukeRevealStackState
 import dev.sherry.wcs.ui.utils.theme.ThemeSettings
 import dev.sherry.wcs.utils.WeLogger
-import dev.sherry.wcs.utils.openInSystem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import androidx.core.net.toUri
 import java.text.Collator
 import java.util.Locale
 
@@ -171,7 +168,6 @@ private fun NukeHomePage(
     featureItems: List<SwitchFeature>,
     onOpenDestination: (NukeDestination, Offset) -> Unit,
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
     val localizedContext = LocalWcSLocalizedContext.current
     val activity = LocalComponentActivity.current
     val revision = FeatureCategoryState.revision
@@ -233,13 +229,6 @@ private fun NukeHomePage(
             stringResource(R.string.nuke_about_title),
             imageVector = MaterialSymbols.Outlined.Info,
             destination = NukeDestination.About,
-        ),
-        NukeRootEntry(
-            title = stringResource(R.string.nuke_support_us_title),
-            imageVector = MaterialSymbols.Outlined.Volunteer_activism,
-            action = {
-                "https://ifdian.net/a/ujhhgtg".toUri().openInSystem(context, true)
-            },
         ),
     )
 
