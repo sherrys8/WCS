@@ -36,6 +36,7 @@ import dev.sherry.wcs.utils.android.isDarkMode
 fun showComposeDialog(
     context: Context,
     directlyDismissable: Boolean = true,
+    dismissOnTouchOutside: Boolean = directlyDismissable,
     fullScreen: Boolean = false,
     content: @Composable ShowComposeDialogScope.() -> Unit
 ) {
@@ -53,6 +54,8 @@ fun showComposeDialog(
         }
 
         setCancelable(directlyDismissable)
+        // 与 setCancelable 分开：cancelable 管返回键，这个管「点到窗口外」
+        setCanceledOnTouchOutside(dismissOnTouchOutside)
 
         val scope = ShowComposeDialogScope(context, this, window!!, ::dismiss)
 

@@ -265,8 +265,8 @@ object TextToSpeech :
     }
 
     private fun showMainDialog(context: android.content.Context, talker: String, initialText: String) {
-        // 与短视频解析的主弹窗一致：点弹窗外面不关，只认底部「关闭」（也避免误触丢掉已生成的语音）
-        showComposeDialog(context, directlyDismissable = false) {
+        // 点弹窗外面不关（避免误触丢掉已生成的语音），但返回键仍可关；显式出口是底部「关闭」
+        showComposeDialog(context, dismissOnTouchOutside = false) {
             var inputText by remember { mutableStateOf(initialText) }
             var backendMode by remember { mutableIntStateOf(backend) }
             val isDoubao = backendMode == BACKEND_DOUBAO
@@ -341,7 +341,6 @@ object TextToSpeech :
                                     value = voiceId,
                                     options = if (mainOptions.any { it.value == voiceId }) mainOptions
                                         else mainOptions + DropdownOption(voiceId, voiceId),
-                                    dismissOnClickOutside = false,
                                     onValueChange = {
                                         voiceId = it
                                         if (isDoubao) doubaoSpeaker = it else selectedVoice = it
@@ -356,7 +355,6 @@ object TextToSpeech :
                                     value = voiceId,
                                     options = if (customCurrent) customOptions
                                         else customOptions + DropdownOption(voiceId, ""),
-                                    dismissOnClickOutside = false,
                                     onValueChange = { voiceId = it; selectedVoice = it },
                                     enabled = !isDoubao && customVoices.isNotEmpty(),
                                 )
@@ -371,7 +369,6 @@ object TextToSpeech :
                             value = emotion,
                             options = if (isDoubao) listOf(DropdownOption(emotion, emotion))
                                 else EMOTIONS.map { DropdownOption(it.first, it.first) },
-                            dismissOnClickOutside = false,
                             onValueChange = { emotion = it; selectedEmotion = it },
                             enabled = !isDoubao,
                         )
