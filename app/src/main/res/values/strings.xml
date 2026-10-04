@@ -964,8 +964,6 @@
     <string name="feature_feature_flag_manager_description">Override the value of WeChat grayscale test (Feature Flag)</string>
     <string name="feature_force_tablet_mode_name">Force tablet mode</string>
     <string name="feature_force_tablet_mode_description">Let WeChat recognize the current device as a tablet</string>
-    <string name="feature_hide_module_from_app_list_name">Hide module from app list</string>
-    <string name="feature_hide_module_from_app_list_description">Prevent WeChat from querying module installation status without affecting module functionality (experimental)</string>
     <string name="feature_link_external_app_jump_name">Open links with system apps</string>
     <string name="feature_link_external_app_jump_description">A dialog box is displayed when opening a link or card link, which can be opened directly using the system open method.\nIf you want to jump to a third-party application, you must first enable "Open supported web links in this application" in the corresponding application settings.</string>
     <string name="feature_auto_like_sports_rank_name">Automatically like sports rankings</string>
@@ -980,8 +978,6 @@
     <string name="feature_predictive_back_gestures_description">Forcibly enable predictive return animation for WeChat activities\nRequires system Android SDK &gt;= 33</string>
     <string name="feature_prevent_module_data_deletion_name">Prevent WeChat from cleaning module data</string>
     <string name="feature_prevent_module_data_deletion_description">Prevent WeChat "Settings → Storage → Cleanup" from deleting module data</string>
-    <string name="feature_prevent_xposed_detection_name">Disable WeChat from detecting Xposed</string>
-    <string name="feature_prevent_xposed_detection_description">Prevent WeChat from detecting the existence of Xposed framework</string>
     <string name="feature_qr_code_record_name">QR code scanning record</string>
     <string name="feature_qr_code_record_description">Record the scanned QR code URL</string>
     <string name="feature_remove_article_ads_name">Remove article ads</string>
@@ -990,8 +986,6 @@
     <string name="feature_remove_external_app_sharing_signature_verify_description">Remove signature verification from third-party apps shared to WeChat</string>
     <string name="feature_remove_qr_code_scan_limit_name">Remove QR code scanning restrictions</string>
     <string name="feature_remove_qr_code_scan_limit_description">Removed QR code scanning restrictions for long-pressing pictures and album selections</string>
-    <string name="feature_spoof_environment_name">Spoof environment</string>
-    <string name="feature_spoof_environment_description">Pretending that ADB, developer options or VPN are not enabled may help pass environmental security detection in scenarios such as faces</string>
     <string name="feature_use_legacy_wallet_view_in_me_page_name">Restore legacy Cards &amp; Offers entry</string>
     <string name="feature_use_legacy_wallet_view_in_me_page_description">Use the old version of "Card Pack" in the "Me" interface instead of "Store and Card Pack"</string>
     <string name="feature_we_agent_name">WeAgent</string>
@@ -3809,7 +3803,6 @@
     <string name="system_loading">Loading…</string>
     <string name="system_none">None</string>
     <string name="system_predictive_back_unsupported">Predictive back is not supported by this Android version</string>
-    <string name="system_prevent_xposed_google_play_warning">This feature is unavailable in the Google Play build of WeChat.</string>
     <string name="system_risky_feature_warning">This feature may cause account risk. Continue only if you understand the consequences.</string>
     <string name="system_sports_active_value">Active upload step count</string>
     <string name="system_sports_fixed">Fixed</string>

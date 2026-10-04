@@ -7,14 +7,12 @@ import dev.ujhhgtg.reflekt.utils.ReflectionClassLoader
 import dev.sherry.wcs.R
 import dev.sherry.wcs.loader.abc.IHookBridge
 import dev.sherry.wcs.loader.abc.ILoaderService
-import dev.sherry.wcs.loader.entry.zygisk.ArtHookBridge
-import dev.sherry.wcs.loader.entry.zygisk.ZygiskLoaderService
+import dev.sherry.wcs.loader.environment.EnvironmentHider
 import dev.sherry.wcs.loader.utils.HybridClassLoader
 import dev.sherry.wcs.loader.utils.NativeLoader
 import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
 import org.lsposed.hiddenapibypass.HiddenApiBypass
-import java.io.File
 import java.lang.reflect.Field
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.deleteRecursively
@@ -47,20 +45,15 @@ object StartupAgent {
             throw AssertionError("module resource package ID must not be 0x7f")
         }
 
+        ensureHiddenApiAccess()
+
         StartupInfo.modulePath = modulePath
         StartupInfo.loaderService = loaderService
         StartupInfo.hookBridge = hookBridge
 
-        ensureHiddenApiAccess()
-        if (loaderService !is ZygiskLoaderService) {
-            checkWxForModulePath(modulePath)
-        }
-
         HostInfo.init(application)
         NativeLoader.init(application)
-        if (hookBridge is ArtHookBridge) {
-            hideModuleLibraries(hookBridge)
-        }
+        EnvironmentHider.afterNativeLoad(hookBridge)
         WeLauncher.init(application)
 
         runCatching {
@@ -70,27 +63,6 @@ object StartupAgent {
         // Only commit after every required startup phase completes. The caller
         // already logs a thrown failure, and a later lifecycle callback can retry.
         initialized = true
-    }
-
-    private fun hideModuleLibraries(hookBridge: ArtHookBridge) {
-        runCatching { hookBridge.hideLoadedModuleLibraries() }
-            .onSuccess { hidden ->
-                WeLogger.i(
-                    TAG,
-                    "hid loaded module libraries"
-                )
-                if (!hidden) WeLogger.w(TAG, "module native-library hiding was incomplete")
-            }
-            .onFailure {
-                WeLogger.e(TAG, "failed to hide module libraries", it)
-            }
-    }
-
-    private fun checkWxForModulePath(modulePath: String) {
-        val moduleFile = File(modulePath)
-        if (moduleFile.canWrite()) {
-            WeLogger.w(TAG, "module path is writable: $modulePath\nthis may cause issues on Android 15+, please check your Xposed framework")
-        }
     }
 
     private fun ensureHiddenApiAccess() {

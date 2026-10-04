@@ -930,8 +930,6 @@
     <string name="feature_feature_flag_manager_description">覆盖微信灰度测试 (Feature Flag) 的值</string>
     <string name="feature_force_tablet_mode_name">强制平板模式</string>
     <string name="feature_force_tablet_mode_description">让微信将当前设备识别为平板</string>
-    <string name="feature_hide_module_from_app_list_name">隐藏模块应用</string>
-    <string name="feature_hide_module_from_app_list_description">在不影响模块功能的情况下防止微信查询模块安装状态 (实验性)</string>
     <string name="feature_link_external_app_jump_name">链接跳转系统打开方式</string>
     <string name="feature_link_external_app_jump_description">打开链接或卡片链接时显示对话框, 可直接使用系统打开方式打开\n若要跳转到第三方应用, 需先在对应应用设置中启用「在此应用中打开支持的网页链接」</string>
     <string name="feature_auto_like_sports_rank_name">运动排行榜自动点赞</string>
@@ -946,8 +944,6 @@
     <string name="feature_predictive_back_gestures_description">为微信的活动强制启用预见性返回动画\n需系统 Android SDK &gt;= 33</string>
     <string name="feature_prevent_module_data_deletion_name">阻止微信清理模块数据</string>
     <string name="feature_prevent_module_data_deletion_description">阻止微信「设置 → 存储空间 → 清理」删除模块数据</string>
-    <string name="feature_prevent_xposed_detection_name">禁止微信检测 Xposed</string>
-    <string name="feature_prevent_xposed_detection_description">防止微信检测 Xposed 框架是否存在</string>
     <string name="feature_qr_code_record_name">二维码扫描记录</string>
     <string name="feature_qr_code_record_description">记录扫描的二维码 URL</string>
     <string name="feature_remove_article_ads_name">去除文章广告</string>
@@ -956,8 +952,6 @@
     <string name="feature_remove_external_app_sharing_signature_verify_description">移除第三方应用分享到微信的签名校验</string>
     <string name="feature_remove_qr_code_scan_limit_name">移除二维码扫描限制</string>
     <string name="feature_remove_qr_code_scan_limit_description">移除长按图片与相册选择的二维码扫描限制</string>
-    <string name="feature_spoof_environment_name">环境伪装</string>
-    <string name="feature_spoof_environment_description">伪装未启用 ADB, 开发者选项或 VPN, 可能有助于通过人脸等场景下的环境安全性检测</string>
     <string name="feature_use_legacy_wallet_view_in_me_page_name">恢复旧版「我」界面卡包</string>
     <string name="feature_use_legacy_wallet_view_in_me_page_description">在「我」界面使用旧版「卡包」而非「小店与卡包」</string>
     <string name="feature_we_agent_name">WeAgent</string>
@@ -3847,7 +3841,6 @@
     <string name="system_loading">加载中…</string>
     <string name="system_none">无</string>
     <string name="system_predictive_back_unsupported">当前 Android 版本不支持预见性返回</string>
-    <string name="system_prevent_xposed_google_play_warning">微信 Google Play 版本无法使用此功能。</string>
     <string name="system_risky_feature_warning">此功能可能带来账号风险，请在了解后果的情况下继续。</string>
     <string name="system_sports_active_value">主动上传步数</string>
     <string name="system_sports_fixed">固定值</string>

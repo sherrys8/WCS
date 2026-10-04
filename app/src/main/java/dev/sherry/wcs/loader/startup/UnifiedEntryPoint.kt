@@ -7,6 +7,7 @@ import dev.ujhhgtg.reflekt.reflekt
 import dev.ujhhgtg.reflekt.utils.toClass
 import dev.sherry.wcs.loader.abc.IHookBridge
 import dev.sherry.wcs.loader.abc.ILoaderService
+import dev.sherry.wcs.loader.environment.EnvironmentHider
 import dev.sherry.wcs.loader.utils.HybridClassLoader
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.hookAfterDirectly
@@ -36,16 +37,14 @@ object UnifiedEntryPoint {
             .firstField { name = "parent"; superclass() }
             .set(HybridClassLoader)
 
-        WeLogger.d(TAG, "hooking Application.attachBaseContext")
-
         "com.tencent.mm.app.Application".toClass(initialClassLoader).reflekt()
             .firstMethod { name = "attachBaseContext" }
             .hookAfterDirectly {
-                WeLogger.d(TAG, "Application.attachBaseContext invoked, hooking Instrumentation.callApplicationOnCreate")
-                val currentClassLoader = (thisObject as Context).classLoader
+                val context = thisObject as Context
+                EnvironmentHider.install(context, modulePath)
+                val currentClassLoader = context.classLoader
                 "android.app.Instrumentation".toClass(currentClassLoader).reflekt()
                     .firstMethod("callApplicationOnCreate").hookAfterDirectly {
-                        WeLogger.d(TAG, "Instrumentation.callApplicationOnCreate invoked, running StartupAgent")
                         runCatching {
                             StartupAgent.startup(
                                 loaderService,
