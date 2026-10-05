@@ -2,7 +2,6 @@ package dev.sherry.wcs.features.items.contacts
 
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -11,7 +10,6 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
-import android.net.Uri
 import android.view.View
 import android.widget.BaseAdapter
 import android.widget.ImageView
@@ -67,7 +65,9 @@ import dev.sherry.wcs.ui.content.DefaultColumn
 import dev.sherry.wcs.ui.content.TextButton
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.HostInfo
+import dev.sherry.wcs.utils.TargetProcesses
 import dev.sherry.wcs.utils.WeLogger
+import dev.sherry.wcs.utils.android._mainHandler
 import dev.sherry.wcs.utils.android.currentWxId
 import dev.sherry.wcs.utils.android.showToast
 import dev.sherry.wcs.utils.fs.KnownPaths
@@ -260,6 +260,11 @@ object CustomLocalFriendAvatars : ClickableFeature(), IContactInfoProvider, IRes
     override fun onEnable() {
         WeContactPrefsScreenApi.addProvider(this)
 
+        // Only the main process owns the asset directory; other processes just read what it wrote.
+        if (TargetProcesses.isInMain) {
+            Thread(::migrateLegacyReferences).start()
+        }
+
         listOf(
             methodConversationAvatar,
             methodMvvmLoadAvatar1,
@@ -358,21 +363,21 @@ object CustomLocalFriendAvatars : ClickableFeature(), IContactInfoProvider, IRes
     }
 
     private fun applyCustomAvatar(imageView: ImageView, username: String, radiusFactor: Float): Boolean {
-        val uri = avatarMap[username]?.takeIf { it.isNotBlank() } ?: return false
+        val ref = avatarMap[username]?.takeIf { it.isNotBlank() } ?: return false
         val effectiveRadiusFactor = effectiveRadiusFactor(radiusFactor)
-        val tag = "$username$SEP$uri$SEP$effectiveRadiusFactor"
+        val tag = "$username$SEP$ref$SEP$effectiveRadiusFactor"
         imageView.setTag(VIEW_TAG_CUSTOM_AVATAR, tag)
-        boundAvatarViews[imageView] = BoundAvatar(username, uri, radiusFactor)
-        loadAvatarInto(imageView, uri, effectiveRadiusFactor)
+        boundAvatarViews[imageView] = BoundAvatar(username, ref, radiusFactor)
+        loadAvatarInto(imageView, ref, effectiveRadiusFactor)
         imageView.post {
             if (imageView.getTag(VIEW_TAG_CUSTOM_AVATAR) == tag) {
-                loadAvatarInto(imageView, uri, effectiveRadiusFactor)
+                loadAvatarInto(imageView, ref, effectiveRadiusFactor)
             }
         }
         return true
     }
 
-    private fun loadAvatarInto(imageView: ImageView, uri: String, radiusFactor: Float) {
+    private fun loadAvatarInto(imageView: ImageView, ref: String, radiusFactor: Float) {
         val targetSize = imageView.width
             .takeIf { it > 0 }
             ?: imageView.layoutParams?.width?.takeIf { it > 0 }
@@ -380,12 +385,12 @@ object CustomLocalFriendAvatars : ClickableFeature(), IContactInfoProvider, IRes
 
         val shouldRound = RoundAvatars.isEnabled
         val bitmap = decodeAvatarBitmap(
-            uri = uri,
+            ref = ref,
             targetSize = targetSize,
             round = shouldRound,
             radiusFactor = if (shouldRound) radiusFactor else 0f
         ) ?: run {
-            imageView.load(uri) {
+            imageView.load(CustomAvatarAssets.resolve(ref)) {
                 allowHardware(false)
                 crossfade(false)
             }
@@ -398,10 +403,10 @@ object CustomLocalFriendAvatars : ClickableFeature(), IContactInfoProvider, IRes
     }
 
     private fun applyCustomHdAvatar(gallery: Any?, username: String): Boolean {
-        val uri = avatarMap[username]?.takeIf { it.isNotBlank() } ?: return false
+        val ref = avatarMap[username]?.takeIf { it.isNotBlank() } ?: return false
         val view = gallery as? View ?: return false
         val width = view.resources.displayMetrics.widthPixels.coerceAtLeast(720)
-        val bitmap = decodeAvatarBitmap(uri, width, round = false, radiusFactor = 0f) ?: return false
+        val bitmap = decodeAvatarBitmap(ref, width, round = false, radiusFactor = 0f) ?: return false
 
         runCatching {
             ensureReflection()
@@ -425,14 +430,18 @@ object CustomLocalFriendAvatars : ClickableFeature(), IContactInfoProvider, IRes
         return true
     }
 
-    private fun decodeAvatarBitmap(uri: String, targetSize: Int, round: Boolean, radiusFactor: Float): Bitmap? {
-        val cacheKey = "$uri|$targetSize|$round|$radiusFactor"
+    private fun decodeAvatarBitmap(ref: String, targetSize: Int, round: Boolean, radiusFactor: Float): Bitmap? {
+        val cacheKey = "$ref|$targetSize|$round|$radiusFactor"
         val cache = if (round) roundedBitmapCache else originalBitmapCache
         cache[cacheKey]?.takeIf { !it.isRecycled }?.let { return it }
 
+        val asset = CustomAvatarAssets.file(ref)
         val bitmap = runCatching {
-            HostInfo.application.contentResolver.openInputStream(uri.toUri())?.use { stream ->
-                android.graphics.BitmapFactory.decodeStream(stream)
+            if (asset != null) {
+                asset.inputStream().use { android.graphics.BitmapFactory.decodeStream(it) }
+            } else {
+                HostInfo.application.contentResolver.openInputStream(ref.toUri())
+                    ?.use { android.graphics.BitmapFactory.decodeStream(it) }
             }
         }.getOrNull() ?: return null
 
@@ -550,32 +559,70 @@ object CustomLocalFriendAvatars : ClickableFeature(), IContactInfoProvider, IRes
                 finish()
                 if (uri == null) return@registerForActivityResult
 
-                persistReadPermission(uri)
-                setAvatar(wxId, uri.toString())
-                showToast(
-                    context.localizedContactsString(R.string.contacts_custom_avatar_set_reopen),
-                )
+                // Import decodes and re-encodes the picked image, so keep it off the Activity result thread.
+                Thread {
+                    val result = CustomAvatarAssets.import(uri)
+                    _mainHandler.post {
+                        if (result is CustomAvatarImportResult.Success) {
+                            setAvatar(wxId, result.assetId)
+                            showToast(
+                                context.localizedContactsString(R.string.contacts_custom_avatar_set_reopen),
+                            )
+                        } else {
+                            if (result is CustomAvatarImportResult.Failure) {
+                                WeLogger.w(TAG, "failed to import custom avatar for $wxId", result.error)
+                            }
+                            showToast(context.localizedContactsString(avatarImportFailure(result)))
+                        }
+                    }
+                }.start()
             }
             launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
     }
 
-    private fun persistReadPermission(uri: Uri) {
-        runCatching {
-            HostInfo.application.contentResolver.takePersistableUriPermission(
-                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        }.onFailure { WeLogger.w(TAG, "failed to persist avatar uri permission: $uri", it) }
+    private fun avatarImportFailure(result: CustomAvatarImportResult): Int = when (result) {
+        CustomAvatarImportResult.TooLarge -> R.string.contacts_custom_avatar_too_large
+        CustomAvatarImportResult.TooManyPixels -> R.string.contacts_custom_avatar_dimensions_too_large
+        CustomAvatarImportResult.UnsupportedAspectRatio -> R.string.contacts_custom_avatar_aspect_ratio_unsupported
+        CustomAvatarImportResult.InvalidImage -> R.string.contacts_custom_avatar_invalid
+        else -> R.string.contacts_custom_avatar_import_failed
     }
 
-    private fun setAvatar(wxId: String, uri: String) {
-        avatarMap = avatarMap + (wxId to uri)
+    /** One-off upgrade of pre-asset values, which were WeChat-granted content URIs. */
+    private fun migrateLegacyReferences() {
+        CustomAvatarAssets.cleanupStaleTempFiles()
+        val legacy = avatarMap.filterValues { !CustomAvatarAssets.isAsset(it) }
+        if (legacy.isEmpty()) return
+        // Imports stay outside the lock so a concurrent pick cannot be blocked behind decoding.
+        val migrated = legacy.mapNotNull { (wxId, ref) ->
+            val result = runCatching { CustomAvatarAssets.import(ref.toUri()) }.getOrNull()
+            (result as? CustomAvatarImportResult.Success)?.let { wxId to it.assetId }
+        }.toMap()
+        WeLogger.i(TAG, "custom avatar migration upgraded ${migrated.size} of ${legacy.size} entries")
+        if (migrated.isNotEmpty()) commitMigration(migrated)
+    }
+
+    @Synchronized
+    private fun commitMigration(migrated: Map<String, String>) {
+        avatarMap = avatarMap + migrated
         clearBitmapCaches()
     }
 
+    @Synchronized
+    private fun setAvatar(wxId: String, ref: String) {
+        val replaced = avatarMap[wxId]
+        avatarMap = avatarMap + (wxId to ref)
+        clearBitmapCaches()
+        replaced?.let(CustomAvatarAssets::delete)
+    }
+
+    @Synchronized
     fun removeAvatar(wxId: String) {
+        val replaced = avatarMap[wxId]
         avatarMap = avatarMap - wxId
         clearBitmapCaches()
+        replaced?.let(CustomAvatarAssets::delete)
     }
 
     private fun clearBitmapCaches() {
@@ -586,14 +633,14 @@ object CustomLocalFriendAvatars : ClickableFeature(), IContactInfoProvider, IRes
     fun onRoundAvatarConfigChanged() {
         clearBitmapCaches()
         boundAvatarViews.entries.toList().forEach { (imageView, binding) ->
-            if (avatarMap[binding.username] != binding.uri) return@forEach
+            if (avatarMap[binding.username] != binding.ref) return@forEach
             val radiusFactor = effectiveRadiusFactor(binding.loaderRadiusFactor)
-            val tag = "${binding.username}$SEP${binding.uri}$SEP$radiusFactor"
+            val tag = "${binding.username}$SEP${binding.ref}$SEP$radiusFactor"
             imageView.setTag(VIEW_TAG_CUSTOM_AVATAR, tag)
-            loadAvatarInto(imageView, binding.uri, radiusFactor)
+            loadAvatarInto(imageView, binding.ref, radiusFactor)
             imageView.post {
                 if (imageView.getTag(VIEW_TAG_CUSTOM_AVATAR) == tag) {
-                    loadAvatarInto(imageView, binding.uri, radiusFactor)
+                    loadAvatarInto(imageView, binding.ref, radiusFactor)
                 }
             }
         }
@@ -689,7 +736,9 @@ object CustomLocalFriendAvatars : ClickableFeature(), IContactInfoProvider, IRes
             onConfirm = {},
             selectionKey = entries,
             isSelected = { it.wxId in entries.keys },
-            avatarModelProvider = { contact -> entries[contact.wxId] ?: contact.avatarUrl },
+            avatarModelProvider = { contact ->
+                entries[contact.wxId]?.let(CustomAvatarAssets::resolve) ?: contact.avatarUrl
+            },
             subtitleProvider = { contact ->
                 if (contact.wxId in entries.keys) {
                     localizedContext.localizedContactsString(
@@ -725,7 +774,7 @@ object CustomLocalFriendAvatars : ClickableFeature(), IContactInfoProvider, IRes
 
     private data class BoundAvatar(
         val username: String,
-        val uri: String,
+        val ref: String,
         val loaderRadiusFactor: Float
     )
 }

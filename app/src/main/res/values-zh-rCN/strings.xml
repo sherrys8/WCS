@@ -2876,6 +2876,11 @@
     <string name="contacts_custom_avatar_set_reopen">自定义头像已设置，重新进入页面或重启微信后生效</string>
     <string name="contacts_custom_avatar_configured">已设置 - %1$s</string>
     <string name="contacts_custom_avatar_select">选择</string>
+    <string name="contacts_custom_avatar_too_large">图片文件过大</string>
+    <string name="contacts_custom_avatar_dimensions_too_large">图片像素过大</string>
+    <string name="contacts_custom_avatar_aspect_ratio_unsupported">图片宽高比过于极端</string>
+    <string name="contacts_custom_avatar_invalid">图片无效</string>
+    <string name="contacts_custom_avatar_import_failed">图片导入失败</string>
     <string name="contacts_detect_create_label_failed">创建标签“%1$s”失败</string>
     <string name="contacts_detect_marking_done">标记完成</string>
     <plurals name="contacts_detect_delete_done">

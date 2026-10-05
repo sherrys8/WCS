@@ -2851,6 +2851,11 @@
     <string name="contacts_custom_avatar_set_reopen">Custom avatar set; reopen the page or restart WeChat to apply it</string>
     <string name="contacts_custom_avatar_configured">Configured — %1$s</string>
     <string name="contacts_custom_avatar_select">Select</string>
+    <string name="contacts_custom_avatar_too_large">Image is too large</string>
+    <string name="contacts_custom_avatar_dimensions_too_large">Image dimensions are too large</string>
+    <string name="contacts_custom_avatar_aspect_ratio_unsupported">Image aspect ratio is too extreme</string>
+    <string name="contacts_custom_avatar_invalid">Invalid image</string>
+    <string name="contacts_custom_avatar_import_failed">Image import failed</string>
     <string name="contacts_detect_create_label_failed">Failed to create label “%1$s”</string>
     <string name="contacts_detect_marking_done">Labeling complete</string>
     <plurals name="contacts_detect_delete_done"><item quantity="one">Deletion complete: %1$d succeeded, %2$d failed</item><item quantity="other">Deletion complete: %1$d succeeded, %2$d failed</item></plurals>
