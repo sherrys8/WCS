@@ -4000,8 +4000,9 @@
     <string name="parse_video_convert">Convert</string>
     <string name="parse_video_send">Send</string>
     <string name="parse_video_sending">Sending...</string>
-    <string name="parse_video_auto_reply">Auto-parse Douyin links in groups</string>
-    <string name="parse_video_auto_reply_description">When someone sends a Douyin share link in a group chat, automatically parse and send the watermark-free video back</string>
+    <string name="parse_video_auto_reply_group">Auto parse</string>
+    <string name="parse_video_auto_reply">Enable auto-parse</string>
+    <string name="parse_video_auto_reply_description">When the other party sends a Douyin or Xiaohongshu share link, parse it automatically and send the watermark-free media back to that conversation</string>
     <string name="parse_video_download">Download</string>
     <string name="parse_video_send_video">Send Video</string>
     <string name="parse_video_delete">Delete File</string>
@@ -4038,8 +4039,9 @@
     <string name="parse_video_route_xhs">Xiaohongshu (dovis)</string>
     <string name="parse_video_route_changed">Parse route switched: %1$s</string>
     <string name="parse_video_line_option">Line %1$d</string>
-    <string name="parse_video_primary_token">51web API Token</string>
-    <string name="parse_video_primary_token_hint">Not set — primary route disabled, backup route only</string>
+    <string name="parse_video_primary_route_group">Primary route (51web)</string>
+    <string name="parse_video_primary_token">API Token</string>
+    <string name="parse_video_primary_token_hint">Not set — get one at dy.51web.eu.org</string>
     <plurals name="parse_video_whitelist_count">
         <item quantity="other">%d conversations</item>
     </plurals>

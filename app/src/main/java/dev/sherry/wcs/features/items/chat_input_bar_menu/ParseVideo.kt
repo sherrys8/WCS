@@ -6,7 +6,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -143,13 +142,13 @@ object ParseVideo : ClickableFeature() {
     private var saveDir by prefOption("parse_video_save_dir", "")
     private var autoReply by prefOption("parse_video_auto_reply", false)
 
-    /** 自动解析白名单：空 = 所有群聊生效；非空 = 仅选中的会话（群聊或私聊用户）生效。 */
+    /** 自动解析白名单：群聊与私聊都可以选，空集 = 任何会话都不解析。 */
     private var autoReplyWhitelist by prefOption("parse_video_whitelist", emptySet<String>())
 
-    /** 当前解析线路（见 ROUTE_* 常量），手动弹窗与群聊自动回复共用同一选择。 */
+    /** 当前解析线路（见 ROUTE_* 常量），手动弹窗与自动解析共用同一选择。 */
     private var parseRoute by prefOption("parse_video_route", ROUTE_AUTO)
 
-    /** 主线路请求的 pid 参数（线路1~线路7 → 数字 1~7），手动弹窗与群聊自动回复共用。 */
+    /** 主线路请求的 pid 参数（线路1~线路7 → 数字 1~7），手动弹窗与自动解析共用。 */
     private var parsePid by prefOption("parse_video_pid", 2)
 
     /** 主线路 token，与汽水线路同思路由用户自带；为空时主线路不可用，auto 直接走备用线路。 */
@@ -208,18 +207,22 @@ object ParseVideo : ClickableFeature() {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
                             .padding(vertical = 4.dp),
                     ) {
-                        SwitchWidget(
-                            title = stringResource(R.string.parse_video_auto_reply),
-                            description = stringResource(R.string.parse_video_auto_reply_description),
-                            checked = autoReplyChecked,
-                            onCheckedChange = {
-                                autoReplyChecked = it
-                                autoReply = it
-                            },
-                        )
-                        SegmentedColumn(contentPadding = PaddingValues(0.dp)) {
+                        SegmentedColumn(title = stringResource(R.string.parse_video_auto_reply_group)) {
+                            item {
+                                SwitchWidget(
+                                    iconPlaceholder = false,
+                                    title = stringResource(R.string.parse_video_auto_reply),
+                                    description = stringResource(R.string.parse_video_auto_reply_description),
+                                    checked = autoReplyChecked,
+                                    onCheckedChange = {
+                                        autoReplyChecked = it
+                                        autoReply = it
+                                    },
+                                )
+                            }
                             item {
                                 BaseWidget(
                                     iconPlaceholder = false,
@@ -247,7 +250,7 @@ object ParseVideo : ClickableFeature() {
 
                         Spacer(Modifier.height(8.dp))
 
-                        SegmentedColumn(contentPadding = PaddingValues(0.dp)) {
+                        SegmentedColumn(title = stringResource(R.string.parse_video_primary_route_group)) {
                             item {
                                 TextFieldDialogWidget(
                                     title = stringResource(R.string.parse_video_primary_token),
@@ -275,7 +278,7 @@ object ParseVideo : ClickableFeature() {
         }
     }
 
-    /** 白名单多选：好友 + 群聊一起列出，选中即生效（空集 = 全部群聊生效）。 */
+    /** 白名单多选：好友 + 群聊一起列出，选中即生效（空集 = 全部不生效）。 */
     private fun showWhitelistSelector(context: android.content.Context, onUpdated: () -> Unit) {
         val contacts = runCatching {
             WeDatabaseApi.getFriends() + WeDatabaseApi.getGroups()
@@ -675,7 +678,7 @@ object ParseVideo : ClickableFeature() {
         outPath
     }
 
-    // ==================== 群聊抖音链接自动解析回复 ====================
+    // ==================== 抖音/小红书链接自动解析回复 ====================
 
     /** 临时发送用目录：外部存储 Download/WcS/ParseVideoTemp（不再落微信内部 cache，便于用户查看与清理） */
     private fun tempSendDir(): java.io.File =
