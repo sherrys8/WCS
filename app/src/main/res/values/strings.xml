@@ -4038,6 +4038,8 @@
     <string name="parse_video_route_xhs">Xiaohongshu (dovis)</string>
     <string name="parse_video_route_changed">Parse route switched: %1$s</string>
     <string name="parse_video_line_option">Line %1$d</string>
+    <string name="parse_video_primary_token">51web API Token</string>
+    <string name="parse_video_primary_token_hint">Not set — primary route disabled, backup route only</string>
     <plurals name="parse_video_whitelist_count">
         <item quantity="other">%d conversations</item>
     </plurals>

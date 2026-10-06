@@ -4069,6 +4069,8 @@
     <string name="parse_video_route_xhs">小红书线路（dovis）</string>
     <string name="parse_video_route_changed">解析线路已切换：%1$s</string>
     <string name="parse_video_line_option">线路%1$d</string>
+    <string name="parse_video_primary_token">51web API Token</string>
+    <string name="parse_video_primary_token_hint">未设置，主线路不可用，仅走备用线路</string>
     <plurals name="parse_video_whitelist_count">
         <item quantity="other">%d 个会话</item>
     </plurals>

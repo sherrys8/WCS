@@ -70,6 +70,7 @@ import dev.sherry.wcs.ui.content.TextButton
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
+import dev.sherry.wcs.ui.content.m3.TextFieldDialogWidget
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.readTextFromClipboard
@@ -106,10 +107,9 @@ object ParseVideo : ClickableFeature() {
 
     private const val TAG = "ParseVideo"
 
-    /** 主解析线路：dy.51web.eu.org（抖音多清晰度无水印，token=dyyy）。 */
+    /** 主解析线路：dy.51web.eu.org（抖音多清晰度无水印），token 由用户在设置里自带。 */
     private const val PARSE_API_PRIMARY = "https://dy.51web.eu.org/api/parse"
     private const val PARSE_API_PRIMARY_ORIGIN = "https://dy.51web.eu.org"
-    private const val PARSE_API_PRIMARY_TOKEN = "dyyy"
 
     /** 备用解析线路：kit9 聚合解析（主线路失败时自动切换）。 */
     private const val PARSE_API = "https://apis.kit9.cn/api/aggregate_videos/api.php"
@@ -151,6 +151,9 @@ object ParseVideo : ClickableFeature() {
 
     /** 主线路请求的 pid 参数（线路1~线路7 → 数字 1~7），手动弹窗与群聊自动回复共用。 */
     private var parsePid by prefOption("parse_video_pid", 2)
+
+    /** 主线路 token，与汽水线路同思路由用户自带；为空时主线路不可用，auto 直接走备用线路。 */
+    private var primaryToken by prefOption("parse_video_primary_token", "")
 
     private fun defaultSaveDir(): String =
         (KnownPaths.downloads / "ParseVideo").absolutePathString()
@@ -196,6 +199,7 @@ object ParseVideo : ClickableFeature() {
     override fun onClick(context: androidx.activity.ComponentActivity) {
         showComposeDialog(context) {
             var autoReplyChecked by remember { mutableStateOf(autoReply) }
+            var primaryTokenState by remember { mutableStateOf(primaryToken) }
             var whitelistRevision by remember { mutableIntStateOf(0) }
             val whitelistCount = remember(whitelistRevision) { autoReplyWhitelist.size }
             AlertDialogContent(
@@ -237,6 +241,26 @@ object ParseVideo : ClickableFeature() {
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     },
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        SegmentedColumn(contentPadding = PaddingValues(0.dp)) {
+                            item {
+                                TextFieldDialogWidget(
+                                    title = stringResource(R.string.parse_video_primary_token),
+                                    value = primaryTokenState,
+                                    onValueChange = {
+                                        primaryTokenState = it
+                                        primaryToken = it.trim()
+                                    },
+                                    dialogTitle = stringResource(R.string.parse_video_primary_token),
+                                    confirmLabel = stringResource(R.string.dialog_confirm),
+                                    dismissLabel = stringResource(R.string.dialog_cancel),
+                                    valueHint = stringResource(R.string.parse_video_primary_token_hint),
+                                    password = true,
                                 )
                             }
                         }
@@ -424,25 +448,38 @@ object ParseVideo : ClickableFeature() {
         }
         when (parseRoute) {
             // 用户手动指定线路：严格只走所选线路，失败直接报错，不再静默回退
-            ROUTE_PRIMARY -> parseByPrimary(link).getOrElse { throw it }
+            ROUTE_PRIMARY -> {
+                requirePrimaryToken()
+                parseByPrimary(link).getOrElse { throw it }
+            }
             ROUTE_BACKUP -> parseByBackup(link).getOrElse { throw it }
             ROUTE_XHS -> parseByXhs(link).getOrElse { throw it }
             // 默认：主线路优先（多清晰度无水印）；失败/无有效地址自动回退 kit9 聚合解析
-            else -> parseByPrimary(link).getOrElse { primaryError ->
-                WeLogger.w(TAG, "primary parse failed, fallback to backup: ${primaryError.message}")
-                parseByBackup(link).getOrElse { backupError ->
-                    WeLogger.w(TAG, "backup parse also failed: ${backupError.message}")
-                    throw backupError
+            else -> {
+                if (primaryToken.isBlank()) {
+                    WeLogger.i(TAG, "primary token not configured; using backup route")
+                    return@runCatching parseByBackup(link).getOrElse { throw it }
+                }
+                parseByPrimary(link).getOrElse { primaryError ->
+                    WeLogger.w(TAG, "primary parse failed, fallback to backup: ${primaryError.message}")
+                    parseByBackup(link).getOrElse { backupError ->
+                        WeLogger.w(TAG, "backup parse also failed: ${backupError.message}")
+                        throw backupError
+                    }
                 }
             }
         }
+    }
+
+    private fun requirePrimaryToken() {
+        if (primaryToken.isBlank()) error("未设置主线路 token，请在「短视频解析」设置中填写")
     }
 
     /** 主线路：dy.51web.eu.org。结果映射成统一的 VideoParseResult 供 UI 层无感消费。 */
     private fun parseByPrimary(link: String): Result<VideoParseResult> = runCatching {
         // pid 为线路编号（1~7，用户左下角「线路N」选择框决定），传数字而非「线路N」文本
         val url = PARSE_API_PRIMARY +
-            "?token=" + java.net.URLEncoder.encode(PARSE_API_PRIMARY_TOKEN, "UTF-8") +
+            "?token=" + java.net.URLEncoder.encode(primaryToken, "UTF-8") +
             "&pid=" + parsePid +
             "&url=" + java.net.URLEncoder.encode(link, "UTF-8")
         val request = browserParseRequest(url, PARSE_API_PRIMARY_ORIGIN)
