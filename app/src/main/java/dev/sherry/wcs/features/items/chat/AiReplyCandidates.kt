@@ -3,6 +3,8 @@ package dev.sherry.wcs.features.items.chat
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -38,9 +41,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Auto_awesome
 import com.composables.icons.materialsymbols.outlined.Keyboard_arrow_down
@@ -76,6 +82,7 @@ import dev.sherry.wcs.utils.android.showToast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /**
  * Long-press a message to generate reply candidates for it.
@@ -300,18 +307,26 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // 齿轮靠 Row 末端：中间用 spacer 吃掉剩余宽度。
-                    // 给标题 Box 加 weight(fill = false) 不行 —— 摆放按实际宽度推进，齿轮会贴到语气后面。
-                    Box {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    // 给标题 Row 加 weight(fill = false) 不行 —— 摆放按实际宽度推进，齿轮会贴到语气后面。
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(text = stringResource(R.string.ai_reply_menu))
+                        Text(
+                            text = "·",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        // 锚点跟着手指：DropdownMenuPopup 锚在父 layout 上，所以在按下位置
+                        // 放一个零尺寸锚点 Box，气泡就从点击处展开（同 DropDownMenuWidget 的做法）
+                        var pressPosition by remember { mutableStateOf(Offset.Zero) }
+                        Box(
+                            modifier = Modifier.pointerInput(Unit) {
+                                awaitEachGesture {
+                                    pressPosition = awaitFirstDown(requireUnconsumed = false).position
+                                }
+                            },
                         ) {
-                            Text(text = stringResource(R.string.ai_reply_menu))
-                            Text(
-                                text = "·",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            // 点击区只覆盖语气值和箭头，标题本身不可点
                             Row(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
@@ -333,20 +348,26 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                     modifier = Modifier.size(20.dp),
                                 )
                             }
+                            Box(
+                                modifier = Modifier.offset {
+                                    IntOffset(pressPosition.x.roundToInt(), pressPosition.y.roundToInt())
+                                },
+                            ) {
+                                ExpressiveOptionDropdown(
+                                    expanded = styleMenuExpanded,
+                                    value = style,
+                                    options = STYLE_OPTIONS,
+                                    onDismissRequest = { styleMenuExpanded = false },
+                                    onValueChange = { chosen ->
+                                        style = chosen
+                                        lastStyle = chosen
+                                        stylePrompt = promptFor(chosen)
+                                        editingPrompt = false
+                                        styleMenuExpanded = false
+                                    },
+                                )
+                            }
                         }
-                        ExpressiveOptionDropdown(
-                            expanded = styleMenuExpanded,
-                            value = style,
-                            options = STYLE_OPTIONS,
-                            onDismissRequest = { styleMenuExpanded = false },
-                            onValueChange = { chosen ->
-                                style = chosen
-                                lastStyle = chosen
-                                stylePrompt = promptFor(chosen)
-                                editingPrompt = false
-                                styleMenuExpanded = false
-                            },
-                        )
                     }
                     Spacer(Modifier.weight(1f))
                     IconButton(onClick = { showApiSettingsDialog(context) }) {
@@ -483,6 +504,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                     } else {
                         // 选中后收成一行摘要 + 「换一条」下拉，草稿紧跟其后，不必滚动即可发送
                         var pickingAnother by remember { mutableStateOf(false) }
+                        var anotherPressPosition by remember { mutableStateOf(Offset.Zero) }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -496,7 +518,14 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
                             )
-                            Box {
+                            Box(
+                                modifier = Modifier.pointerInput(Unit) {
+                                    awaitEachGesture {
+                                        anotherPressPosition =
+                                            awaitFirstDown(requireUnconsumed = false).position
+                                    }
+                                },
+                            ) {
                                 TextButton(onClick = { pickingAnother = true }) {
                                     Text(stringResource(R.string.ai_reply_pick_another))
                                     Icon(
@@ -505,19 +534,28 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                         modifier = Modifier.size(18.dp),
                                     )
                                 }
-                                ExpressiveOptionDropdown(
-                                    expanded = pickingAnother,
-                                    value = selected,
-                                    options = candidates.mapIndexed { index, candidate ->
-                                        DropdownOption(index, candidate)
+                                Box(
+                                    modifier = Modifier.offset {
+                                        IntOffset(
+                                            anotherPressPosition.x.roundToInt(),
+                                            anotherPressPosition.y.roundToInt(),
+                                        )
                                     },
-                                    onDismissRequest = { pickingAnother = false },
-                                    onValueChange = { index ->
-                                        selected = index
-                                        draft = candidates[index]
-                                        pickingAnother = false
-                                    },
-                                )
+                                ) {
+                                    ExpressiveOptionDropdown(
+                                        expanded = pickingAnother,
+                                        value = selected,
+                                        options = candidates.mapIndexed { index, candidate ->
+                                            DropdownOption(index, candidate)
+                                        },
+                                        onDismissRequest = { pickingAnother = false },
+                                        onValueChange = { index ->
+                                            selected = index
+                                            draft = candidates[index]
+                                            pickingAnother = false
+                                        },
+                                    )
+                                }
                             }
                         }
 
