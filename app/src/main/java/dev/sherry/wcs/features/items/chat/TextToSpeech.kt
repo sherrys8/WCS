@@ -96,8 +96,8 @@ object TextToSpeech :
     private const val TAG = "TextToSpeech"
     private const val API_BASE = "https://peiyinmofang.com"
 
-    private const val BACKEND_MOFA = 0
-    private const val BACKEND_DOUBAO = 1
+    const val BACKEND_MOFA = 0
+    const val BACKEND_DOUBAO = 1
 
     // 豆包网页端逆向协议: 鉴权在 WebSocket 握手阶段完成, 依赖登录态 Cookie
     private const val DOUBAO_WS = "wss://ws-samantha.doubao.com/samantha/audio/tts"
@@ -131,7 +131,7 @@ object TextToSpeech :
 
     data class TtsVoice(val voiceId: String, val label: String)
 
-    private val DEFAULT_VOICES = listOf(
+    val DEFAULT_VOICES = listOf(
         TtsVoice("琅琊榜-梅长苏", "琅琊榜-梅长苏"),
         TtsVoice("琅琊榜-靖王", "琅琊榜-靖王"),
         TtsVoice("甄嬛传-甄嬛", "甄嬛传-甄嬛"),
@@ -139,7 +139,7 @@ object TextToSpeech :
 
     data class DoubaoVoice(val id: String, val label: String)
 
-    private val DOUBAO_VOICES = listOf(
+    val DOUBAO_VOICES = listOf(
         DoubaoVoice("zh_female_taozi_conversation_v4_wvae_bigtts", "桃子 · 女声对话"),
         DoubaoVoice("zh_female_shuangkuai_emo_v3_wvae_bigtts", "爽快 · 女声"),
         DoubaoVoice("zh_female_tianmei_conversation_v4_wvae_bigtts", "甜美 · 女声"),
@@ -159,7 +159,7 @@ object TextToSpeech :
             .build()
     }
 
-    private val EMOTIONS = listOf(
+    val EMOTIONS = listOf(
         "平静" to floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
         "开心" to floatArrayOf(1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
         "悲伤" to floatArrayOf(0f, 1f, 0f, 0f, 0f, 0f, 0f, 0f),
@@ -558,7 +558,7 @@ object TextToSpeech :
         }
     }
 
-    private fun showPreviewDialog(context: android.content.Context, talker: String, wavPath: String) {
+    fun showPreviewDialog(context: android.content.Context, talker: String, wavPath: String) {
         showComposeDialog(context, dismissOnTouchOutside = false) {
             var playing by remember { mutableStateOf(false) }
             var durationMs by remember { mutableIntStateOf(0) }
@@ -650,7 +650,13 @@ object TextToSpeech :
         return "%d:%02d".format(totalSec / 60, totalSec % 60)
     }
 
-    private fun generateVoice(text: String, voiceId: String, emoVec: FloatArray, cb: (String?, String) -> Unit) {
+    fun generateVoice(
+        text: String,
+        voiceId: String,
+        emoVec: FloatArray,
+        key: String = apiKey,
+        cb: (String?, String) -> Unit,
+    ) {
         Thread {
             var wavPath: String? = null
             var error = ""
@@ -660,7 +666,7 @@ object TextToSpeech :
                     put("text", text)
                     put("emoVec", JSONArray(emoVec.map { it.toDouble() }))
                 }.toString()
-                val resp = httpPostJson("$API_BASE/api/open/v1/tts/simple-generate", body)
+                val resp = httpPostJson("$API_BASE/api/open/v1/tts/simple-generate", body, key)
                 if (resp.isEmpty()) {
                     error = "接口无响应 (HTTP 非 200 或网络异常)"
                 } else {
@@ -700,7 +706,12 @@ object TextToSpeech :
             "&region=&sys_region=&samantha_web=1&use-olympus-account=1&web_tab_id=${UUID.randomUUID()}"
     }
 
-    private fun generateVoiceDoubao(text: String, speaker: String, cb: (String?, String) -> Unit) {
+    fun generateVoiceDoubao(
+        text: String,
+        speaker: String,
+        cookie: String = doubaoCookie,
+        cb: (String?, String) -> Unit,
+    ) {
         Thread {
             val audio = ByteArrayOutputStream()
             val closed = CountDownLatch(1)
@@ -713,7 +724,7 @@ object TextToSpeech :
                 .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
                 .header("Cache-Control", "no-cache")
                 .header("Pragma", "no-cache")
-                .header("Cookie", doubaoCookie)
+                .header("Cookie", cookie)
                 .build()
 
             val ws = doubaoClient.newWebSocket(request, object : WebSocketListener() {
@@ -781,7 +792,7 @@ object TextToSpeech :
         }.start()
     }
 
-    private fun sendVoiceTo(talker: String, wavPath: String, cb: (Boolean) -> Unit) {
+    fun sendVoiceTo(talker: String, wavPath: String, cb: (Boolean) -> Unit) {
         Thread {
             val ok = runCatching {
                 val silkPath = wavPath.substringBeforeLast('.') + ".silk"
@@ -793,10 +804,10 @@ object TextToSpeech :
         }.start()
     }
 
-    private fun fetchVoices(): List<TtsVoice> {
-        if (apiKey.isBlank()) return DEFAULT_VOICES
+    fun fetchVoices(key: String = apiKey): List<TtsVoice> {
+        if (key.isBlank()) return DEFAULT_VOICES
         return try {
-            val resp = httpGet("$API_BASE/api/open/v1/voices")
+            val resp = httpGet("$API_BASE/api/open/v1/voices", key)
             val root = JSONObject(resp)
             val data = root.optJSONArray("data") ?: return DEFAULT_VOICES
             val list = DEFAULT_VOICES.toMutableList()
@@ -822,10 +833,10 @@ object TextToSpeech :
         }
     }
 
-    private fun fetchUserVoices(): List<TtsVoice> {
-        if (apiKey.isBlank()) return emptyList()
+    fun fetchUserVoices(key: String = apiKey): List<TtsVoice> {
+        if (key.isBlank()) return emptyList()
         return try {
-            val resp = httpGet("$API_BASE/api/open/v1/user-voices")
+            val resp = httpGet("$API_BASE/api/open/v1/user-voices", key)
             val root = JSONObject(resp)
             val data = root.optJSONArray("data") ?: return emptyList()
             buildList {
@@ -843,12 +854,12 @@ object TextToSpeech :
         }
     }
 
-    private fun httpGet(urlStr: String): String {
+    private fun httpGet(urlStr: String, key: String = apiKey): String {
         val c = URL(urlStr).openConnection() as HttpURLConnection
         c.requestMethod = "GET"
         c.connectTimeout = 15000
         c.readTimeout = 15000
-        c.setRequestProperty("Authorization", "Bearer $apiKey")
+        c.setRequestProperty("Authorization", "Bearer $key")
         return if (c.responseCode == 200) {
             c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         } else {
@@ -856,14 +867,14 @@ object TextToSpeech :
         }
     }
 
-    private fun httpPostJson(urlStr: String, jsonBody: String): String {
+    private fun httpPostJson(urlStr: String, jsonBody: String, key: String = apiKey): String {
         val c = URL(urlStr).openConnection() as HttpURLConnection
         c.requestMethod = "POST"
         c.connectTimeout = 15000
         c.readTimeout = 30000
         c.doOutput = true
         c.setRequestProperty("Content-Type", "application/json")
-        c.setRequestProperty("Authorization", "Bearer $apiKey")
+        c.setRequestProperty("Authorization", "Bearer $key")
         c.outputStream.use { it.write(jsonBody.toByteArray(Charsets.UTF_8)) }
         return if (c.responseCode == 200) {
             c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
