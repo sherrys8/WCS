@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -1489,12 +1490,17 @@ fun showParseDialog(context: android.content.Context) {
                         }
                     }
                 },
-                dismissButton = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                confirmButton = {
+                    // 底部按钮数量随解析/下载状态增长，硬排一行会把文字挤成竖排：
+                    // 改用 FlowRow，每个按钮按自身宽度换行
+                    val r = parseResult
+                    val data = r?.parsedData()
+                    val hasVideo = data?.video_link?.isNotBlank() == true
+                    FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        // 左下角线路选择：当前线路为自动/主线路时可选线路1~线路7（数字作为 pid 传给主线路接口）
+                        // 线路选择：当前线路为自动/主线路时可选线路1~线路7（数字作为 pid 传给主线路接口）
                         if (selectedRoute == ROUTE_AUTO || selectedRoute == ROUTE_PRIMARY) {
                             Box {
                                 OutlinedButton(onClick = { pidMenuExpanded = true }) {
@@ -1533,15 +1539,8 @@ fun showParseDialog(context: android.content.Context) {
                         TextButton(onClick = onDismiss, enabled = !loading && !sending) {
                             Text(stringResource(R.string.dialog_cancel))
                         }
-                    }
-                },
-                confirmButton = {
-                    // ===== 按钮组：解析成功后视频/图集下载按钮常驻，下载完再追加发送/删除 =====
-                    val r = parseResult
-                    val data = r?.parsedData()
-                    val hasVideo = data?.video_link?.isNotBlank() == true
-                    if (r != null) {
-                        Column(horizontalAlignment = Alignment.End) {
+                        // 解析成功后下载按钮常驻，下载完再追加发送/删除
+                        if (r != null) {
                             // 纯视频保持单下载按钮；有图集（含混合）改为「下载全部文件」一键取视频+图集
                             if (hasVideo && r.imageList.isEmpty()) {
                                 Button(
@@ -1557,7 +1556,6 @@ fun showParseDialog(context: android.content.Context) {
                                 }
                             }
                             if (r.imageList.isNotEmpty()) {
-                                Spacer(Modifier.height(4.dp))
                                 Button(
                                     onClick = { doDownloadAll() },
                                     enabled = !downloading && !sending,
@@ -1569,32 +1567,21 @@ fun showParseDialog(context: android.content.Context) {
                                 }
                             }
                             if (downloadedFiles.isNotEmpty()) {
-                                Spacer(Modifier.height(4.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Button(
-                                        onClick = { sendDownloadedFiles() },
-                                        modifier = Modifier.weight(1f),
-                                        enabled = !downloading && !sending,
-                                    ) {
-                                        Text(stringResource(R.string.parse_video_send_files))
-                                    }
-                                    OutlinedButton(
-                                        onClick = { deleteDownloadedFile() },
-                                        modifier = Modifier.weight(1f),
-                                    ) {
-                                        Text(
-                                            stringResource(R.string.parse_video_delete),
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    }
+                                Button(
+                                    onClick = { sendDownloadedFiles() },
+                                    enabled = !downloading && !sending,
+                                ) { Text(stringResource(R.string.parse_video_send_files)) }
+                                OutlinedButton(onClick = { deleteDownloadedFile() }) {
+                                    Text(
+                                        stringResource(R.string.parse_video_delete),
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
                                 }
                             }
                         }
                     }
                 },
+                dismissButton = null,
             )
         }
     }
