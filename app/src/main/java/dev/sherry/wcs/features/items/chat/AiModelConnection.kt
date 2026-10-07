@@ -15,19 +15,18 @@ import org.json.JSONObject
 internal object AiModelConnection {
 
     /**
-     * 测试连接：向「API 地址 + API 路径」拼出的端点原样发起 OpenAI Chat Completions
-     * 格式的最小请求，不做额外的 /chat/completions 拼接——用户填什么路径就测什么路径。
-     * HTTP 2xx 且响应包含「OK」才算成功。
+     * 测试连接：按 [AiApiConfig.requestEndpoint] 拼出的端点（与真正生成回复时同一个 URL）
+     * 发起 OpenAI Chat Completions 格式的最小请求。HTTP 2xx 且响应包含「OK」才算成功。
      */
-    suspend fun testConnection(): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun testConnection(config: AiApiConfig): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            val endpoint = AiModelConfig.resolvedBaseUrl().trimEnd('/')
+            val endpoint = config.requestEndpoint()
             check(endpoint.isNotEmpty()) { "未配置 API 地址" }
-            check(AiModelConfig.apiKey.isNotBlank()) { "未配置 API Key" }
-            check(AiModelConfig.modelId.isNotBlank()) { "未配置模型名称" }
+            check(config.apiKey.isNotBlank()) { "未配置 API Key" }
+            check(config.modelId.isNotBlank()) { "未配置模型名称" }
 
             val body = JSONObject()
-                .put("model", AiModelConfig.modelId.trim())
+                .put("model", config.modelId.trim())
                 .put("stream", false)
                 .put(
                     "messages",
@@ -44,7 +43,7 @@ internal object AiModelConnection {
                 connectTimeout = 15_000
                 readTimeout = 30_000
                 setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("Authorization", "Bearer ${AiModelConfig.apiKey.trim()}")
+                setRequestProperty("Authorization", "Bearer ${config.apiKey.trim()}")
                 doOutput = true
             }
             try {
@@ -69,11 +68,11 @@ internal object AiModelConnection {
     }
 
     /** 获取模型列表：GET {已填端点去掉 /chat/completions 后缀后拼接}/models，从 data[].id 提取。 */
-    suspend fun fetchModels(): Result<List<String>> = withContext(Dispatchers.IO) {
+    suspend fun fetchModels(config: AiApiConfig): Result<List<String>> = withContext(Dispatchers.IO) {
         runCatching {
-            val base = AiModelConfig.resolvedBaseUrl().trimEnd('/')
+            val base = config.resolvedBaseUrl().trimEnd('/')
             check(base.isNotEmpty()) { "未配置 API 地址" }
-            check(AiModelConfig.apiKey.isNotBlank()) { "未配置 API Key" }
+            check(config.apiKey.isNotBlank()) { "未配置 API Key" }
 
             val endpoint = when {
                 base.endsWith("/chat/completions") -> base.removeSuffix("/chat/completions").trimEnd('/') + "/models"
@@ -85,7 +84,7 @@ internal object AiModelConnection {
                 connectTimeout = 15_000
                 readTimeout = 30_000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("Authorization", "Bearer ${AiModelConfig.apiKey.trim()}")
+                setRequestProperty("Authorization", "Bearer ${config.apiKey.trim()}")
             }
             try {
                 val code = conn.responseCode

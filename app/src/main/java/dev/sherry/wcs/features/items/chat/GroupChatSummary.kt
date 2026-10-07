@@ -69,7 +69,6 @@ import com.composables.icons.materialsymbols.outlined.Settings
 import com.composables.icons.materialsymbols.outlined.Tune
 import dev.sherry.wcs.agent.data.entity.ModelEntity
 import dev.sherry.wcs.agent.data.entity.ModelProviderEntity
-import dev.sherry.wcs.agent.data.entity.ModelProviderType
 import dev.sherry.wcs.agent.model.LlmMessage
 import dev.sherry.wcs.agent.model.LlmRole
 import dev.sherry.wcs.agent.model.LlmStreamEvent
@@ -614,7 +613,6 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
     @Composable
     private fun AiSettingsDialog(onDismiss: () -> Unit) {
         fun saveSetting(save: () -> Unit) {
-            AiModelConfig.providerTypeName = ModelProviderType.OPENAI_CHAT_COMPLETION.name
             save()
             showToast("已保存 API 配置")
         }
@@ -717,7 +715,7 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
                                         testOutcome = null
                                         testError = null
                                         scope.launch {
-                                            val r = AiModelConnection.testConnection()
+                                            val r = AiModelConnection.testConnection(AiModelConfig)
                                             testing = false
                                             r.onSuccess {
                                                 testOutcome = true
@@ -743,7 +741,7 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
                                         fetching = true
                                         fetchError = null
                                         scope.launch {
-                                            val r = AiModelConnection.fetchModels()
+                                            val r = AiModelConnection.fetchModels(AiModelConfig)
                                             fetching = false
                                             r.onSuccess { list ->
                                                 models = list

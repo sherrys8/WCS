@@ -1,6 +1,10 @@
 package dev.sherry.wcs.features.items.chat
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
@@ -11,11 +15,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -29,12 +35,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Auto_awesome
 import com.composables.icons.materialsymbols.outlined.Keyboard_arrow_down
+import com.composables.icons.materialsymbols.outlined.Settings
 import dev.sherry.wcs.R
 import dev.sherry.wcs.agent.data.entity.ModelEntity
 import dev.sherry.wcs.agent.data.entity.ModelProviderEntity
@@ -51,12 +59,12 @@ import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.m3.BaseItemContainer
-import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
 import dev.sherry.wcs.ui.content.m3.ExpressiveOptionDropdown
 import dev.sherry.wcs.ui.content.m3.IntNumberPickerWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
+import dev.sherry.wcs.ui.content.m3.TextFieldDialogWidget
 import dev.sherry.wcs.ui.utils.ReplyIcon
 import dev.sherry.wcs.ui.utils.ShowComposeDialogScope
 import dev.sherry.wcs.ui.utils.showComposeDialog
@@ -229,6 +237,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
     }
 
     private fun showCandidateDialog(context: android.content.Context, talker: String, source: String) {
+        AiReplyApiConfig.inheritSharedConfigOnce()
         showComposeDialog(context, directlyDismissable = false) {
             CandidateContent(talker, source)
         }
@@ -271,7 +280,23 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
         }
 
         AlertDialogContent(
-            title = { Text(stringResource(R.string.ai_reply_menu)) },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.ai_reply_menu),
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { showApiSettingsDialog(context) }) {
+                        Icon(
+                            imageVector = MaterialSymbols.Outlined.Settings,
+                            contentDescription = stringResource(R.string.ui_group_ai_settings_title),
+                        )
+                    }
+                }
+            },
             text = {
                 Column(
                     modifier = Modifier
@@ -280,26 +305,52 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                         .padding(vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    // 被长按的原文是这一页的主角，给整块色底和正文字号，别再当辅助说明
                     Text(
                         text = source,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                     )
 
-                    DropDownMenuWidget(
-                        iconPlaceholder = true,
-                        title = stringResource(R.string.ai_reply_style),
-                        description = null,
-                        value = style,
-                        options = STYLE_OPTIONS,
-                        onValueChange = { chosen ->
-                            style = chosen
-                            lastStyle = chosen
-                            stylePrompt = promptFor(chosen)
-                            editingPrompt = false
-                        },
-                    )
+                    var styleMenuExpanded by remember { mutableStateOf(false) }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.ai_reply_style),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Box {
+                            StylePill(text = style, onClick = { styleMenuExpanded = true })
+                            ExpressiveOptionDropdown(
+                                expanded = styleMenuExpanded,
+                                value = style,
+                                options = STYLE_OPTIONS,
+                                onDismissRequest = { styleMenuExpanded = false },
+                                onValueChange = { chosen ->
+                                    style = chosen
+                                    lastStyle = chosen
+                                    stylePrompt = promptFor(chosen)
+                                    editingPrompt = false
+                                    styleMenuExpanded = false
+                                },
+                            )
+                        }
+                        if (!editingPrompt) {
+                            TextButton(onClick = { editingPrompt = true }) {
+                                Text(stringResource(R.string.ai_reply_style_edit))
+                            }
+                        }
+                    }
 
                     if (editingPrompt) {
                         OutlinedTextField(
@@ -334,9 +385,6 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                             maxLines = 2,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        TextButton(onClick = { editingPrompt = true }) {
-                            Text(stringResource(R.string.ai_reply_style_edit))
-                        }
                     }
 
                     if (selected < 0) {
@@ -471,31 +519,202 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
         )
     }
 
+    /** 语气选择器：只占一行的小胶囊，点开还是同一套 M3 下拉列表。 */
+    @Composable
+    private fun StylePill(text: String, onClick: () -> Unit) {
+        val shape = RoundedCornerShape(16.dp)
+        val accent = MaterialTheme.colorScheme.primary
+        Row(
+            modifier = Modifier
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceBright)
+                .border(BorderStroke(1.dp, accent.copy(alpha = 0.4f)), shape)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = accent,
+            )
+            Icon(
+                imageVector = MaterialSymbols.Outlined.Keyboard_arrow_down,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+
+    private fun showApiSettingsDialog(context: android.content.Context) {
+        showComposeDialog(context) { ApiSettingsContent() }
+    }
+
+    @Composable
+    private fun ShowComposeDialogScope.ApiSettingsContent() {
+        val scope = rememberCoroutineScope()
+        var baseUrl by remember { mutableStateOf(AiReplyApiConfig.baseUrl) }
+        var apiPath by remember { mutableStateOf(AiReplyApiConfig.apiPath) }
+        var apiKey by remember { mutableStateOf(AiReplyApiConfig.apiKey) }
+        var modelId by remember { mutableStateOf(AiReplyApiConfig.modelId) }
+        var testing by remember { mutableStateOf(false) }
+        var testOutcome by remember { mutableStateOf<Boolean?>(null) }
+        var testError by remember { mutableStateOf<String?>(null) }
+
+        AlertDialogContent(
+            title = {
+                Text(
+                    text = stringResource(R.string.ui_group_ai_settings_title),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    SegmentedColumn {
+                        item {
+                            TextFieldDialogWidget(
+                                title = stringResource(R.string.ui_group_ai_settings_base_url),
+                                value = baseUrl,
+                                onValueChange = {
+                                    baseUrl = it.trim()
+                                    AiReplyApiConfig.baseUrl = baseUrl
+                                },
+                                dialogTitle = stringResource(R.string.ui_group_ai_settings_base_url),
+                                confirmLabel = stringResource(R.string.dialog_confirm),
+                                dismissLabel = stringResource(R.string.dialog_cancel),
+                                valueHint = stringResource(R.string.ui_group_ai_settings_base_url_hint),
+                            )
+                        }
+                        item {
+                            TextFieldDialogWidget(
+                                title = stringResource(R.string.ui_group_ai_settings_path),
+                                value = apiPath,
+                                onValueChange = {
+                                    apiPath = it.trim()
+                                    AiReplyApiConfig.apiPath = apiPath
+                                },
+                                dialogTitle = stringResource(R.string.ui_group_ai_settings_path),
+                                confirmLabel = stringResource(R.string.dialog_confirm),
+                                dismissLabel = stringResource(R.string.dialog_cancel),
+                                valueHint = stringResource(R.string.ui_group_ai_settings_path_hint),
+                            )
+                        }
+                        item {
+                            TextFieldDialogWidget(
+                                title = stringResource(R.string.ui_group_ai_settings_api_key),
+                                value = apiKey,
+                                onValueChange = {
+                                    apiKey = it.trim()
+                                    AiReplyApiConfig.apiKey = apiKey
+                                },
+                                dialogTitle = stringResource(R.string.ui_group_ai_settings_api_key),
+                                confirmLabel = stringResource(R.string.dialog_confirm),
+                                dismissLabel = stringResource(R.string.dialog_cancel),
+                                valueHint = stringResource(R.string.ui_group_ai_settings_api_key_hint),
+                                password = true,
+                            )
+                        }
+                        item {
+                            TextFieldDialogWidget(
+                                title = stringResource(R.string.ui_group_ai_settings_model_id),
+                                value = modelId,
+                                onValueChange = {
+                                    modelId = it.trim()
+                                    AiReplyApiConfig.modelId = modelId
+                                },
+                                dialogTitle = stringResource(R.string.ui_group_ai_settings_model_id),
+                                confirmLabel = stringResource(R.string.dialog_confirm),
+                                dismissLabel = stringResource(R.string.dialog_cancel),
+                            )
+                        }
+                    }
+
+                    testOutcome?.let { ok ->
+                        Text(
+                            text = if (ok) {
+                                stringResource(R.string.ui_group_ai_settings_test_ok)
+                            } else {
+                                stringResource(
+                                    R.string.ui_group_ai_settings_test_failed_toast,
+                                    testError.orEmpty(),
+                                )
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (ok) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        testing = true
+                        testOutcome = null
+                        testError = null
+                        scope.launch {
+                            val result = AiModelConnection.testConnection(AiReplyApiConfig)
+                            testing = false
+                            result.fold(
+                                onSuccess = { testOutcome = true },
+                                onFailure = { failure ->
+                                    testOutcome = false
+                                    testError = failure.message
+                                },
+                            )
+                        }
+                    },
+                    enabled = !testing,
+                ) {
+                    Text(
+                        stringResource(
+                            if (testing) R.string.ui_group_ai_settings_testing
+                            else R.string.ui_group_ai_settings_test,
+                        ),
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.dialog_close)) }
+            },
+        )
+    }
+
     private suspend fun requestCandidates(
         talker: String,
         source: String,
         style: String,
         stylePrompt: String,
     ): List<String> = withContext(Dispatchers.IO) {
-        check(AiModelConfig.baseUrl.isNotBlank()) { localizedChatString(R.string.ai_reply_err_base_url) }
-        check(AiModelConfig.apiKey.isNotBlank()) { localizedChatString(R.string.ai_reply_err_api_key) }
-        check(AiModelConfig.modelId.isNotBlank()) { localizedChatString(R.string.ai_reply_err_model_id) }
+        check(AiReplyApiConfig.baseUrl.isNotBlank()) { localizedChatString(R.string.ai_reply_err_base_url) }
+        check(AiReplyApiConfig.apiKey.isNotBlank()) { localizedChatString(R.string.ai_reply_err_api_key) }
+        check(AiReplyApiConfig.modelId.isNotBlank()) { localizedChatString(R.string.ai_reply_err_model_id) }
 
         val count = candidateCount.coerceIn(1, MAX_CANDIDATES)
         val provider = ModelProviderEntity(
             id = "ai_reply_candidates",
-            type = AiModelConfig.providerType(),
+            type = AiReplyApiConfig.providerType(),
             name = technicalId,
-            baseUrl = AiModelConfig.resolvedBaseUrl(),
-            apiKey = AiModelConfig.apiKey.trim(),
+            baseUrl = AiReplyApiConfig.resolvedBaseUrl(),
+            apiKey = AiReplyApiConfig.apiKey.trim(),
         )
         val model = ModelEntity(
             id = "ai_reply_candidates_model",
             providerId = provider.id,
-            modelIdRemote = AiModelConfig.modelId.trim(),
+            modelIdRemote = AiReplyApiConfig.modelId.trim(),
             reasoningEffort = null,
             customJsonOverride = null,
-            displayName = AiModelConfig.modelId.trim(),
+            displayName = AiReplyApiConfig.modelId.trim(),
         )
 
         val systemPrompt = buildString {
