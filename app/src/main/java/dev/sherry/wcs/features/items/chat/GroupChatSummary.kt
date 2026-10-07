@@ -617,6 +617,12 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
             showToast("已保存 API 配置")
         }
 
+        // MMKV 偏好不是 Compose 快照状态：行内显示必须走本地状态，否则保存后不刷新
+        var baseUrl by remember { mutableStateOf(AiModelConfig.baseUrl) }
+        var apiPath by remember { mutableStateOf(AiModelConfig.apiPath) }
+        var apiKey by remember { mutableStateOf(AiModelConfig.apiKey) }
+        var modelId by remember { mutableStateOf(AiModelConfig.modelId) }
+
         var testing by remember { mutableStateOf(false) }
         var fetching by remember { mutableStateOf(false) }
         var testOutcome by remember { mutableStateOf<Boolean?>(null) }
@@ -630,6 +636,7 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
             ModelPickerDialog(
                 models = models,
                 onPick = {
+                    modelId = it
                     AiModelConfig.modelId = it
                     showModelPicker = false
                     showToast("已选择模型 $it")
@@ -661,8 +668,8 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
                         item {
                             TextFieldDialogWidget(
                                 title = stringResource(R.string.ui_group_ai_settings_base_url),
-                                value = AiModelConfig.baseUrl,
-                                onValueChange = { saveSetting { AiModelConfig.baseUrl = it.trim() } },
+                                value = baseUrl,
+                                onValueChange = { saveSetting { baseUrl = it.trim(); AiModelConfig.baseUrl = baseUrl } },
                                 dialogTitle = stringResource(R.string.ui_group_ai_settings_base_url),
                                 confirmLabel = stringResource(R.string.dialog_confirm),
                                 dismissLabel = stringResource(R.string.dialog_cancel),
@@ -672,8 +679,8 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
                         item {
                             TextFieldDialogWidget(
                                 title = stringResource(R.string.ui_group_ai_settings_path),
-                                value = AiModelConfig.apiPath,
-                                onValueChange = { saveSetting { AiModelConfig.apiPath = it.trim() } },
+                                value = apiPath,
+                                onValueChange = { saveSetting { apiPath = it.trim(); AiModelConfig.apiPath = apiPath } },
                                 dialogTitle = stringResource(R.string.ui_group_ai_settings_path),
                                 confirmLabel = stringResource(R.string.dialog_confirm),
                                 dismissLabel = stringResource(R.string.dialog_cancel),
@@ -683,8 +690,8 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
                         item {
                             TextFieldDialogWidget(
                                 title = stringResource(R.string.ui_group_ai_settings_api_key),
-                                value = AiModelConfig.apiKey,
-                                onValueChange = { saveSetting { AiModelConfig.apiKey = it.trim() } },
+                                value = apiKey,
+                                onValueChange = { saveSetting { apiKey = it.trim(); AiModelConfig.apiKey = apiKey } },
                                 dialogTitle = stringResource(R.string.ui_group_ai_settings_api_key),
                                 confirmLabel = stringResource(R.string.dialog_confirm),
                                 dismissLabel = stringResource(R.string.dialog_cancel),
@@ -695,8 +702,8 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
                         item {
                             TextFieldDialogWidget(
                                 title = stringResource(R.string.ui_group_ai_settings_model_id),
-                                value = AiModelConfig.modelId,
-                                onValueChange = { saveSetting { AiModelConfig.modelId = it.trim() } },
+                                value = modelId,
+                                onValueChange = { saveSetting { modelId = it.trim(); AiModelConfig.modelId = modelId } },
                                 dialogTitle = stringResource(R.string.ui_group_ai_settings_model_id),
                                 confirmLabel = stringResource(R.string.dialog_confirm),
                                 dismissLabel = stringResource(R.string.dialog_cancel),
