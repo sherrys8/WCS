@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -60,6 +61,7 @@ import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.m3.BaseItemContainer
+import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
 import dev.sherry.wcs.ui.content.m3.ExpressiveOptionDropdown
 import dev.sherry.wcs.ui.content.m3.IntNumberPickerWidget
@@ -99,6 +101,10 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
     private const val MAX_CONTEXT_LINE_CHARS = 300
     private const val SOURCE_MAX_LINES = 4
     private const val MAX_SOURCE_CHARS = 300
+
+    /** 模型列表一屏露出的行数，与 M3 单行 ListItem 的默认最小高度一起决定弹窗限高。 */
+    private const val MODEL_ROWS_VISIBLE = 8
+    private const val LIST_ITEM_MIN_HEIGHT_DP = 56
 
     private val STYLES = listOf(
         "智能全能" to "分析当前对话氛围，给出最得体、自然的回复。",
@@ -241,7 +247,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
 
     private fun showCandidateDialog(context: android.content.Context, talker: String, source: String) {
         AiReplyApiConfig.inheritSharedConfigOnce()
-        showComposeDialog(context, directlyDismissable = false) {
+        showComposeDialog(context, dismissOnTouchOutside = false) {
             CandidateContent(talker, source)
         }
     }
@@ -591,6 +597,123 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
         showComposeDialog(context) { ApiSettingsContent() }
     }
 
+    private fun showModelPickerDialog(
+        context: android.content.Context,
+        current: String,
+        onPicked: (String) -> Unit,
+    ) {
+        showComposeDialog(context) { ModelPickerContent(current, onPicked) }
+    }
+
+    /**
+     * 模型选择弹窗：右下角先只有「获取模型」，取回列表并点选一条后原位变成「确定」。
+     * 列表最多露出 [MODEL_ROWS_VISIBLE] 行，其余上下滑动。
+     */
+    @Composable
+    private fun ShowComposeDialogScope.ModelPickerContent(current: String, onPicked: (String) -> Unit) {
+        val scope = rememberCoroutineScope()
+        var models by remember { mutableStateOf<List<String>>(emptyList()) }
+        var fetching by remember { mutableStateOf(false) }
+        var fetchError by remember { mutableStateOf<String?>(null) }
+        var picked by remember { mutableStateOf("") }
+
+        AlertDialogContent(
+            title = {
+                Text(
+                    text = stringResource(R.string.ui_group_ai_model_picker_title),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (models.isEmpty()) {
+                        if (fetching) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.padding(4.dp), strokeWidth = 3.dp)
+                                Text(
+                                    text = stringResource(R.string.ui_group_ai_settings_fetching),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        } else {
+                            val error = fetchError
+                            Text(
+                                text = if (error == null) {
+                                    stringResource(R.string.ai_reply_model_fetch_hint)
+                                } else {
+                                    stringResource(R.string.ui_group_ai_settings_fetch_failed_toast, error)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (error == null) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                },
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = stringResource(R.string.ui_group_ai_model_picker_summary, models.size),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Column(
+                            modifier = Modifier
+                                .heightIn(max = (LIST_ITEM_MIN_HEIGHT_DP * MODEL_ROWS_VISIBLE).dp)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            models.forEach { name ->
+                                BaseWidget(
+                                    iconPlaceholder = false,
+                                    title = name,
+                                    selected = name == picked || (picked.isEmpty() && name == current),
+                                    onClick = { picked = name },
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (picked.isEmpty()) {
+                    Button(
+                        onClick = {
+                            fetching = true
+                            fetchError = null
+                            scope.launch {
+                                val result = AiModelConnection.fetchModels(AiReplyApiConfig)
+                                fetching = false
+                                result.fold(
+                                    onSuccess = { models = it },
+                                    onFailure = { failure -> fetchError = failure.message },
+                                )
+                            }
+                        },
+                        enabled = !fetching,
+                    ) {
+                        Text(
+                            stringResource(
+                                if (fetching) R.string.ui_group_ai_settings_fetching
+                                else R.string.ui_group_ai_settings_fetch_models,
+                            ),
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            onPicked(picked)
+                            onDismiss()
+                        },
+                    ) { Text(stringResource(R.string.dialog_confirm)) }
+                }
+            },
+        )
+    }
+
     @Composable
     private fun ShowComposeDialogScope.ApiSettingsContent() {
         val scope = rememberCoroutineScope()
@@ -660,16 +783,18 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                             )
                         }
                         item {
-                            TextFieldDialogWidget(
+                            BaseWidget(
+                                iconPlaceholder = false,
                                 title = stringResource(R.string.ui_group_ai_settings_model_id),
-                                value = modelId,
-                                onValueChange = {
-                                    modelId = it.trim()
-                                    AiReplyApiConfig.modelId = modelId
+                                description = modelId.ifBlank {
+                                    stringResource(R.string.ai_reply_model_row_hint)
                                 },
-                                dialogTitle = stringResource(R.string.ui_group_ai_settings_model_id),
-                                confirmLabel = stringResource(R.string.dialog_confirm),
-                                dismissLabel = stringResource(R.string.dialog_cancel),
+                                onClick = {
+                                    showModelPickerDialog(context, modelId) { picked ->
+                                        modelId = picked
+                                        AiReplyApiConfig.modelId = picked
+                                    }
+                                },
                             )
                         }
                     }

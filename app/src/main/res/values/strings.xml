@@ -1945,6 +1945,8 @@
     <string name="ai_reply_pick_hint">Pick a candidate to edit it and send</string>
     <string name="ai_reply_source_expand">Expand</string>
     <string name="ai_reply_source_collapse">Collapse</string>
+    <string name="ai_reply_model_row_hint">Tap to fetch and choose a model</string>
+    <string name="ai_reply_model_fetch_hint">Tap Fetch Models below to load the list</string>
     <string name="ai_reply_style_prompt">Tone prompt (editable)</string>
     <string name="ai_reply_style_save">Save tone</string>
     <string name="ai_reply_style_reset">Restore default</string>

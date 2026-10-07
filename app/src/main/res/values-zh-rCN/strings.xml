@@ -1898,6 +1898,8 @@
     <string name="ai_reply_pick_hint">点选一条候选即可编辑并发送</string>
     <string name="ai_reply_source_expand">展开</string>
     <string name="ai_reply_source_collapse">收起</string>
+    <string name="ai_reply_model_row_hint">点击获取并选择模型</string>
+    <string name="ai_reply_model_fetch_hint">点右下角「获取模型」拉取列表</string>
     <string name="ai_reply_style_prompt">语气提示词（可直接修改）</string>
     <string name="ai_reply_style_save">保存语气</string>
     <string name="ai_reply_style_reset">恢复默认</string>
