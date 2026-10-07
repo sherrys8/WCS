@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
@@ -294,12 +293,10 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(modifier = Modifier.weight(1f, fill = false)) {
+                    // 齿轮靠 Row 末端：中间用 spacer 吃掉剩余宽度。
+                    // 给标题 Box 加 weight(fill = false) 不行 —— 摆放按实际宽度推进，齿轮会贴到语气后面。
+                    Box {
                         Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { styleMenuExpanded = true }
-                                .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
@@ -308,18 +305,28 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                 text = "·",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            Text(
-                                text = style,
-                                color = MaterialTheme.colorScheme.primary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Icon(
-                                imageVector = MaterialSymbols.Outlined.Keyboard_arrow_down,
-                                contentDescription = stringResource(R.string.ai_reply_style),
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp),
-                            )
+                            // 点击区只覆盖语气值和箭头，标题本身不可点
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { styleMenuExpanded = true }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    text = style,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Icon(
+                                    imageVector = MaterialSymbols.Outlined.Keyboard_arrow_down,
+                                    contentDescription = stringResource(R.string.ai_reply_style),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
                         }
                         ExpressiveOptionDropdown(
                             expanded = styleMenuExpanded,
@@ -335,6 +342,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                             },
                         )
                     }
+                    Spacer(Modifier.weight(1f))
                     IconButton(onClick = { showApiSettingsDialog(context) }) {
                         Icon(
                             imageVector = MaterialSymbols.Outlined.Settings,
@@ -373,22 +381,26 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                 maxLines = if (sourceExpanded) Int.MAX_VALUE else SOURCE_MAX_LINES,
                                 overflow = TextOverflow.Ellipsis,
                                 onTextLayout = { result ->
-                                    // 只在折叠态判定是否被裁；同值写回不会触发重排
-                                    if (!sourceExpanded) sourceClipped = result.lineCount > SOURCE_MAX_LINES
+                                    // maxLines 会把 lineCount 自身也压在 4 以内，只能问「最后一行有没有被省略号截断」
+                                    if (!sourceExpanded) {
+                                        sourceClipped = result.lineCount >= SOURCE_MAX_LINES &&
+                                            result.isLineEllipsized(result.lineCount - 1)
+                                    }
                                 },
                             )
                             if (sourceClipped || sourceExpanded) {
-                                TextButton(
-                                    onClick = { sourceExpanded = !sourceExpanded },
-                                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
-                                ) {
-                                    Text(
-                                        stringResource(
-                                            if (sourceExpanded) R.string.ai_reply_source_collapse
-                                            else R.string.ai_reply_source_expand,
-                                        ),
-                                    )
-                                }
+                                Text(
+                                    text = stringResource(
+                                        if (sourceExpanded) R.string.ai_reply_source_collapse
+                                        else R.string.ai_reply_source_expand,
+                                    ),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { sourceExpanded = !sourceExpanded }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                                )
                             }
                         }
                     }
@@ -431,10 +443,15 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                 maxLines = 2,
                                 modifier = Modifier.weight(1f),
                             )
-                            TextButton(
-                                onClick = { editingPrompt = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                            ) { Text(stringResource(R.string.ai_reply_style_edit)) }
+                            Text(
+                                text = stringResource(R.string.ai_reply_style_edit),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { editingPrompt = true }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                            )
                         }
                     }
 
