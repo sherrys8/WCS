@@ -1,11 +1,12 @@
 package dev.sherry.wcs.features.items.chat
 
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -96,6 +98,8 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
     private const val DEFAULT_CANDIDATES = 3
     private const val MAX_CONTEXT_LINES = 50
     private const val MAX_CONTEXT_LINE_CHARS = 300
+    private const val SOURCE_MAX_LINES = 4
+    private const val MAX_SOURCE_CHARS = 300
 
     private val STYLES = listOf(
         "智能全能" to "分析当前对话氛围，给出最得体、自然的回复。",
@@ -256,6 +260,8 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
         var draft by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
+        var sourceExpanded by remember { mutableStateOf(false) }
+        var sourceClipped by remember { mutableStateOf(false) }
 
         fun generate() {
             if (busy) return
@@ -279,16 +285,56 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
             }
         }
 
+        // 语气并进标题行：整页少一行控件，候选区拿到更多高度
+        var styleMenuExpanded by remember { mutableStateOf(false) }
+
         AlertDialogContent(
             title = {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = stringResource(R.string.ai_reply_menu),
-                        modifier = Modifier.weight(1f),
-                    )
+                    Box(modifier = Modifier.weight(1f, fill = false)) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { styleMenuExpanded = true }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(text = stringResource(R.string.ai_reply_menu))
+                            Text(
+                                text = "·",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = style,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Icon(
+                                imageVector = MaterialSymbols.Outlined.Keyboard_arrow_down,
+                                contentDescription = stringResource(R.string.ai_reply_style),
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        ExpressiveOptionDropdown(
+                            expanded = styleMenuExpanded,
+                            value = style,
+                            options = STYLE_OPTIONS,
+                            onDismissRequest = { styleMenuExpanded = false },
+                            onValueChange = { chosen ->
+                                style = chosen
+                                lastStyle = chosen
+                                stylePrompt = promptFor(chosen)
+                                editingPrompt = false
+                                styleMenuExpanded = false
+                            },
+                        )
+                    }
                     IconButton(onClick = { showApiSettingsDialog(context) }) {
                         Icon(
                             imageVector = MaterialSymbols.Outlined.Settings,
@@ -305,49 +351,44 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                         .padding(vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // 被长按的原文是这一页的主角，给整块色底和正文字号，别再当辅助说明
-                    Text(
-                        text = source,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
+                    // 被长按的原文：一根主色竖条就够，别再压一整块色底
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                    )
-
-                    var styleMenuExpanded by remember { mutableStateOf(false) }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            .height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Text(
-                            text = stringResource(R.string.ai_reply_style),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(MaterialTheme.colorScheme.primary),
                         )
-                        Box {
-                            StylePill(text = style, onClick = { styleMenuExpanded = true })
-                            ExpressiveOptionDropdown(
-                                expanded = styleMenuExpanded,
-                                value = style,
-                                options = STYLE_OPTIONS,
-                                onDismissRequest = { styleMenuExpanded = false },
-                                onValueChange = { chosen ->
-                                    style = chosen
-                                    lastStyle = chosen
-                                    stylePrompt = promptFor(chosen)
-                                    editingPrompt = false
-                                    styleMenuExpanded = false
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = source,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = if (sourceExpanded) Int.MAX_VALUE else SOURCE_MAX_LINES,
+                                overflow = TextOverflow.Ellipsis,
+                                onTextLayout = { result ->
+                                    // 只在折叠态判定是否被裁；同值写回不会触发重排
+                                    if (!sourceExpanded) sourceClipped = result.lineCount > SOURCE_MAX_LINES
                                 },
                             )
-                        }
-                        if (!editingPrompt) {
-                            TextButton(onClick = { editingPrompt = true }) {
-                                Text(stringResource(R.string.ai_reply_style_edit))
+                            if (sourceClipped || sourceExpanded) {
+                                TextButton(
+                                    onClick = { sourceExpanded = !sourceExpanded },
+                                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                                ) {
+                                    Text(
+                                        stringResource(
+                                            if (sourceExpanded) R.string.ai_reply_source_collapse
+                                            else R.string.ai_reply_source_expand,
+                                        ),
+                                    )
+                                }
                             }
                         }
                     }
@@ -378,13 +419,23 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                             ) { Text(stringResource(R.string.ai_reply_style_reset)) }
                         }
                     } else {
-                        Text(
-                            text = stylePrompt,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                        )
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = stylePrompt,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                onClick = { editingPrompt = true },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            ) { Text(stringResource(R.string.ai_reply_style_edit)) }
+                        }
                     }
 
                     if (selected < 0) {
@@ -517,35 +568,6 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.dialog_cancel)) }
             },
         )
-    }
-
-    /** 语气选择器：只占一行的小胶囊，点开还是同一套 M3 下拉列表。 */
-    @Composable
-    private fun StylePill(text: String, onClick: () -> Unit) {
-        val shape = RoundedCornerShape(16.dp)
-        val accent = MaterialTheme.colorScheme.primary
-        Row(
-            modifier = Modifier
-                .clip(shape)
-                .background(MaterialTheme.colorScheme.surfaceBright)
-                .border(BorderStroke(1.dp, accent.copy(alpha = 0.4f)), shape)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = accent,
-            )
-            Icon(
-                imageVector = MaterialSymbols.Outlined.Keyboard_arrow_down,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(18.dp),
-            )
-        }
     }
 
     private fun showApiSettingsDialog(context: android.content.Context) {
@@ -701,6 +723,12 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
         check(AiReplyApiConfig.modelId.isNotBlank()) { localizedChatString(R.string.ai_reply_err_model_id) }
 
         val count = candidateCount.coerceIn(1, MAX_CANDIDATES)
+        // 界面可以展开看全文，送进模型的只取前 MAX_SOURCE_CHARS 字，并在提示词里说明
+        val sourceForModel = if (source.length > MAX_SOURCE_CHARS) {
+            "${source.take(MAX_SOURCE_CHARS)}……（这条消息过长，只取前 $MAX_SOURCE_CHARS 字）"
+        } else {
+            source
+        }
         val provider = ModelProviderEntity(
             id = "ai_reply_candidates",
             type = AiReplyApiConfig.providerType(),
@@ -735,7 +763,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                 LlmMessage(role = LlmRole.SYSTEM, content = systemPrompt),
                 LlmMessage(
                     role = LlmRole.USER,
-                    content = "对方说：$source\n\n请生成${count}条回复：",
+                    content = "对方说：$sourceForModel\n\n请生成${count}条回复：",
                 ),
             ),
             tools = emptyList(),
