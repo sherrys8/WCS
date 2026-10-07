@@ -3,6 +3,7 @@
 本页介绍 WcS 的开发环境、构建命令和产物。专题说明请参阅：
 
 - [DexKit 解析器测试](linux-dex-test.md)
+- [主题取色接口](theme-colors.md)
 - [国际化开发指南](i18n.md)
 - [文档站维护](documentation-site.md)
 - [翻译贡献](../translations/index.md)
