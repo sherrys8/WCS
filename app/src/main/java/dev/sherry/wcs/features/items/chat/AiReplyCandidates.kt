@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +33,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,9 +70,11 @@ import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.m3.BaseItemContainer
 import dev.sherry.wcs.ui.content.m3.BaseWidget
+import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
 import dev.sherry.wcs.ui.content.m3.ExpressiveOptionDropdown
 import dev.sherry.wcs.ui.content.m3.IntNumberPickerWidget
+import dev.sherry.wcs.ui.content.m3.RadioButtonWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
 import dev.sherry.wcs.ui.content.m3.TextFieldDialogWidget
@@ -140,6 +144,28 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
     private var contextLimit by prefOption("ai_reply_context_limit", 10)
     private var candidateCount by prefOption("ai_reply_count", DEFAULT_CANDIDATES)
     private var lastStyle by prefOption("ai_reply_style", STYLES.first().first)
+
+    // 语音回复只复用文字转语音的合成/发送/试听实现，凭据与音色设置各自独立一套键。
+    private var ttsEnabled by prefOption("ai_reply_tts_enabled", false)
+    private var ttsBackend by prefOption("ai_reply_tts_backend", TextToSpeech.BACKEND_MOFA)
+    private var ttsApiKey by prefOption("ai_reply_tts_api_key", "")
+    private var ttsDoubaoCookie by prefOption("ai_reply_tts_doubao_cookie", "")
+    private var ttsVoiceId by prefOption("ai_reply_tts_voice_id", "")
+    private var ttsDoubaoSpeaker by prefOption("ai_reply_tts_doubao_speaker", "")
+    private var ttsEmotion by prefOption("ai_reply_tts_emotion", TextToSpeech.EMOTIONS.first().first)
+
+    private fun isDoubaoBackend(): Boolean = ttsBackend == TextToSpeech.BACKEND_DOUBAO
+
+    private fun effectiveVoiceId(): String =
+        if (isDoubaoBackend()) ttsDoubaoSpeaker.ifBlank { TextToSpeech.DOUBAO_VOICES.first().id }
+        else ttsVoiceId.ifBlank { TextToSpeech.DEFAULT_VOICES.first().voiceId }
+
+    private fun emotionVector(): FloatArray =
+        TextToSpeech.EMOTIONS.firstOrNull { it.first == ttsEmotion }?.second
+            ?: TextToSpeech.EMOTIONS.first().second
+
+    private fun ttsCredentialsReady(): Boolean =
+        if (isDoubaoBackend()) ttsDoubaoCookie.isNotBlank() else ttsApiKey.isNotBlank()
 
     private fun defaultPromptFor(style: String): String =
         STYLES.firstOrNull { it.first == style }?.second ?: STYLES.first().second
@@ -274,6 +300,10 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
         var error by remember { mutableStateOf<String?>(null) }
         var sourceExpanded by remember { mutableStateOf(false) }
         var sourceClipped by remember { mutableStateOf(false) }
+        var audioPath by remember { mutableStateOf<String?>(null) }
+        var voiceBusy by remember { mutableStateOf(false) }
+        // 语音开关是裸 MMKV 委托、不可观察；从本弹窗打开配置改了它，要靠回调把新值带进组合
+        var ttsOn by remember { mutableStateOf(ttsEnabled) }
 
         fun generate() {
             if (busy) return
@@ -294,6 +324,32 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                         error = failure.message
                     },
                 )
+            }
+        }
+
+        // 语音合成走文字转语音的实现，但凭据/音色/语气用的是本功能自己那套偏好
+        fun synthesize(text: String) {
+            if (voiceBusy || text.isEmpty()) return
+            if (!ttsCredentialsReady()) {
+                error = localizedChatString(R.string.ai_reply_tts_missing_credentials)
+                return
+            }
+            voiceBusy = true
+            error = null
+            val callback: (String?, String) -> Unit = { path, failure ->
+                voiceBusy = false
+                if (path != null) {
+                    audioPath = path
+                    TextToSpeech.showPreviewDialog(context, talker, path)
+                } else {
+                    WeLogger.w(TAG, "reply voice generation failed: $failure")
+                    error = failure
+                }
+            }
+            if (isDoubaoBackend()) {
+                TextToSpeech.generateVoiceDoubao(text, effectiveVoiceId(), cookie = ttsDoubaoCookie, cb = callback)
+            } else {
+                TextToSpeech.generateVoice(text, effectiveVoiceId(), emotionVector(), key = ttsApiKey, cb = callback)
             }
         }
 
@@ -370,10 +426,10 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { showApiSettingsDialog(context) }) {
+                    IconButton(onClick = { showApiSettingsDialog(context) { ttsOn = it } }) {
                         Icon(
                             imageVector = MaterialSymbols.Outlined.Settings,
-                            contentDescription = stringResource(R.string.ui_group_ai_settings_title),
+                            contentDescription = stringResource(R.string.ai_reply_config_title),
                         )
                     }
                 }
@@ -488,6 +544,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                 onClick = {
                                     selected = index
                                     draft = candidate
+                                    audioPath = null
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
@@ -552,6 +609,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                         onValueChange = { index ->
                                             selected = index
                                             draft = candidates[index]
+                                            audioPath = null
                                             pickingAnother = false
                                         },
                                     )
@@ -561,7 +619,11 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
 
                         OutlinedTextField(
                             value = draft,
-                            onValueChange = { draft = it },
+                            onValueChange = {
+                                draft = it
+                                // 草稿一改，之前那段语音就对不上文字了
+                                audioPath = null
+                            },
                             label = { Text(stringResource(R.string.ai_reply_draft)) },
                             minLines = 2,
                             maxLines = 5,
@@ -595,9 +657,13 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                 }
             },
             confirmButton = {
-                Column(horizontalAlignment = Alignment.End) {
+                // 一行放不下就换行，避免按钮文字被挤成竖排（同短视频解析的 FlowRow 做法）
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     // 生成/重新生成常驻原位；发送入口只在选中某条候选后出现
-                    Button(onClick = { generate() }, enabled = !busy) {
+                    Button(onClick = { generate() }, enabled = !busy && !voiceBusy) {
                         Text(
                             stringResource(
                                 if (candidates.isEmpty()) R.string.ai_reply_generate
@@ -605,8 +671,19 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                             ),
                         )
                     }
+                    if (selected >= 0 && audioPath != null) {
+                        Button(
+                            onClick = {
+                                val path = audioPath ?: return@Button
+                                TextToSpeech.sendVoiceTo(talker, path) { ok ->
+                                    if (ok) onDismiss()
+                                    else error = localizedChatString(R.string.ai_reply_send_failed)
+                                }
+                            },
+                            enabled = !busy && !voiceBusy,
+                        ) { Text(stringResource(R.string.ai_reply_send_voice)) }
+                    }
                     if (selected >= 0) {
-                        Spacer(Modifier.height(4.dp))
                         Button(
                             onClick = {
                                 val text = draft.trim()
@@ -620,8 +697,29 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                     else error = localizedChatString(R.string.ai_reply_send_failed)
                                 }
                             },
-                            enabled = !busy,
+                            enabled = !busy && !voiceBusy,
                         ) { Text(stringResource(R.string.ai_reply_send)) }
+                    }
+                    if (selected >= 0 && ttsOn) {
+                        Button(
+                            onClick = {
+                                val text = draft.trim().ifEmpty { candidates.getOrElse(selected) { "" } }
+                                if (text.isEmpty()) {
+                                    error = localizedChatString(R.string.ai_reply_empty_draft)
+                                    return@Button
+                                }
+                                synthesize(text)
+                            },
+                            enabled = !busy && !voiceBusy,
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (voiceBusy) R.string.ai_reply_tts_generating
+                                    else if (audioPath == null) R.string.ai_reply_generate_voice
+                                    else R.string.ai_reply_regenerate_voice,
+                                ),
+                            )
+                        }
                     }
                 }
             },
@@ -631,8 +729,11 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
         )
     }
 
-    private fun showApiSettingsDialog(context: android.content.Context) {
-        showComposeDialog(context) { ApiSettingsContent() }
+    private fun showApiSettingsDialog(
+        context: android.content.Context,
+        onTtsChanged: (Boolean) -> Unit = {},
+    ) {
+        showComposeDialog(context) { ApiSettingsContent(onTtsChanged) }
     }
 
     private fun showModelPickerDialog(
@@ -753,7 +854,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
     }
 
     @Composable
-    private fun ShowComposeDialogScope.ApiSettingsContent() {
+    private fun ShowComposeDialogScope.ApiSettingsContent(onTtsChanged: (Boolean) -> Unit) {
         val scope = rememberCoroutineScope()
         var baseUrl by remember { mutableStateOf(AiReplyApiConfig.baseUrl) }
         var apiPath by remember { mutableStateOf(AiReplyApiConfig.apiPath) }
@@ -763,10 +864,39 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
         var testOutcome by remember { mutableStateOf<Boolean?>(null) }
         var testError by remember { mutableStateOf<String?>(null) }
 
+        var ttsOn by remember { mutableStateOf(ttsEnabled) }
+        var ttsBackendState by remember { mutableStateOf(ttsBackend) }
+        var ttsApiKeyState by remember { mutableStateOf(ttsApiKey) }
+        var ttsCookieState by remember { mutableStateOf(ttsDoubaoCookie) }
+        var ttsVoiceState by remember { mutableStateOf(effectiveVoiceId()) }
+        var ttsEmotionState by remember { mutableStateOf(ttsEmotion) }
+        var mofangVoices by remember { mutableStateOf(TextToSpeech.DEFAULT_VOICES) }
+        var mofangCustomVoices by remember { mutableStateOf<List<TextToSpeech.TtsVoice>>(emptyList()) }
+        val doubaoTts = ttsBackendState == TextToSpeech.BACKEND_DOUBAO
+
+        // 魔方音色要按这套独立凭据现拉；失败就保留内置列表，与文字转语音的降级一致
+        LaunchedEffect(ttsOn, ttsBackendState, ttsApiKeyState) {
+            if (!ttsOn || doubaoTts || ttsApiKeyState.isBlank()) return@LaunchedEffect
+            val key = ttsApiKeyState
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching { TextToSpeech.fetchVoices(key) to TextToSpeech.fetchUserVoices(key) }.getOrNull()
+            } ?: return@LaunchedEffect
+            mofangVoices = loaded.first
+            mofangCustomVoices = loaded.second
+        }
+
+        val systemVoiceOptions = (if (doubaoTts) {
+            TextToSpeech.DOUBAO_VOICES.map { DropdownOption(it.id, it.label) }
+        } else {
+            mofangVoices.map { DropdownOption(it.voiceId, it.label) }
+        } + DropdownOption(ttsVoiceState, ttsVoiceState)).distinctBy { it.value }
+        val customVoiceOptions = mofangCustomVoices.map { DropdownOption(it.voiceId, it.label) }
+        val emotionOptions = TextToSpeech.EMOTIONS.map { DropdownOption(it.first, it.first) }
+
         AlertDialogContent(
             title = {
                 Text(
-                    text = stringResource(R.string.ui_group_ai_settings_title),
+                    text = stringResource(R.string.ai_reply_config_title),
                     modifier = Modifier.fillMaxWidth(),
                 )
             },
@@ -855,6 +985,117 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                             },
                             modifier = Modifier.padding(top = 8.dp),
                         )
+                    }
+
+                    SegmentedColumn(title = stringResource(R.string.ai_reply_voice_group)) {
+                        item {
+                            SwitchWidget(
+                                title = stringResource(R.string.ai_reply_tts_switch),
+                                description = stringResource(R.string.ai_reply_tts_switch_summary),
+                                checked = ttsOn,
+                                onCheckedChange = {
+                                    ttsOn = it
+                                    ttsEnabled = it
+                                    onTtsChanged(it)
+                                },
+                            )
+                        }
+                        if (ttsOn) {
+                            item {
+                                Column {
+                                    RadioButtonWidget(
+                                        title = stringResource(R.string.ai_reply_tts_backend_mofang),
+                                        description = stringResource(R.string.ai_reply_tts_backend_mofang_summary),
+                                        selected = !doubaoTts,
+                                        onSelect = {
+                                            ttsBackendState = TextToSpeech.BACKEND_MOFA
+                                            ttsBackend = TextToSpeech.BACKEND_MOFA
+                                            ttsVoiceState = effectiveVoiceId()
+                                        },
+                                    )
+                                    RadioButtonWidget(
+                                        title = stringResource(R.string.ai_reply_tts_backend_doubao),
+                                        description = stringResource(R.string.ai_reply_tts_backend_doubao_summary),
+                                        selected = doubaoTts,
+                                        onSelect = {
+                                            ttsBackendState = TextToSpeech.BACKEND_DOUBAO
+                                            ttsBackend = TextToSpeech.BACKEND_DOUBAO
+                                            ttsVoiceState = effectiveVoiceId()
+                                        },
+                                    )
+                                }
+                            }
+                            item {
+                                TextFieldDialogWidget(
+                                    title = stringResource(R.string.ai_reply_tts_api_key),
+                                    value = ttsApiKeyState,
+                                    onValueChange = {
+                                        ttsApiKeyState = it.trim()
+                                        ttsApiKey = ttsApiKeyState
+                                    },
+                                    dialogTitle = stringResource(R.string.ai_reply_tts_api_key),
+                                    confirmLabel = stringResource(R.string.dialog_confirm),
+                                    dismissLabel = stringResource(R.string.dialog_cancel),
+                                    valueHint = stringResource(R.string.ai_reply_tts_api_key_hint),
+                                    password = true,
+                                )
+                            }
+                            item {
+                                TextFieldDialogWidget(
+                                    title = stringResource(R.string.ai_reply_tts_cookie),
+                                    value = ttsCookieState,
+                                    onValueChange = {
+                                        ttsCookieState = it.trim()
+                                        ttsDoubaoCookie = ttsCookieState
+                                    },
+                                    dialogTitle = stringResource(R.string.ai_reply_tts_cookie),
+                                    confirmLabel = stringResource(R.string.dialog_confirm),
+                                    dismissLabel = stringResource(R.string.dialog_cancel),
+                                    valueHint = stringResource(R.string.ai_reply_tts_cookie_hint),
+                                    password = true,
+                                    enabled = doubaoTts,
+                                )
+                            }
+                            item {
+                                DropDownMenuWidget(
+                                    title = stringResource(R.string.ai_reply_tts_voice),
+                                    description = null,
+                                    value = ttsVoiceState,
+                                    options = systemVoiceOptions,
+                                    onValueChange = {
+                                        ttsVoiceState = it
+                                        if (doubaoTts) ttsDoubaoSpeaker = it else ttsVoiceId = it
+                                    },
+                                )
+                            }
+                            item {
+                                DropDownMenuWidget(
+                                    title = stringResource(R.string.ai_reply_tts_custom_voice),
+                                    description = null,
+                                    value = ttsVoiceState,
+                                    options = (customVoiceOptions + DropdownOption(ttsVoiceState, ttsVoiceState))
+                                        .distinctBy { it.value },
+                                    onValueChange = {
+                                        ttsVoiceState = it
+                                        ttsVoiceId = it
+                                    },
+                                    enabled = !doubaoTts && customVoiceOptions.isNotEmpty(),
+                                )
+                            }
+                            item {
+                                DropDownMenuWidget(
+                                    title = stringResource(R.string.ai_reply_tts_emotion),
+                                    description = null,
+                                    value = ttsEmotionState,
+                                    options = emotionOptions,
+                                    onValueChange = {
+                                        ttsEmotionState = it
+                                        ttsEmotion = it
+                                    },
+                                    enabled = !doubaoTts,
+                                )
+                            }
+                        }
                     }
                 }
             },
