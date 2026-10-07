@@ -559,7 +559,7 @@ object TextToSpeech :
     }
 
     private fun showPreviewDialog(context: android.content.Context, talker: String, wavPath: String) {
-        showComposeDialog(context, directlyDismissable = false) {
+        showComposeDialog(context, dismissOnTouchOutside = false) {
             var playing by remember { mutableStateOf(false) }
             var durationMs by remember { mutableIntStateOf(0) }
             var positionMs by remember { mutableIntStateOf(0) }

@@ -816,7 +816,7 @@ object ParseVideo : ClickableFeature() {
     }
 
 fun showParseDialog(context: android.content.Context) {
-        showComposeDialog(context, directlyDismissable = false) {
+        showComposeDialog(context, dismissOnTouchOutside = false) {
             var link by remember { mutableStateOf("") }
             var loading by remember { mutableStateOf(false) }
             var errorMsg by remember { mutableStateOf<String?>(null) }
