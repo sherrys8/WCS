@@ -1,5 +1,7 @@
 package dev.sherry.wcs.features.items.system
 
+import android.app.Activity
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import com.tencent.mm.ui.LauncherUI
 import dev.sherry.wcs.R
@@ -40,7 +42,6 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
     /** 微信识别流程常对同一串连续回调多次，这个窗口内的重复内容只记一条 */
     private const val DUPE_WINDOW_MS = 1_500L
 
-    @Serializable
     /**
      * `codeType = 0` 表示这条记录是旧版本存的，不知道微信自己的码类型。
      * 拿默认值去回放会让微信把载荷投错分支（收款码曾被送进小程序启动路径后 NPE），

@@ -1,6 +1,7 @@
 package dev.sherry.wcs.features.items.system
 
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -296,6 +297,8 @@ private fun classifyQrContent(url: String): Pair<ImageVector, Int> {
 @Composable
 private fun QrRecordCard(record: QrCodeRecord.QrRecord) {
     val context = LocalContext.current
+    // CompositionLocal 只能在组合期读，点回调里再取会报「@Composable invocations…」
+    val activity = LocalActivity.current!!
     var expanded by rememberSaveable(record.url, record.time) { mutableStateOf(false) }
     var truncated by remember(record.url) { mutableStateOf(false) }
     val uri = remember(record.url) { record.url.toUri() }
@@ -362,7 +365,7 @@ private fun QrRecordCard(record: QrCodeRecord.QrRecord) {
                                 modifier = Modifier.weight(1f),
                                 onClick = {
                                     QrCodeRecord.openInWeChat(
-                                        LocalActivity.current!!,
+                                        activity,
                                         record,
                                     )
                                 },
