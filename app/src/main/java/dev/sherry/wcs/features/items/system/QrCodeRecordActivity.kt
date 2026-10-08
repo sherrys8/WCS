@@ -2,11 +2,11 @@ package dev.sherry.wcs.features.items.system
 
 import android.content.Context
 import android.content.Intent
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.Keep
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +54,7 @@ import com.composables.icons.materialsymbols.outlined.Info
 import com.composables.icons.materialsymbols.outlined.More_vert
 import com.composables.icons.materialsymbols.outlined.Person
 import com.composables.icons.materialsymbols.outlined.Shopping_cart
+import com.tencent.mm.plugin.webview.ui.tools.WebViewUI
 import dev.sherry.wcs.R
 import dev.sherry.wcs.i18n.LocaleResourceMode
 import dev.sherry.wcs.i18n.WcSLocaleProvider
@@ -66,7 +67,6 @@ import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.ui.utils.theme.ModuleTheme
-import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.copyToClipboard
 import dev.sherry.wcs.utils.android.isDarkMode
 import dev.sherry.wcs.utils.android.showToast
@@ -245,10 +245,12 @@ private fun QrCodeRecordScreen(
 @Composable
 private fun QrRecordCard(record: QrCodeRecord.QrRecord) {
     val context = LocalContext.current
-    val activity = LocalActivity.current!!
     var expanded by rememberSaveable(record.url, record.time) { mutableStateOf(false) }
     var truncated by remember(record.url) { mutableStateOf(false) }
     val uri = remember(record.url) { record.url.toUri() }
+    // wxp://、weixin:// 这类内部协议既没有能接 ACTION_VIEW 的 Activity，也不能安全回放进
+    // 扫码流程（缺原始 Bundle 会让微信在小程序启动路径上 NPE），所以只给复制。
+    val isWebUrl = uri.scheme == "http" || uri.scheme == "https"
     val (icon, typeRes) = when {
         uri.host.equals("u.wechat.com", ignoreCase = true) ->
             MaterialSymbols.Outlined.Person to R.string.qr_code_record_type_contact
@@ -268,7 +270,7 @@ private fun QrRecordCard(record: QrCodeRecord.QrRecord) {
                 description = formatEpoch(record.time, true),
                 trailingContent = {
                     // 外链改道外部 App 时，「在微信中打开」本身就会跳出去，不必再给一个入口
-                    if (!LinkExternalAppJump.isEnabled && !uri.scheme.isNullOrEmpty()) {
+                    if (isWebUrl && !LinkExternalAppJump.isEnabled) {
                         IconButton(onClick = { uri.openInSystem(context, true) }) {
                             Icon(
                                 imageVector = MaterialSymbols.Outlined.Open_in_new,
@@ -311,19 +313,17 @@ private fun QrRecordCard(record: QrCodeRecord.QrRecord) {
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                runCatching { QrCodeRecord.openInWeChat(activity, record) }
-                                    .onFailure { failure ->
-                                        WeLogger.e("QrCodeRecord", "failed to replay a scan result", failure)
-                                        showToast(
-                                            context,
-                                            context.localizedSystemString(R.string.qr_code_record_open_failed),
-                                        )
-                                    }
-                            },
-                        ) { Text(stringResource(R.string.system_qr_code_record_open)) }
+                        if (isWebUrl) {
+                            Button(
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    context.startActivity(
+                                        Intent(context, WebViewUI::class.java)
+                                            .putExtra("rawUrl", record.url),
+                                    )
+                                },
+                            ) { Text(stringResource(R.string.qr_code_record_open_in_wechat)) }
+                        }
                         TextButton(
                             modifier = Modifier.weight(1f),
                             onClick = {

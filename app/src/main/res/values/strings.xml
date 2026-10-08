@@ -3885,8 +3885,8 @@
     <string name="qr_code_record_menu">More options</string>
     <string name="qr_code_record_home_menu_enabled">Home menu entry</string>
     <string name="qr_code_record_home_menu_title">Scan records</string>
+    <string name="qr_code_record_open_in_wechat">Open in WeChat</string>
     <string name="system_qr_code_record_clear_description">Clear every scan record? This cannot be undone.</string>
-    <string name="qr_code_record_open_failed">WeChat could not open this record, check the logs for details.</string>
     <string name="system_safe_mode_enable_title">Enable safe mode?</string>
     <string name="system_safe_mode_enable_message">Once enabled, regular features will not be loaded the next time WeChat starts. Only core features will remain, but regular features will still appear in Settings so you can restore them after disabling safe mode.\n\nEnable safe mode?</string>
     <string name="system_safe_mode_enable">Enable</string>
