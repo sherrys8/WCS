@@ -1,5 +1,6 @@
 package dev.sherry.wcs.features.items.system
 
+import android.app.Activity
 import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
@@ -40,7 +41,6 @@ import com.composables.icons.materialsymbols.outlined.Info
 import com.composables.icons.materialsymbols.outlined.Open_in_new
 import com.composables.icons.materialsymbols.outlined.Person
 import com.composables.icons.materialsymbols.outlined.Shopping_cart
-import com.tencent.mm.plugin.webview.ui.tools.WebViewUI
 import dev.sherry.wcs.R
 import dev.sherry.wcs.dexkit.abc.IResolveDex
 import dev.sherry.wcs.dexkit.dsl.dexMethod
@@ -52,6 +52,7 @@ import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.IconButton
 import dev.sherry.wcs.ui.content.TextButton
 import dev.sherry.wcs.ui.utils.showComposeDialog
+import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.copyToClipboard
 import dev.sherry.wcs.utils.android.showToast
@@ -70,31 +71,60 @@ object QrCodeRecord : ClickableFeature(), IResolveDex {
     override val descriptionRes = R.string.feature_qr_code_record_description
 
     private const val TAG = "QrCodeRecord"
+    private const val KEY_RECORDS = "qr_code_records"
+
+    /** 我们自己回放给扫码流程时挂的标记，hook 见到它就跳过，避免把回放记成一次新扫码 */
+    private const val EXTRA_REPLAY = "dev.sherry.wcs.qr_code_record_replay"
 
     @Serializable
-    data class QrRecord(val url: String, val time: Long)
+    data class QrRecord(
+        val url: String,
+        val time: Long,
+        // 老记录只有 url/time；19 是微信普通 QR_CODE 类型
+        val codeType: Int = 19,
+        val codeVersion: Int = 0,
+    )
 
     private val records = mutableListOf<QrRecord>()
-    private const val KEY_RECORDS = "qr_code_records"
     private var prefRecords by prefOption(KEY_RECORDS, nul<String>())
     private var loaded = false
 
     override fun onEnable() {
+        // 新旧宿主的 handleCode 参数个数不同，codeType/codeVersion 位置随之位移
+        val codeTypeIndex = if (methodQBarString.method.parameterCount == 16) 6 else 5
         methodQBarString.hookBefore {
-            val rawUrl = args[1] as? String? ?: return@hookBefore
-            handleUrl(rawUrl)
+            if ((args[0] as Activity).intent.getBooleanExtra(EXTRA_REPLAY, false)) return@hookBefore
+            val content = args[1] as String? ?: return@hookBefore
+            handleUrl(content, args[codeTypeIndex] as Int, args[codeTypeIndex + 1] as Int)
         }
     }
 
-    private fun handleUrl(rawUrl: String) {
+    private fun handleUrl(url: String, codeType: Int, codeVersion: Int) {
         if (!loaded) {
             loadRecords()
             loaded = true
         }
 
-        records.add(0, QrRecord(rawUrl, System.currentTimeMillis()))
-        WeLogger.i(TAG, "added $rawUrl")
+        records.add(0, QrRecord(url, System.currentTimeMillis(), codeType, codeVersion))
+        WeLogger.i(TAG, "added $url")
         saveRecords()
+    }
+
+    /**
+     * 走微信自己的识别流程：这个宿主 Activity 会发布 DealQBarStrEvent 并管理结果/取消，
+     * 好友码、群码、支付码、小程序码都能落到对应功能；直接丢给 WebViewUI 只会开网页。
+     */
+    fun openInWeChat(activity: Activity, record: QrRecord) {
+        activity.startActivity(
+            Intent().setClassName(
+                HostInfo.packageName,
+                "com.tencent.mm.plugin.webview.stub.WebviewScanImageActivity",
+            )
+                .putExtra("key_string_for_scan", record.url)
+                .putExtra("key_codetype_for_scan", record.codeType)
+                .putExtra("key_codeversion_for_scan", record.codeVersion)
+                .putExtra(EXTRA_REPLAY, true),
+        )
     }
 
     override fun onClick(context: ComponentActivity) {
@@ -183,10 +213,7 @@ object QrCodeRecord : ClickableFeature(), IResolveDex {
                                             )
                                         }
                                         IconButton({
-                                            context.startActivity(
-                                                Intent(context, WebViewUI::class.java).apply {
-                                                    putExtra("rawUrl", record.url)
-                                                })
+                                            openInWeChat(context, record)
                                         }) {
                                             Icon(
                                                 imageVector =
