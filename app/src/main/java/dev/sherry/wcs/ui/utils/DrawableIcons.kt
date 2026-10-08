@@ -25,11 +25,15 @@ abstract class VectorPathDrawable(
         val bounds = bounds
 
         canvas.withSave {
-            val scaleX = bounds.width() / 960f
-            val scaleY = bounds.height() / 960f
+            // 等比缩放 + 四周留一成：按宽高各自拉伸会让图标铺满整个 ImageView，
+            // 比宿主自带图标明显大一圈，非方形视图下还会变形。
+            val ratio = minOf(bounds.width(), bounds.height()) / 960f * 0.9f
 
-            translate(bounds.left.toFloat(), bounds.top.toFloat())
-            scale(scaleX, scaleY)
+            translate(
+                bounds.left + (bounds.width() - 960f * ratio) / 2f,
+                bounds.top + (bounds.height() - 960f * ratio) / 2f,
+            )
+            scale(ratio, ratio)
 
             drawPath(path, paint)
         }
