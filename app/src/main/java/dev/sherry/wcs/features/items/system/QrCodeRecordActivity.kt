@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,14 +47,23 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.core.view.WindowInsetsControllerCompat
 import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.outlined.Account_box
+import com.composables.icons.materialsymbols.outlined.Code
 import com.composables.icons.materialsymbols.outlined.Content_copy
 import com.composables.icons.materialsymbols.outlined.Delete_sweep
+import com.composables.icons.materialsymbols.outlined.Extension
+import com.composables.icons.materialsymbols.outlined.Groups
+import com.composables.icons.materialsymbols.outlined.Key
+import com.composables.icons.materialsymbols.outlined.Language
+import com.composables.icons.materialsymbols.outlined.Newspaper
 import com.composables.icons.materialsymbols.outlined.Open_in_new
 import com.composables.icons.materialsymbols.outlined.History
-import com.composables.icons.materialsymbols.outlined.Info
 import com.composables.icons.materialsymbols.outlined.More_vert
+import com.composables.icons.materialsymbols.outlined.Payments
 import com.composables.icons.materialsymbols.outlined.Person
-import com.composables.icons.materialsymbols.outlined.Shopping_cart
+import com.composables.icons.materialsymbols.outlined.Qr_code_scanner
+import com.composables.icons.materialsymbols.outlined.Shield
+import com.composables.icons.materialsymbols.outlined.Smart_display
 import com.tencent.mm.plugin.webview.ui.tools.WebViewUI
 import dev.sherry.wcs.R
 import dev.sherry.wcs.i18n.LocaleResourceMode
@@ -242,6 +252,47 @@ private fun QrCodeRecordScreen(
     }
 }
 
+/** 按内容判类型：先具体协议、再域名特征、最后才落到网页/通用，顺序即优先级。 */
+private fun classifyQrContent(url: String): Pair<ImageVector, Int> {
+    val host = url.toUri().host?.lowercase().orEmpty()
+    return when {
+        url.startsWith("wxp://") || host == "servicewechat.com" ->
+            MaterialSymbols.Outlined.Extension to R.string.qr_code_record_type_miniprogram
+
+        host == "u.wechat.com" ->
+            MaterialSymbols.Outlined.Person to R.string.qr_code_record_type_contact
+
+        url.startsWith("weixin://wxpay") || host == "wx.tenpay.com" || host == "payapp.weixin.qq.com" ->
+            MaterialSymbols.Outlined.Payments to R.string.qr_code_record_type_payment
+
+        host == "weixin.qq.com" && url.toUri().path?.startsWith("/g/") == true ->
+            MaterialSymbols.Outlined.Groups to R.string.qr_code_record_type_group
+
+        host == "work.weixin.qq.com" || url.startsWith("wework://") ->
+            MaterialSymbols.Outlined.Account_box to R.string.qr_code_record_type_work
+
+        host == "mp.weixin.qq.com" ->
+            MaterialSymbols.Outlined.Newspaper to R.string.qr_code_record_type_official_account
+
+        host == "login.weixin.qq.com" || host == "open.weixin.qq.com" ->
+            MaterialSymbols.Outlined.Key to R.string.qr_code_record_type_login
+
+        host == "channels.weixin.qq.com" || host == "finder.video.qq.com" ->
+            MaterialSymbols.Outlined.Smart_display to R.string.qr_code_record_type_channels
+
+        host == "weixin110.qq.com" || host == "support.weixin.qq.com" ->
+            MaterialSymbols.Outlined.Shield to R.string.qr_code_record_type_security
+
+        url.startsWith("weixin://") ->
+            MaterialSymbols.Outlined.Code to R.string.qr_code_record_type_scheme
+
+        url.startsWith("http://") || url.startsWith("https://") ->
+            MaterialSymbols.Outlined.Language to R.string.qr_code_record_type_web
+
+        else -> MaterialSymbols.Outlined.Qr_code_scanner to R.string.qr_code_record_type_other
+    }
+}
+
 @Composable
 private fun QrRecordCard(record: QrCodeRecord.QrRecord) {
     val context = LocalContext.current
@@ -251,15 +302,7 @@ private fun QrRecordCard(record: QrCodeRecord.QrRecord) {
     // wxp://、weixin:// 这类内部协议既没有能接 ACTION_VIEW 的 Activity，也不能安全回放进
     // 扫码流程（缺原始 Bundle 会让微信在小程序启动路径上 NPE），所以只给复制。
     val isWebUrl = uri.scheme == "http" || uri.scheme == "https"
-    val (icon, typeRes) = when {
-        uri.host.equals("u.wechat.com", ignoreCase = true) ->
-            MaterialSymbols.Outlined.Person to R.string.qr_code_record_type_contact
-
-        uri.host.equals("wx.tenpay.com", ignoreCase = true) || record.url.startsWith("weixin://wxpay") ->
-            MaterialSymbols.Outlined.Shopping_cart to R.string.qr_code_record_type_payment
-
-        else -> MaterialSymbols.Outlined.Info to R.string.qr_code_record_type_other
-    }
+    val (icon, typeRes) = classifyQrContent(record.url)
 
     SegmentedColumn {
         item {
