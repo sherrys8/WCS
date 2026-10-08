@@ -88,6 +88,11 @@
             android:theme="@style/Theme.Material3.DynamicColors.DayNight.NoActionBar" />
 
         <activity
+            android:name=".features.items.system.QrCodeRecordActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Material3.DynamicColors.DayNight.NoActionBar" />
+
+        <activity
             android:name=".activity.settings.ExtensionsSettingsActivity"
             android:exported="true"
             android:theme="@style/Theme.Material3.DynamicColors.DayNight.NoActionBar" />

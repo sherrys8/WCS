@@ -3,67 +3,26 @@ package dev.sherry.wcs.features.items.system
 import android.app.Activity
 import android.content.Intent
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
-import com.composables.icons.materialsymbols.MaterialSymbols
-import com.composables.icons.materialsymbols.outlined.Content_copy
-import com.composables.icons.materialsymbols.outlined.Globe
-import com.composables.icons.materialsymbols.outlined.Info
-import com.composables.icons.materialsymbols.outlined.Open_in_new
-import com.composables.icons.materialsymbols.outlined.Person
-import com.composables.icons.materialsymbols.outlined.Shopping_cart
+import com.tencent.mm.ui.LauncherUI
 import dev.sherry.wcs.R
 import dev.sherry.wcs.dexkit.abc.IResolveDex
 import dev.sherry.wcs.dexkit.dsl.dexMethod
+import dev.sherry.wcs.features.api.ui.WeHomeScreenPopupMenuApi
 import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
+import dev.sherry.wcs.features.items.home_screen_menu.localizedHomeMenuString
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
-import dev.sherry.wcs.ui.content.AlertDialogContent
-import dev.sherry.wcs.ui.content.IconButton
-import dev.sherry.wcs.ui.content.TextButton
-import dev.sherry.wcs.ui.utils.showComposeDialog
+import dev.sherry.wcs.ui.utils.LinkIcon
+import dev.sherry.wcs.utils.HookParam
 import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
-import dev.sherry.wcs.utils.android.copyToClipboard
-import dev.sherry.wcs.utils.android.showToast
-import dev.sherry.wcs.utils.formatEpoch
 import dev.sherry.wcs.utils.nul
-import dev.sherry.wcs.utils.openInSystem
 import dev.sherry.wcs.utils.serialization.DefaultJson
 import kotlinx.serialization.Serializable
 import org.luckypray.dexkit.DexKitBridge
 
-object QrCodeRecord : ClickableFeature(), IResolveDex {
+object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.IMenuItemsProvider {
 
     override val technicalId = "二维码扫描记录"
     override val nameRes = R.string.feature_qr_code_record_name
@@ -72,9 +31,16 @@ object QrCodeRecord : ClickableFeature(), IResolveDex {
 
     private const val TAG = "QrCodeRecord"
     private const val KEY_RECORDS = "qr_code_records"
+    private const val HOME_MENU_ITEM_ID = 777026
 
     /** 我们自己回放给扫码流程时挂的标记，hook 见到它就跳过，避免把回放记成一次新扫码 */
     private const val EXTRA_REPLAY = "dev.sherry.wcs.qr_code_record_replay"
+
+    /** 记录整串 JSON 存在一个偏好键里，不设上限会越来越肥 */
+    const val MAX_RECORDS = 200
+
+    /** 微信识别流程常对同一串连续回调多次，这个窗口内的重复内容只记一条 */
+    private const val DUPE_WINDOW_MS = 1_500L
 
     @Serializable
     data class QrRecord(
@@ -85,9 +51,12 @@ object QrCodeRecord : ClickableFeature(), IResolveDex {
         val codeVersion: Int = 0,
     )
 
-    private val records = mutableListOf<QrRecord>()
+    var showInHomeMenu by prefOption("qr_code_record_home_menu_enabled", false)
     private var prefRecords by prefOption(KEY_RECORDS, nul<String>())
+    private val records = mutableListOf<QrRecord>()
     private var loaded = false
+    private var lastRecordUrl = ""
+    private var lastRecordAt = 0L
 
     override fun onEnable() {
         // 新旧宿主的 handleCode 参数个数不同，codeType/codeVersion 位置随之位移
@@ -97,17 +66,48 @@ object QrCodeRecord : ClickableFeature(), IResolveDex {
             val content = args[1] as String? ?: return@hookBefore
             handleUrl(content, args[codeTypeIndex] as Int, args[codeTypeIndex + 1] as Int)
         }
+        WeHomeScreenPopupMenuApi.addProvider(this)
     }
 
+    override fun onDisable() {
+        WeHomeScreenPopupMenuApi.removeProvider(this)
+    }
+
+    @Synchronized
     private fun handleUrl(url: String, codeType: Int, codeVersion: Int) {
         if (!loaded) {
             loadRecords()
             loaded = true
         }
 
-        records.add(0, QrRecord(url, System.currentTimeMillis(), codeType, codeVersion))
+        val now = System.currentTimeMillis()
+        if (url == lastRecordUrl && now - lastRecordAt < DUPE_WINDOW_MS) return
+        lastRecordUrl = url
+        lastRecordAt = now
+
+        records.add(0, QrRecord(url, now, codeType, codeVersion))
+        if (records.size > MAX_RECORDS) {
+            records.subList(MAX_RECORDS, records.size).clear()
+        }
         WeLogger.i(TAG, "added $url")
         saveRecords()
+    }
+
+    override fun onClick(context: ComponentActivity) {
+        QrCodeRecordActivity.launch(context)
+    }
+
+    override fun getMenuItems(param: HookParam): List<WeHomeScreenPopupMenuApi.MenuItem> {
+        if (!showInHomeMenu) return emptyList()
+        return listOf(
+            WeHomeScreenPopupMenuApi.MenuItem(
+                HOME_MENU_ITEM_ID,
+                localizedHomeMenuString(R.string.qr_code_record_home_menu_title),
+                LinkIcon,
+            ) {
+                QrCodeRecordActivity.launch(LauncherUI.getInstance()!!)
+            },
+        )
     }
 
     /**
@@ -127,157 +127,22 @@ object QrCodeRecord : ClickableFeature(), IResolveDex {
         )
     }
 
-    override fun onClick(context: ComponentActivity) {
+    @Synchronized
+    fun recordsSnapshot(): List<QrRecord> {
         if (!loaded) {
             loadRecords()
             loaded = true
         }
-
-        showComposeDialog(context) {
-            var list by remember { mutableStateOf(records.toList()) }
-
-            AlertDialogContent(
-                title = { Text(stringResource(R.string.feature_qr_code_record_name)) },
-                text = {
-                    if (list.isEmpty()) {
-                        Text(
-                            text = stringResource(R.string.system_qr_code_record_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                            items(list, key = { "${it.url}${it.time}" }) { record ->
-                                val (icon, tint) = getQrTypeConfig(record.url)
-
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 10.dp)
-                                ) {
-                                    // Header row: icon badge + timestamp & url
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.Top
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .padding(top = 2.dp, end = 12.dp)
-                                                .size(36.dp)
-                                                .clip(CircleShape)
-                                                .background(tint.copy(alpha = 0.12f)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = icon,
-                                                contentDescription = null,
-                                                tint = tint,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = formatEpoch(record.time, true),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Spacer(Modifier.height(3.dp))
-                                            Text(
-                                                text = record.url,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                maxLines = 3,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                    }
-
-                                    // Action buttons, end-aligned below content
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.End
-                                    ) {
-                                        IconButton({
-                                            copyToClipboard(context, record.url)
-                                            showToast(
-                                                context,
-                                                context.localizedSystemString(R.string.copied_to_clipboard)
-                                            )
-                                        }) {
-                                            Icon(
-                                                imageVector = MaterialSymbols.Outlined.Content_copy,
-                                                contentDescription = stringResource(
-                                                    R.string.system_qr_code_record_copy
-                                                ),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        IconButton({
-                                            openInWeChat(context, record)
-                                        }) {
-                                            Icon(
-                                                imageVector =
-                                                    if (LinkExternalAppJump.isEnabled) MaterialSymbols.Outlined.Open_in_new
-                                                    else MaterialSymbols.Outlined.Globe,
-                                                contentDescription = stringResource(
-                                                    R.string.system_qr_code_record_open
-                                                ),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        if (!LinkExternalAppJump.isEnabled) {
-                                            IconButton({
-                                                record.url.toUri().openInSystem(context, true)
-                                            }) {
-                                                Icon(
-                                                    imageVector = MaterialSymbols.Outlined.Open_in_new,
-                                                    contentDescription = stringResource(
-                                                        R.string.system_qr_code_record_open_in_system
-                                                    ),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                HorizontalDivider(
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
-                            }
-                        }
-                    }
-                },
-                dismissButton = {
-                    TextButton({
-                        records.clear()
-                        list = emptyList()
-                        clearRecords()
-                    }) { Text(stringResource(R.string.action_clear)) }
-                },
-                confirmButton = { TextButton(onDismiss) { Text(stringResource(R.string.action_close)) } }
-            )
-        }
+        return records.toList()
     }
 
-    /**
-     * Determines the icon presentation and branding color based on URL targets.
-     */
-    @Composable
-    private fun getQrTypeConfig(url: String): Pair<ImageVector, Color> {
-        return when {
-            url.startsWith("https://u.wechat.com") -> {
-                MaterialSymbols.Outlined.Person to Color(0xFF07C160)
-            }
-
-            url.startsWith("https://wx.tenpay.com") || url.startsWith("weixin://wxpay") -> {
-                MaterialSymbols.Outlined.Shopping_cart to Color(0xFFFDAE17)
-            }
-
-            else -> {
-                MaterialSymbols.Outlined.Info to MaterialTheme.colorScheme.onSurfaceVariant
-            }
-        }
+    @Synchronized
+    fun clearAllRecords() {
+        records.clear()
+        loaded = true
+        lastRecordUrl = ""
+        lastRecordAt = 0L
+        WePrefs.remove(KEY_RECORDS)
     }
 
     private fun saveRecords() {
@@ -289,10 +154,6 @@ object QrCodeRecord : ClickableFeature(), IResolveDex {
         prefRecords
             ?.let { runCatching { DefaultJson.decodeFromString<List<QrRecord>>(it) }.getOrNull() }
             ?.let { records.addAll(it) }
-    }
-
-    private fun clearRecords() {
-        WePrefs.remove(KEY_RECORDS)
     }
 
     val methodQBarString by dexMethod {
