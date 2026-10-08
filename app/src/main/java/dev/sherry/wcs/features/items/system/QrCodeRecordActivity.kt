@@ -157,7 +157,7 @@ private fun QrCodeRecordScreen(
                 ) {
                     DropdownMenuGroup(shapes = MenuDefaults.groupShapes()) {
                         SelectableDropdownMenuItem(
-                            checked = homeMenuEnabled,
+                            selected = homeMenuEnabled,
                             onClick = {
                                 homeMenuEnabled = !homeMenuEnabled
                                 QrCodeRecord.showInHomeMenu = homeMenuEnabled
