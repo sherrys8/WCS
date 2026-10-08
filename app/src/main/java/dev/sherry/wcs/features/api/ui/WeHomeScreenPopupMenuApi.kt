@@ -44,7 +44,9 @@ object WeHomeScreenPopupMenuApi : ApiFeature(), IResolveDex {
         val text: String, val drawable: Drawable,
         val onClick: () -> Unit
     ) {
-        val fakeResId get() = id + text.hashCode()
+        // 这个值会被宿主当成资源号用：负数会让微信直接按「本项无图标」布局，
+        // 连 setImageResource 都不调用，下面的替换就没有落点。强制为正的奇数且非 0。
+        val fakeResId get() = ((id + text.hashCode()) and 0x7ffffffe) or 1
     }
 
     private val providers = CopyOnWriteArrayList<IMenuItemsProvider>()
