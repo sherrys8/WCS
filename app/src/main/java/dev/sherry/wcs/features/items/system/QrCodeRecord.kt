@@ -1,6 +1,5 @@
 package dev.sherry.wcs.features.items.system
 
-import android.content.Intent
 import androidx.activity.ComponentActivity
 import com.tencent.mm.ui.LauncherUI
 import dev.sherry.wcs.R
@@ -14,7 +13,6 @@ import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.ui.utils.LinkIcon
 import dev.sherry.wcs.utils.HookParam
-import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.nul
 import dev.sherry.wcs.utils.serialization.DefaultJson
