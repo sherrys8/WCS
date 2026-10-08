@@ -3875,7 +3875,7 @@
     <string name="system_qr_code_record_open">Open</string>
     <string name="system_qr_code_record_open_in_system">Open in system</string>
     <string name="qr_code_record_count">%1$d scan records</string>
-    <string name="qr_code_record_native_open_description">Keeps the latest %1$d records and drops the oldest. Internal schemes such as wxp:// can only be copied.</string>
+    <string name="qr_code_record_native_open_description">Keeps the latest %1$d records and drops the oldest. Records saved by older builds carry no code type, so they can only be copied.</string>
     <string name="qr_code_record_empty_description">Scanned content shows up here once the feature is on.</string>
     <string name="qr_code_record_type_contact">Friend code</string>
     <string name="qr_code_record_type_payment">Payment code</string>

@@ -1,11 +1,11 @@
 package dev.sherry.wcs.features.items.system
 
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.Keep
 import androidx.compose.foundation.layout.Arrangement
@@ -63,7 +63,6 @@ import com.composables.icons.materialsymbols.outlined.Person
 import com.composables.icons.materialsymbols.outlined.Qr_code_scanner
 import com.composables.icons.materialsymbols.outlined.Shield
 import com.composables.icons.materialsymbols.outlined.Smart_display
-import com.tencent.mm.plugin.webview.ui.tools.WebViewUI
 import dev.sherry.wcs.R
 import dev.sherry.wcs.i18n.LocaleResourceMode
 import dev.sherry.wcs.i18n.WcSLocaleProvider
@@ -255,13 +254,15 @@ private fun QrCodeRecordScreen(
 private fun classifyQrContent(url: String): Pair<ImageVector, Int> {
     val host = url.toUri().host?.lowercase().orEmpty()
     return when {
-        url.startsWith("wxp://") || host == "servicewechat.com" ->
+        host == "servicewechat.com" ->
             MaterialSymbols.Outlined.Extension to R.string.qr_code_record_type_miniprogram
 
         host == "u.wechat.com" ->
             MaterialSymbols.Outlined.Person to R.string.qr_code_record_type_contact
 
-        url.startsWith("weixin://wxpay") || host == "wx.tenpay.com" || host == "payapp.weixin.qq.com" ->
+        // wxp://f2f0… 是面对面收款码，不是小程序码
+        url.startsWith("wxp://") || url.startsWith("weixin://wxpay") ||
+            host == "wx.tenpay.com" || host == "payapp.weixin.qq.com" ->
             MaterialSymbols.Outlined.Payments to R.string.qr_code_record_type_payment
 
         host == "weixin.qq.com" && url.toUri().path?.startsWith("/g/") == true ->
@@ -298,9 +299,10 @@ private fun QrRecordCard(record: QrCodeRecord.QrRecord) {
     var expanded by rememberSaveable(record.url, record.time) { mutableStateOf(false) }
     var truncated by remember(record.url) { mutableStateOf(false) }
     val uri = remember(record.url) { record.url.toUri() }
-    // wxp://、weixin:// 这类内部协议既没有能接 ACTION_VIEW 的 Activity，也不能安全回放进
-    // 扫码流程（缺原始 Bundle 会让微信在小程序启动路径上 NPE），所以只给复制。
+    // wxp:// 这类内部协议没有任何 Activity 能接 ACTION_VIEW，只能交给微信自己的扫码流程；
+    // 而回放要求记到真实 codeType，旧记录做不到，就只留复制。
     val isWebUrl = uri.scheme == "http" || uri.scheme == "https"
+    val canOpenInWeChat = QrCodeRecord.canReplayInWeChat(record)
     val (icon, typeRes) = classifyQrContent(record.url)
 
     SegmentedColumn {
@@ -355,13 +357,13 @@ private fun QrRecordCard(record: QrCodeRecord.QrRecord) {
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (isWebUrl) {
+                        if (canOpenInWeChat) {
                             Button(
                                 modifier = Modifier.weight(1f),
                                 onClick = {
-                                    context.startActivity(
-                                        Intent(context, WebViewUI::class.java)
-                                            .putExtra("rawUrl", record.url),
+                                    QrCodeRecord.openInWeChat(
+                                        LocalActivity.current!!,
+                                        record,
                                     )
                                 },
                             ) { Text(stringResource(R.string.qr_code_record_open_in_wechat)) }

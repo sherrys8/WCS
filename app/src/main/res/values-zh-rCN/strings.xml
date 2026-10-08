@@ -3913,7 +3913,7 @@
     <string name="system_qr_code_record_open">打开</string>
     <string name="system_qr_code_record_open_in_system">在系统中打开</string>
     <string name="qr_code_record_count">%1$d 条扫描记录</string>
-    <string name="qr_code_record_native_open_description">最多保留 %1$d 条，超出自动丢弃最旧的。小程序码等内部协议只支持复制。</string>
+    <string name="qr_code_record_native_open_description">最多保留 %1$d 条，超出自动丢弃最旧的。旧版本存的记录没有码类型，只能复制。</string>
     <string name="qr_code_record_empty_description">启用后，扫码识别到的内容会显示在这里。</string>
     <string name="qr_code_record_type_contact">好友二维码</string>
     <string name="qr_code_record_type_payment">收付款码</string>

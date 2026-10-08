@@ -12,6 +12,7 @@ import dev.sherry.wcs.features.items.home_screen_menu.localizedHomeMenuString
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.ui.utils.LinkIcon
+import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.HookParam
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.nul
@@ -30,6 +31,9 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
     private const val KEY_RECORDS = "qr_code_records"
     private const val HOME_MENU_ITEM_ID = 777026
 
+    /** 我们自己回放给扫码流程时挂的标记，hook 见到它就跳过，避免把回放记成一次新扫码 */
+    private const val EXTRA_REPLAY = "dev.sherry.wcs.qr_code_record_replay"
+
     /** 记录整串 JSON 存在一个偏好键里，不设上限会越来越肥 */
     const val MAX_RECORDS = 200
 
@@ -37,7 +41,18 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
     private const val DUPE_WINDOW_MS = 1_500L
 
     @Serializable
-    data class QrRecord(val url: String, val time: Long)
+    /**
+     * `codeType = 0` 表示这条记录是旧版本存的，不知道微信自己的码类型。
+     * 拿默认值去回放会让微信把载荷投错分支（收款码曾被送进小程序启动路径后 NPE），
+     * 所以只有记到真实 codeType 的记录才允许「在微信中打开」。
+     */
+    @Serializable
+    data class QrRecord(
+        val url: String,
+        val time: Long,
+        val codeType: Int = 0,
+        val codeVersion: Int = 0,
+    )
 
     var showInHomeMenu by prefOption("qr_code_record_home_menu_enabled", false)
     private var prefRecords by prefOption(KEY_RECORDS, nul<String>())
@@ -45,13 +60,40 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
     private var loaded = false
     private var lastRecordUrl = ""
     private var lastRecordAt = 0L
+    @Volatile private var signatureLogged = false
 
     override fun onEnable() {
+        // 新旧宿主的 handleCode 参数个数不同，codeType/codeVersion 位置随之位移
+        val method = methodQBarString.method
+        val codeTypeIndex = if (method.parameterCount == 16) 6 else 5
         methodQBarString.hookBefore {
+            if (!signatureLogged) {
+                signatureLogged = true
+                logSignature(method.parameterTypes, args)
+            }
+            if ((args[0] as Activity).intent.getBooleanExtra(EXTRA_REPLAY, false)) return@hookBefore
             val content = args[1] as String? ?: return@hookBefore
-            handleUrl(content)
+            handleUrl(content, args[codeTypeIndex] as Int, args[codeTypeIndex + 1] as Int)
         }
         WeHomeScreenPopupMenuApi.addProvider(this)
+    }
+
+    /**
+     * 临时探针：WeKitsun 声称 codeType 在第 6/5 位，但没有任何证据。扫一次码把这行日志
+     * 发回来就能钉死下标，核完删掉。字符串只记长度，不记内容。
+     */
+    private fun logSignature(paramTypes: Array<out Class<*>>, args: Array<out Any?>) {
+        val types = paramTypes.joinToString(",") { it.simpleName }
+        val values = args.mapIndexed { index, arg ->
+            when (arg) {
+                null -> "$index=null"
+                is String -> "$index=String(len=${arg.length})"
+                is Int -> "$index=Int($arg)"
+                is Number -> "${index}=${arg.javaClass.simpleName}($arg)"
+                else -> "$index=${arg.javaClass.simpleName}"
+            }
+        }.joinToString(" ")
+        WeLogger.i(TAG, "handleCode arity=${args.size} types=[$types] args: $values")
     }
 
     override fun onDisable() {
@@ -59,7 +101,7 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
     }
 
     @Synchronized
-    private fun handleUrl(url: String) {
+    private fun handleUrl(url: String, codeType: Int, codeVersion: Int) {
         if (!loaded) {
             loadRecords()
             loaded = true
@@ -70,7 +112,7 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
         lastRecordUrl = url
         lastRecordAt = now
 
-        records.add(0, QrRecord(url, now))
+        records.add(0, QrRecord(url, now, codeType, codeVersion))
         if (records.size > MAX_RECORDS) {
             records.subList(MAX_RECORDS, records.size).clear()
         }
@@ -92,6 +134,26 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
             ) {
                 QrCodeRecordActivity.launch(LauncherUI.getInstance()!!)
             },
+        )
+    }
+
+    /** 只有记到真实 codeType 的记录才回放；旧记录交给调用方隐藏入口 */
+    fun canReplayInWeChat(record: QrRecord): Boolean = record.codeType != 0
+
+    /**
+     * 走微信自己的识别流程：这个宿主 Activity 会发布 DealQBarStrEvent 并管理结果/取消，
+     * 好友码、群码、支付码、小程序码都能落到对应功能；直接丢给 WebViewUI 只会开网页。
+     */
+    fun openInWeChat(activity: Activity, record: QrRecord) {
+        activity.startActivity(
+            Intent().setClassName(
+                HostInfo.packageName,
+                "com.tencent.mm.plugin.webview.stub.WebviewScanImageActivity",
+            )
+                .putExtra("key_string_for_scan", record.url)
+                .putExtra("key_codetype_for_scan", record.codeType)
+                .putExtra("key_codeversion_for_scan", record.codeVersion)
+                .putExtra(EXTRA_REPLAY, true),
         )
     }
 
