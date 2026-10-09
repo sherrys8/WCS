@@ -63,6 +63,7 @@ import com.composables.icons.materialsymbols.outlined.Extension
 import com.composables.icons.materialsymbols.outlined.Favorite
 import com.composables.icons.materialsymbols.outlined.Groups
 import com.composables.icons.materialsymbols.outlined.History
+import com.composables.icons.materialsymbols.outlined.Info
 import com.composables.icons.materialsymbols.outlined.Key
 import com.composables.icons.materialsymbols.outlined.Language
 import com.composables.icons.materialsymbols.outlined.More_vert
@@ -614,12 +615,12 @@ private fun showClearConfirm(context: Context, onClear: () -> Unit) {
 
 private fun showRulesDialog(context: Context, onSaved: () -> Unit) {
     showComposeDialog(context) {
-        RulesDialogContent(onSaved = onSaved)
+        RulesDialogContent(onDismiss = onDismiss, onSaved = onSaved)
     }
 }
 
 @Composable
-private fun RulesDialogContent(onSaved: () -> Unit) {
+private fun RulesDialogContent(onDismiss: () -> Unit, onSaved: () -> Unit) {
     var rules by remember { mutableStateOf(QrCodeRecord.rulesSnapshot()) }
     var name by remember { mutableStateOf("") }
     var prefix by remember { mutableStateOf("") }
