@@ -59,6 +59,8 @@ import com.composables.icons.materialsymbols.outlined.Close
 import com.composables.icons.materialsymbols.outlined.Code
 import com.composables.icons.materialsymbols.outlined.Content_copy
 import com.composables.icons.materialsymbols.outlined.Delete_sweep
+import com.composables.icons.materialsymbols.outlined.Expand_less
+import com.composables.icons.materialsymbols.outlined.Expand_more
 import com.composables.icons.materialsymbols.outlined.Extension
 import com.composables.icons.materialsymbols.outlined.Favorite
 import com.composables.icons.materialsymbols.outlined.Groups
@@ -66,6 +68,7 @@ import com.composables.icons.materialsymbols.outlined.History
 import com.composables.icons.materialsymbols.outlined.Info
 import com.composables.icons.materialsymbols.outlined.Key
 import com.composables.icons.materialsymbols.outlined.Language
+import com.composables.icons.materialsymbols.outlined.Label
 import com.composables.icons.materialsymbols.outlined.More_vert
 import com.composables.icons.materialsymbols.outlined.Newspaper
 import com.composables.icons.materialsymbols.outlined.Open_in_new
@@ -184,6 +187,20 @@ private fun QrCodeRecordScreen(
         }
     }
 
+    // Set 不是可保存类型，展开的组名用换行拼接后过 rememberSaveable
+    var expandedRaw by rememberSaveable { mutableStateOf("") }
+    val expandedNames = remember(expandedRaw) { expandedRaw.split('\n').filter { it.isNotEmpty() }.toSet() }
+    val toggleCategory: (String) -> Unit = { category ->
+        expandedRaw = if (category in expandedNames) (expandedNames - category).joinToString("\n")
+        else (expandedNames + category).joinToString("\n")
+    }
+    // 记录本身是最新在前，组内顺序沿用，组间按各自最新一条排序
+    val groups = visible
+        .mapNotNull { record -> QrCodeRecord.categoryOf(record.url)?.let { it to record } }
+        .groupBy({ it.first }, { it.second })
+        .map { (category, grouped) -> category to grouped }
+        .sortedByDescending { (_, grouped) -> grouped.first().time }
+
     AgentSettingsScaffold(
         title = stringResource(R.string.feature_qr_code_record_name),
         onBack = onBack,
@@ -278,6 +295,19 @@ private fun QrCodeRecordScreen(
                                     onClick = { viewMode = VIEW_FAVORITE },
                                     label = { Text(stringResource(R.string.qr_code_record_view_favorite)) },
                                 )
+                                if (viewMode == VIEW_CATEGORY && groups.isNotEmpty()) {
+                                    val allExpanded = groups.all { (category, _) -> category in expandedNames }
+                                    TextButton(onClick = {
+                                        expandedRaw = if (allExpanded) "" else groups.joinToString("\n") { (category, _) -> category }
+                                    }) {
+                                        Text(
+                                            stringResource(
+                                                if (allExpanded) R.string.qr_code_record_collapse_all
+                                                else R.string.qr_code_record_expand_all,
+                                            ),
+                                        )
+                                    }
+                                }
                             }
                             OutlinedTextField(
                                 value = query,
@@ -317,6 +347,18 @@ private fun QrCodeRecordScreen(
                     hasRules = rules.isNotEmpty(),
                     hasQuery = keyword.isNotEmpty(),
                     onAddRule = { showRulesDialog(context, onRefresh) },
+                )
+            }
+        } else if (viewMode == VIEW_CATEGORY) {
+            items(groups, key = { "category:${it.first}" }) { (category, categoryRecords) ->
+                CategoryCard(
+                    category = category,
+                    prefix = rules.firstOrNull { it.name == category }?.prefix,
+                    records = categoryRecords,
+                    // 搜索时命中组强制展开，否则用不到的结果会藏在收起的组里
+                    expanded = category in expandedNames || keyword.isNotEmpty(),
+                    onToggle = { toggleCategory(category) },
+                    onRefresh = onRefresh,
                 )
             }
         } else {
@@ -393,6 +435,63 @@ private fun EmptyCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * 一个分类一张组卡。展开/收起交给 [SegmentedColumn] 的 expandableItem：
+ * 它按进度裁剪高度与透明度，并把组头与组体的接缝圆角压平，不需要再叠 animateContentSize。
+ */
+@Composable
+private fun CategoryCard(
+    category: String,
+    prefix: String?,
+    records: List<QrCodeRecord.QrRecord>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onRefresh: () -> Unit,
+) {
+    SegmentedColumn {
+        expandableItem(
+            expanded = expanded,
+            topContent = {
+                BaseWidget(
+                    icon = MaterialSymbols.Outlined.Label,
+                    iconColor = MaterialTheme.colorScheme.primary,
+                    title = category,
+                    description = prefix,
+                    onClick = onToggle,
+                    trailingContent = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.qr_code_record_category_count, records.size),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Icon(
+                                imageVector = if (expanded) MaterialSymbols.Outlined.Expand_less
+                                else MaterialSymbols.Outlined.Expand_more,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                )
+            },
+            bottomContent = {
+                Column {
+                    Spacer(Modifier.height(6.dp))
+                    records.forEach { record ->
+                        // 组名已经是这张卡的标题，行内不再重复一遍
+                        QrRecordCard(record = record, category = null, onRefresh = onRefresh)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+            },
+        )
     }
 }
 

@@ -3897,6 +3897,9 @@
     <string name="qr_code_record_view_all">All</string>
     <string name="qr_code_record_view_category">Grouped</string>
     <string name="qr_code_record_view_favorite">Favorites</string>
+    <string name="qr_code_record_category_count">%1$d items</string>
+    <string name="qr_code_record_expand_all">Expand all</string>
+    <string name="qr_code_record_collapse_all">Collapse all</string>
     <string name="qr_code_record_search_hint">Search category or link</string>
     <string name="qr_code_record_no_match">No matching records</string>
     <string name="qr_code_record_no_match_description">Try another keyword, or switch back to All.</string>

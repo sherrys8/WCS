@@ -3935,6 +3935,9 @@
     <string name="qr_code_record_view_all">全部</string>
     <string name="qr_code_record_view_category">自动分类</string>
     <string name="qr_code_record_view_favorite">收藏</string>
+    <string name="qr_code_record_category_count">%1$d 条</string>
+    <string name="qr_code_record_expand_all">全部展开</string>
+    <string name="qr_code_record_collapse_all">全部收起</string>
     <string name="qr_code_record_search_hint">搜索分类名或链接</string>
     <string name="qr_code_record_no_match">没有匹配的记录</string>
     <string name="qr_code_record_no_match_description">换个关键词，或者切回「全部」看看。</string>
