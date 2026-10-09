@@ -302,10 +302,10 @@ private fun QrRecordCard(record: QrCodeRecord.QrRecord) {
     var expanded by rememberSaveable(record.url, record.time) { mutableStateOf(false) }
     var truncated by remember(record.url) { mutableStateOf(false) }
     val uri = remember(record.url) { record.url.toUri() }
-    // wxp:// 这类内部协议没有任何 Activity 能接 ACTION_VIEW，只能交给微信自己的扫码流程；
-    // 而回放要求记到真实 codeType，旧记录做不到，就只留复制。
+    // wxp:// 这类内部协议没有任何 Activity 能接 ACTION_VIEW，只能交给微信自己的识别流程；
+    // 而识别流程要求认得出 handleCode 的参数形状，认不出来就只留复制。
     val isWebUrl = uri.scheme == "http" || uri.scheme == "https"
-    val canOpenInWeChat = QrCodeRecord.canReplayInWeChat(record)
+    val canOpenInWeChat = QrCodeRecord.replaySupported
     val (icon, typeRes) = classifyQrContent(record.url)
 
     SegmentedColumn {
@@ -364,10 +364,14 @@ private fun QrRecordCard(record: QrCodeRecord.QrRecord) {
                             Button(
                                 modifier = Modifier.weight(1f),
                                 onClick = {
-                                    QrCodeRecord.openInWeChat(
-                                        activity,
-                                        record,
-                                    )
+                                    if (!QrCodeRecord.openInWeChat(activity, record)) {
+                                        showToast(
+                                            context,
+                                            context.localizedSystemString(
+                                                R.string.qr_code_record_open_failed,
+                                            ),
+                                        )
+                                    }
                                 },
                             ) { Text(stringResource(R.string.qr_code_record_open_in_wechat)) }
                         }
