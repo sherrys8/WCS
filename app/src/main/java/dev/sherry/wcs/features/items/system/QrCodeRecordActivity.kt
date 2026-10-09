@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -88,6 +89,7 @@ import dev.sherry.wcs.ui.content.TextButton
 import dev.sherry.wcs.ui.content.m3.BaseItemContainer
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
+import dev.sherry.wcs.ui.content.m3.SegmentedColumnScope
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.ui.utils.theme.ModuleTheme
 import dev.sherry.wcs.utils.android.copyToClipboard
@@ -439,8 +441,8 @@ private fun EmptyCard(
 }
 
 /**
- * 一个分类一张组卡。展开/收起交给 [SegmentedColumn] 的 expandableItem：
- * 它按进度裁剪高度与透明度，并把组头与组体的接缝圆角压平，不需要再叠 animateContentSize。
+ * 一个分类一张组卡：组头和组内每条记录都是同一个 [SegmentedColumn] 的 item，
+ * 所以边线和「全部」视图完全对齐；每条记录自己合成一张卡（头部行与链接、按钮同处一个容器）。
  */
 @Composable
 private fun CategoryCard(
@@ -452,47 +454,52 @@ private fun CategoryCard(
     onRefresh: () -> Unit,
 ) {
     SegmentedColumn {
-        expandableItem(
-            expanded = expanded,
-            topContent = {
-                BaseWidget(
-                    icon = MaterialSymbols.Outlined.Label,
-                    iconColor = MaterialTheme.colorScheme.primary,
-                    title = category,
-                    description = prefix,
-                    onClick = onToggle,
-                    trailingContent = {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = stringResource(R.string.qr_code_record_category_count, records.size),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Icon(
-                                imageVector = if (expanded) MaterialSymbols.Outlined.Expand_less
-                                else MaterialSymbols.Outlined.Expand_more,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    },
-                )
-            },
-            bottomContent = {
-                Column {
-                    Spacer(Modifier.height(6.dp))
-                    records.forEach { record ->
-                        // 组名已经是这张卡的标题，行内不再重复一遍
-                        QrRecordCard(record = record, category = null, onRefresh = onRefresh)
-                    }
-                    Spacer(Modifier.height(6.dp))
-                }
-            },
-        )
+        item(key = "category:$category") {
+            CategoryHeaderRow(category, prefix, records.size, expanded, onToggle)
+        }
+        records.forEach { record ->
+            // 组名已经是组卡标题，行内不再重复一遍
+            QrRecordBlock(record, null, onRefresh, animatedVisibility = expanded)
+        }
     }
+}
+
+@Composable
+private fun CategoryHeaderRow(
+    category: String,
+    prefix: String?,
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    BaseWidget(
+        icon = MaterialSymbols.Outlined.Label,
+        // 染色时让 BaseWidget 自己解析图标色（contentColorFor(primaryContainer)），
+        // 未染色才用 primary 拉出层级
+        iconColor = if (expanded) null else MaterialTheme.colorScheme.primary,
+        title = category,
+        description = prefix,
+        selected = expanded,
+        onClick = onToggle,
+        trailingContent = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // 条数与箭头都继承 ListItem 的 trailing 内容色，跟随 selected 一起换，
+                // 写死 primary / onSurfaceVariant 会在染色后塌掉对比度
+                Text(
+                    text = stringResource(R.string.qr_code_record_category_count, count),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Icon(
+                    imageVector = if (expanded) MaterialSymbols.Outlined.Expand_less
+                    else MaterialSymbols.Outlined.Expand_more,
+                    contentDescription = null,
+                )
+            }
+        },
+    )
 }
 
 /**
@@ -556,8 +563,33 @@ private fun classifyQrContent(record: QrCodeRecord.QrRecord): Pair<ImageVector, 
     }
 }
 
+/** 平铺视图（全部 / 收藏）用：一条记录自带一张组卡。 */
 @Composable
 private fun QrRecordCard(
+    record: QrCodeRecord.QrRecord,
+    category: String?,
+    onRefresh: () -> Unit,
+) {
+    SegmentedColumn { QrRecordBlock(record, category, onRefresh) }
+}
+
+/**
+ * 一条记录 = 一个 item、一张卡：头部行与链接、按钮同处一个 [BaseItemContainer]，
+ * 中间不再有分段缝。分组视图靠 animatedVisibility 让引擎做展开收起的进出场。
+ */
+private fun SegmentedColumnScope.QrRecordBlock(
+    record: QrCodeRecord.QrRecord,
+    category: String?,
+    onRefresh: () -> Unit,
+    animatedVisibility: Boolean = true,
+) {
+    item(key = "record:${record.time}", animatedVisibility = animatedVisibility) {
+        QrRecordCardContent(record, category, onRefresh)
+    }
+}
+
+@Composable
+private fun QrRecordCardContent(
     record: QrCodeRecord.QrRecord,
     category: String?,
     onRefresh: () -> Unit,
@@ -574,8 +606,8 @@ private fun QrRecordCard(
     val canOpenInWeChat = QrCodeRecord.replaySupported
     val (icon, typeRes) = classifyQrContent(record)
 
-    SegmentedColumn {
-        item {
+    BaseItemContainer {
+        Column {
             BaseWidget(
                 icon = icon,
                 iconColor = MaterialTheme.colorScheme.primary,
@@ -617,70 +649,74 @@ private fun QrRecordCard(
                     }
                 },
             )
-        }
-        item {
-            BaseItemContainer {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    SelectionContainer {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                SelectionContainer {
+                    Text(
+                        text = record.url,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (expanded) Int.MAX_VALUE else 4,
+                        overflow = TextOverflow.Ellipsis,
+                        onTextLayout = { result ->
+                            if (!expanded) truncated = result.hasVisualOverflow
+                        },
+                    )
+                }
+                if (truncated || expanded) {
+                    TextButton(onClick = { expanded = !expanded }) {
                         Text(
-                            text = record.url,
-                            modifier = Modifier.fillMaxWidth(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = if (expanded) Int.MAX_VALUE else 4,
-                            overflow = TextOverflow.Ellipsis,
-                            onTextLayout = { result ->
-                                if (!expanded) truncated = result.hasVisualOverflow
-                            },
+                            stringResource(
+                                if (expanded) R.string.qr_code_record_collapse
+                                else R.string.qr_code_record_expand,
+                            ),
                         )
                     }
-                    if (truncated || expanded) {
-                        TextButton(onClick = { expanded = !expanded }) {
-                            Text(
-                                stringResource(
-                                    if (expanded) R.string.qr_code_record_collapse
-                                    else R.string.qr_code_record_expand,
-                                ),
-                            )
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (canOpenInWeChat) {
-                            Button(
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    if (!QrCodeRecord.openInWeChat(activity, record)) {
-                                        showToast(
-                                            context,
-                                            context.localizedSystemString(
-                                                R.string.qr_code_record_open_failed,
-                                            ),
-                                        )
-                                    }
-                                },
-                            ) { Text(stringResource(R.string.qr_code_record_open_in_wechat)) }
-                        }
-                        TextButton(
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (canOpenInWeChat) {
+                        Button(
                             modifier = Modifier.weight(1f),
+                            // 左右收到 12dp：默认 24dp 时「在微信中打开」已经贴着边，
+                            // 喵化再加一个字就折成两行。
+                            contentPadding = PaddingValues(
+                                start = 12.dp,
+                                end = 12.dp,
+                                top = 8.dp,
+                                bottom = 8.dp,
+                            ),
                             onClick = {
-                                copyToClipboard(context, record.url)
-                                showToast(
-                                    context,
-                                    context.localizedSystemString(R.string.copied_to_clipboard),
-                                )
+                                if (!QrCodeRecord.openInWeChat(activity, record)) {
+                                    showToast(
+                                        context,
+                                        context.localizedSystemString(
+                                            R.string.qr_code_record_open_failed,
+                                        ),
+                                    )
+                                }
                             },
-                        ) {
-                            Icon(
-                                imageVector = MaterialSymbols.Outlined.Content_copy,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
+                        ) { Text(stringResource(R.string.qr_code_record_open_in_wechat)) }
+                    }
+                    TextButton(
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            copyToClipboard(context, record.url)
+                            showToast(
+                                context,
+                                context.localizedSystemString(R.string.copied_to_clipboard),
                             )
-                            Spacer(Modifier.size(width = 8.dp, height = 0.dp))
-                            Text(stringResource(R.string.system_qr_code_record_copy))
-                        }
+                        },
+                    ) {
+                        Icon(
+                            imageVector = MaterialSymbols.Outlined.Content_copy,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.size(width = 8.dp, height = 0.dp))
+                        Text(stringResource(R.string.system_qr_code_record_copy))
                     }
                 }
             }
