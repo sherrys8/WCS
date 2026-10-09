@@ -191,7 +191,7 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
             replayGuardUrl = record.url
             replayGuardUntil = System.currentTimeMillis() + REPLAY_GUARD_MS
             WeLogger.i(TAG, "replay direct handler=${handler.javaClass.name} args: ${describeArgs(args)}")
-            method.invoke(handler, args)
+            method.invoke(handler, *args)
             WeLogger.i(TAG, "replay direct invoked ${record.url}")
             true
         } catch (e: Throwable) {
