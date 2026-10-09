@@ -30,6 +30,7 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
 
     private const val TAG = "QrCodeRecord"
     private const val KEY_RECORDS = "qr_code_records"
+    private const val KEY_RULES = "qr_code_record_rules"
     private const val HOME_MENU_ITEM_ID = 777026
 
     /** 记录整串 JSON 存在一个偏好键里，不设上限会越来越肥 */
@@ -53,12 +54,23 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
         val codeName: String = "",
         val source: Int = 0,
         val scene: Int = 0,
+        val favorite: Boolean = false,
+    )
+
+    /** 用户自己定的归类规则：链接前缀命中就把记录归到这个名字下 */
+    @Serializable
+    data class Rule(
+        val name: String,
+        val prefix: String,
     )
 
     var showInHomeMenu by prefOption("qr_code_record_home_menu_enabled", false)
     private var prefRecords by prefOption(KEY_RECORDS, nul<String>())
+    private var prefRules by prefOption(KEY_RULES, nul<String>())
     private val records = mutableListOf<QrRecord>()
+    private val rules = mutableListOf<Rule>()
     private var loaded = false
+    private var rulesLoaded = false
     private var lastRecordUrl = ""
     private var lastRecordAt = 0L
     private var replayShape: CodeArgShape? = null
@@ -76,16 +88,15 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
         val codeName: Int,
         val codeType: Int,
         val codeVersion: Int,
-    ) {
-        fun describe() = "spare=$spareInt source=$source scene=$scene codeName=$codeName" +
-            " codeType=$codeType codeVersion=$codeVersion"
-    }
+    )
 
     override fun onEnable() {
         val paramTypes = methodQBarString.method.parameterTypes
         val shape = shapeOf(paramTypes)
         replayShape = shape
-        WeLogger.i(TAG, "handleCode arity=${paramTypes.size} shape=${shape?.describe() ?: "unknown"}")
+        if (shape == null) {
+            WeLogger.w(TAG, "handleCode arity=${paramTypes.size} 参数形状不认识，回放入口不会显示")
+        }
         methodQBarString.hookBefore {
             val content = args[1] as String? ?: return@hookBefore
             if (shape == null) {
@@ -190,9 +201,8 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
             val handler = createHandler()
             replayGuardUrl = record.url
             replayGuardUntil = System.currentTimeMillis() + REPLAY_GUARD_MS
-            WeLogger.i(TAG, "replay direct handler=${handler.javaClass.name} args: ${describeArgs(args)}")
             method.invoke(handler, *args)
-            WeLogger.i(TAG, "replay direct invoked ${record.url}")
+            WeLogger.i(TAG, "replay direct ok ${record.url}")
             true
         } catch (e: Throwable) {
             WeLogger.e(TAG, "replay direct failed arity=${method.parameterCount} args: ${describeArgs(args)}", e)
@@ -296,6 +306,66 @@ object QrCodeRecord : ClickableFeature(), IResolveDex, WeHomeScreenPopupMenuApi.
         lastRecordUrl = ""
         lastRecordAt = 0L
         WePrefs.remove(KEY_RECORDS)
+    }
+
+    /** 切换收藏并返回新状态；记录按 time 定位，同内容 1.5 秒内已去重不会撞 */
+    @Synchronized
+    fun toggleFavorite(time: Long): Boolean {
+        loadRecords()
+        val index = records.indexOfFirst { it.time == time }
+        if (index < 0) return false
+        val favorite = !records[index].favorite
+        records[index] = records[index].copy(favorite = favorite)
+        saveRecords()
+        return favorite
+    }
+
+    @Synchronized
+    fun rulesSnapshot(): List<Rule> {
+        loadRules()
+        return rules.toList()
+    }
+
+    /** 同前缀算同一条，直接改名字，免得列表里堆一串重复前缀 */
+    @Synchronized
+    fun saveRule(name: String, prefix: String) {
+        loadRules()
+        val normalized = prefix.trim()
+        rules.removeAll { it.prefix.equals(normalized, ignoreCase = true) }
+        rules.add(0, Rule(name.trim(), normalized))
+        saveRules()
+    }
+
+    @Synchronized
+    fun removeRule(prefix: String) {
+        loadRules()
+        rules.removeAll { it.prefix == prefix }
+        saveRules()
+    }
+
+    /** 最长前缀命中，越具体的规则赢 */
+    fun categoryOf(url: String): String? {
+        val target = stripScheme(url.trim())
+        return rulesSnapshot()
+            .filter { it.prefix.isNotBlank() && target.startsWith(stripScheme(it.prefix)) }
+            .maxByOrNull { it.prefix.length }
+            ?.name
+    }
+
+    /** 前缀允许省略协议头，否则手写的域名永远配不上 https:// 开头的链接 */
+    private fun stripScheme(value: String): String =
+        value.lowercase().removePrefix("https://").removePrefix("http://")
+
+    private fun loadRules() {
+        if (rulesLoaded) return
+        prefRules
+            ?.let { runCatching { DefaultJson.decodeFromString<List<Rule>>(it) }.getOrNull() }
+            ?.let { rules.addAll(it) }
+        rulesLoaded = true
+    }
+
+    private fun saveRules() {
+        prefRules = DefaultJson.encodeToString(rules.toList())
     }
 
     private fun saveRecords() {
