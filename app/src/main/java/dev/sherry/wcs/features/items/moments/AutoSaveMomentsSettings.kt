@@ -429,18 +429,6 @@ internal object AutoSaveMomentsSettings {
                                     },
                                 )
                             }
-                            item(key = "clear_records") {
-                                BaseWidget(
-                                    iconPlaceholder = false,
-                                    title = stringResource(R.string.moments_auto_save_clear_records),
-                                    description = stringResource(R.string.moments_auto_save_clear_records_summary),
-                                    onClick = {
-                                        AutoSaveMoments.clearSavedRecords()
-                                        showToast(localizedContext.getString(R.string.moments_auto_save_records_cleared))
-                                        onChanged()
-                                    },
-                                )
-                            }
                         }
                     }
                 },
