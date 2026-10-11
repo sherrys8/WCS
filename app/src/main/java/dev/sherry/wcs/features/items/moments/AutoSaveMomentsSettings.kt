@@ -118,15 +118,19 @@ internal object AutoSaveMomentsSettings {
     private fun showGlobalDialog(context: Context, onSettingsChanged: () -> Unit) {
         showComposeDialog(context) {
             var editDirectory by remember { mutableStateOf(false) }
+            // AtomicJsonConfigStore 不是可观察状态，写完必须把快照同步进来，本屏才会重组
+            var config by remember { mutableStateOf(store.get()) }
             if (editDirectory) {
                 showDirectoryDialog(
                     context = context,
                     onDismiss = { editDirectory = false },
-                    onChanged = { onSettingsChanged() },
+                    onChanged = {
+                        config = store.get()
+                        onSettingsChanged()
+                    },
                 )
                 return@showComposeDialog
             }
-            val config = store.get()
             val localizedContext = LocalContext.current
             AlertDialogContent(
                 modifier = Modifier.fillMaxWidth().fillMaxHeight(),
@@ -143,7 +147,7 @@ internal object AutoSaveMomentsSettings {
                                     checked = config.saveTypes.text,
                                     enabled = true,
                                     onClick = {
-                                        store.update { stored ->
+                                        config = store.update { stored ->
                                             stored.copy(version = CONFIG_VERSION, saveTypes = stored.saveTypes.copy(text = !stored.saveTypes.text))
                                         }
                                         onSettingsChanged()
@@ -156,7 +160,7 @@ internal object AutoSaveMomentsSettings {
                                     checked = config.saveTypes.images,
                                     enabled = true,
                                     onClick = {
-                                        store.update { stored ->
+                                        config = store.update { stored ->
                                             stored.copy(version = CONFIG_VERSION, saveTypes = stored.saveTypes.copy(images = !stored.saveTypes.images))
                                         }
                                         onSettingsChanged()
@@ -169,7 +173,7 @@ internal object AutoSaveMomentsSettings {
                                     checked = config.saveTypes.livePhotos,
                                     enabled = true,
                                     onClick = {
-                                        store.update { stored ->
+                                        config = store.update { stored ->
                                             stored.copy(version = CONFIG_VERSION, saveTypes = stored.saveTypes.copy(livePhotos = !stored.saveTypes.livePhotos))
                                         }
                                         onSettingsChanged()
@@ -182,7 +186,7 @@ internal object AutoSaveMomentsSettings {
                                     checked = config.saveTypes.videos,
                                     enabled = true,
                                     onClick = {
-                                        store.update { stored ->
+                                        config = store.update { stored ->
                                             stored.copy(version = CONFIG_VERSION, saveTypes = stored.saveTypes.copy(videos = !stored.saveTypes.videos))
                                         }
                                         onSettingsChanged()
@@ -195,7 +199,7 @@ internal object AutoSaveMomentsSettings {
                                 BaseWidget(
                                     iconPlaceholder = false,
                                     title = stringResource(R.string.moments_auto_save_directory),
-                                    description = directorySummary(localizedContext),
+                                    description = directorySummary(localizedContext, config),
                                     onClick = { editDirectory = true },
                                 )
                             }
@@ -230,11 +234,10 @@ internal object AutoSaveMomentsSettings {
     }
 
     @Composable
-    private fun directorySummary(context: Context): String {
-        val treeUri = store.get().treeUri
+    private fun directorySummary(context: Context, config: StoredAutoSaveConfig): String {
         return when {
-            treeUri.isNotBlank() -> context.getString(R.string.moments_auto_save_directory_summary_system_folder)
-            store.get().saveDirectory.isNotBlank() -> store.get().saveDirectory
+            config.treeUri.isNotBlank() -> context.getString(R.string.moments_auto_save_directory_summary_system_folder)
+            config.saveDirectory.isNotBlank() -> config.saveDirectory
             else -> context.getString(R.string.moments_auto_save_directory_summary_default)
         }
     }
@@ -365,7 +368,8 @@ internal object AutoSaveMomentsSettings {
     ) {
         showComposeDialog(context) {
             val localizedContext = LocalContext.current
-            val current = store.get().contacts[contact.wxId]
+            // AtomicJsonConfigStore 不是可观察状态，选中态存本地状态，写入后界面才跟得上
+            var current by remember { mutableStateOf(store.get().contacts[contact.wxId]) }
             AlertDialogContent(
                 modifier = Modifier.fillMaxWidth(),
                 title = { Text(contact.displayName.ifBlank { contact.wxId }) },
@@ -381,6 +385,7 @@ internal object AutoSaveMomentsSettings {
                                         store.update { stored ->
                                             stored.copy(version = CONFIG_VERSION, contacts = stored.contacts + (contact.wxId to MomentAutomationMode.WHEN_SEEN))
                                         }
+                                        current = MomentAutomationMode.WHEN_SEEN
                                         onChanged()
                                     },
                                 )
@@ -395,6 +400,7 @@ internal object AutoSaveMomentsSettings {
                                         store.update { stored ->
                                             stored.copy(version = CONFIG_VERSION, contacts = stored.contacts + (contact.wxId to MomentAutomationMode.ALL_LOADED))
                                         }
+                                        current = MomentAutomationMode.ALL_LOADED
                                         onChanged()
                                     },
                                 )
