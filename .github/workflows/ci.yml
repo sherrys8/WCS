@@ -423,7 +423,7 @@ jobs:
           cache-dependency-path: app/src/main/go/wcs-cloudflared/go.sum
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: false
 
