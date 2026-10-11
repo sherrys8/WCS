@@ -72,6 +72,7 @@
 
 ## 朋友圈
 
+* [朋友圈发布通知](features/moments/moment-post-notification.md)
 * [拦截朋友圈删除](features/moments/anti-moments-delete.md)
 * [朋友圈伪集赞](features/moments/fake-moments-likes.md)
 * [朋友圈底部详细信息](features/moments/display-details.md)
