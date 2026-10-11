@@ -3242,6 +3242,9 @@
     <string name="moments_auto_save_directory_path">路径</string>
     <string name="moments_auto_save_directory_path_hint">例如 /storage/emulated/0/Download/WcS/Moments</string>
     <string name="moments_auto_save_directory_saved">保存目录已更新</string>
+    <string name="moments_auto_save_clear_records">清空已保存记录</string>
+    <string name="moments_auto_save_clear_records_summary">清空后，已保存的朋友圈会重新保存</string>
+    <string name="moments_auto_save_records_cleared">已清空保存记录</string>
     <string name="moments_auto_save_mode_when_seen">刷到时保存新内容</string>
     <string name="moments_auto_save_mode_all_loaded">保存本地缓存全量内容</string>
     <string name="moments_auto_save_mode_all_loaded_requires_refresh">需启用“朋友圈 / 自动刷新”</string>

@@ -3190,6 +3190,9 @@
     <string name="moments_auto_save_directory_path">Path</string>
     <string name="moments_auto_save_directory_path_hint">e.g. /storage/emulated/0/Download/WcS/Moments</string>
     <string name="moments_auto_save_directory_saved">Save directory updated</string>
+    <string name="moments_auto_save_clear_records">Clear saved records</string>
+    <string name="moments_auto_save_clear_records_summary">Saved Moments will be saved again</string>
+    <string name="moments_auto_save_records_cleared">Saved records cleared</string>
     <string name="moments_auto_save_mode_when_seen">Save new Moments when seen</string>
     <string name="moments_auto_save_mode_all_loaded">Save all cached Moments</string>
     <string name="moments_auto_save_mode_all_loaded_requires_refresh">Requires “Moments / Auto refresh”</string>

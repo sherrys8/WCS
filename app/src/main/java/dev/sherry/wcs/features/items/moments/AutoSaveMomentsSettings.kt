@@ -117,20 +117,8 @@ internal object AutoSaveMomentsSettings {
 
     private fun showGlobalDialog(context: Context, onSettingsChanged: () -> Unit) {
         showComposeDialog(context) {
-            var editDirectory by remember { mutableStateOf(false) }
             // AtomicJsonConfigStore 不是可观察状态，写完必须把快照同步进来，本屏才会重组
             var config by remember { mutableStateOf(store.get()) }
-            if (editDirectory) {
-                showDirectoryDialog(
-                    context = context,
-                    onDismiss = { editDirectory = false },
-                    onChanged = {
-                        config = store.get()
-                        onSettingsChanged()
-                    },
-                )
-                return@showComposeDialog
-            }
             val localizedContext = LocalContext.current
             AlertDialogContent(
                 modifier = Modifier.fillMaxWidth().fillMaxHeight(),
@@ -195,12 +183,32 @@ internal object AutoSaveMomentsSettings {
                             }
                         }
                         SegmentedColumn(contentPadding = PaddingValues(0.dp)) {
+                            item(key = "clear_records") {
+                                BaseWidget(
+                                    iconPlaceholder = false,
+                                    title = stringResource(R.string.moments_auto_save_clear_records),
+                                    description = stringResource(R.string.moments_auto_save_clear_records_summary),
+                                    onClick = {
+                                        AutoSaveMoments.clearSavedRecords()
+                                        showToast(localizedContext.getString(R.string.moments_auto_save_records_cleared))
+                                        onSettingsChanged()
+                                    },
+                                )
+                            }
                             item(key = "directory") {
                                 BaseWidget(
                                     iconPlaceholder = false,
                                     title = stringResource(R.string.moments_auto_save_directory),
                                     description = directorySummary(localizedContext, config),
-                                    onClick = { editDirectory = true },
+                                    onClick = {
+                                        showDirectoryDialog(
+                                            context = context,
+                                            onChanged = {
+                                                config = store.get()
+                                                onSettingsChanged()
+                                            },
+                                        )
+                                    },
                                 )
                             }
                         }
@@ -244,13 +252,14 @@ internal object AutoSaveMomentsSettings {
 
     private fun showDirectoryDialog(
         context: Context,
-        onDismiss: () -> Unit,
         onChanged: () -> Unit,
     ) {
         showComposeDialog(context) {
             var draft by remember { mutableStateOf(store.get().saveDirectory) }
             var revision by remember { mutableIntStateOf(0) }
             val localizedContext = LocalContext.current
+            // store 不可观察，revision 是选完系统目录后让本屏重画唯一的钥匙
+            val stored = remember(revision) { store.get() }
             AlertDialogContent(
                 modifier = Modifier.fillMaxWidth().fillMaxHeight(),
                 title = { Text(stringResource(R.string.moments_auto_save_directory)) },
@@ -261,7 +270,7 @@ internal object AutoSaveMomentsSettings {
                                 BaseWidget(
                                     iconPlaceholder = false,
                                     title = stringResource(R.string.moments_auto_save_directory_system_folder),
-                                    description = if (store.get().treeUri.isNotBlank()) {
+                                    description = if (stored.treeUri.isNotBlank()) {
                                         localizedContext.getString(R.string.moments_auto_save_directory_system_folder_picked)
                                     } else {
                                         localizedContext.getString(R.string.moments_auto_save_directory_not_picked)
@@ -416,6 +425,18 @@ internal object AutoSaveMomentsSettings {
                                         }
                                         showToast(localizedContext.getString(R.string.moments_auto_save_contact_removed))
                                         onDismiss()
+                                        onChanged()
+                                    },
+                                )
+                            }
+                            item(key = "clear_records") {
+                                BaseWidget(
+                                    iconPlaceholder = false,
+                                    title = stringResource(R.string.moments_auto_save_clear_records),
+                                    description = stringResource(R.string.moments_auto_save_clear_records_summary),
+                                    onClick = {
+                                        AutoSaveMoments.clearSavedRecords()
+                                        showToast(localizedContext.getString(R.string.moments_auto_save_records_cleared))
                                         onChanged()
                                     },
                                 )
