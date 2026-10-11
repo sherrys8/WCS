@@ -242,12 +242,14 @@ object AutoSaveMoments : AutoMomentsBase(),
         var ok = false
         for (index in images.indices) {
             val media = resolved.items.getOrNull(index) ?: continue
-            if (target.saveFromPath(relativeDir, "image_${index + 1}${extensionOf(media.imagePath)}", media.imagePath)) {
+            // 实况图与图片分开命名，否则同目录里 image_1.jpg 和 image_1.mp4 分不清谁是视频
+            val baseName = "Live Photo_${index + 1}"
+            if (target.saveFromPath(relativeDir, "$baseName${extensionOf(media.imagePath, ".jpg")}", media.imagePath)) {
                 ok = true
             }
             val videoPath = media.videoPath
             if (videosReady && !videoPath.isNullOrBlank()) {
-                if (target.saveFromPath(relativeDir, "image_${index + 1}${extensionOf(videoPath)}", videoPath)) {
+                if (target.saveFromPath(relativeDir, "$baseName${extensionOf(videoPath, ".mp4")}", videoPath)) {
                     ok = true
                 }
             }
@@ -259,7 +261,11 @@ object AutoSaveMoments : AutoMomentsBase(),
         val resolved: ResolvedVideo = runBlocking {
             WeMomentsApi.ensureVideoPaths(HostInfo.application, content)
         } ?: return false
-        return target.saveFromPath(relativeDir, "video${extensionOf(resolved.videoPath)}", resolved.videoPath)
+        return target.saveFromPath(
+            relativeDir,
+            "video${extensionOf(resolved.videoPath, ".mp4")}",
+            resolved.videoPath,
+        )
     }
 
     private fun saveImages(target: SaveTarget, relativeDir: String, content: MomentContent): Boolean {
@@ -268,7 +274,8 @@ object AutoSaveMoments : AutoMomentsBase(),
         } ?: return false
         var ok = false
         for (index in images.indices) {
-            if (target.saveFromPath(relativeDir, "image_${index + 1}${extensionOf(images[index])}", images[index])) {
+            val fileName = "image_${index + 1}${extensionOf(images[index], ".jpg")}"
+            if (target.saveFromPath(relativeDir, fileName, images[index])) {
                 ok = true
             }
         }
@@ -294,10 +301,37 @@ object AutoSaveMoments : AutoMomentsBase(),
 
     private fun sanitizeFileName(name: String): String = name.replace(Regex("""[\\/:*?"<>|]"""), "_")
 
-    private fun extensionOf(path: String): String {
-        val lower = path.substringAfterLast('.', "").lowercase()
-        return if (lower in SAVE_EXTENSIONS) ".$lower" else ""
+    /**
+     * 微信给的大图缓存名经常不带后缀（实测落盘的 148 个媒体文件全无扩展名，相册和播放器都不认），
+     * 所以名字里取不到就先按文件头魔数判；VFS 逻辑路径读不了文件头，退回按类型给默认后缀。
+     */
+    private fun extensionOf(path: String, fallback: String): String {
+        val named = path.substringAfterLast('.', "").lowercase()
+        if (named in SAVE_EXTENSIONS) return ".$named"
+        return sniffExtension(path).ifEmpty { fallback }
     }
+
+    private fun sniffExtension(path: String): String {
+        if (!path.asPath.isRegularFile()) return ""
+        return runCatching {
+            val header = ByteArray(16)
+            val read = java.io.File(path).inputStream().use { it.read(header) }
+            if (read < 4) return@runCatching ""
+            when {
+                header[0] == 0xFF.toByte() && header[1] == 0xD8.toByte() -> ".jpg"
+                header.has(0, "GIF8") -> ".gif"
+                header.has(0, "\u0089PNG") -> ".png"
+                header.has(0, "RIFF") && header.has(8, "WEBP") -> ".webp"
+                !header.has(4, "ftyp") -> ""
+                header.has(8, "qt  ") -> ".mov"
+                HEIF_BRANDS.any { header.has(8, it) } -> ".heic"
+                else -> ".mp4"
+            }
+        }.getOrDefault("")
+    }
+
+    private fun ByteArray.has(offset: Int, literal: String): Boolean =
+        offset + literal.length <= size && literal.indices.all { this[offset + it] == literal[it].code.toByte() }
 
     private fun buildSaveTarget(): SaveTarget? {
         val treeUri = AutoSaveMomentsSettings.treeUri()
@@ -439,4 +473,7 @@ object AutoSaveMoments : AutoMomentsBase(),
     }
 
     private val SAVE_EXTENSIONS = setOf("jpg", "jpeg", "png", "gif", "webp", "heic", "mp4", "mov")
+
+    /** HEIF 家族的 ftyp brand，用来把 .heic 从普通 mp4 里分出来 */
+    private val HEIF_BRANDS = setOf("heic", "heix", "heim", "heis", "mif1", "msf1", "hevc", "hev1")
 }
