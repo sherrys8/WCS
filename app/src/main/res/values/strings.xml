@@ -3216,7 +3216,10 @@
     <string name="moment_post_notify_title_template">Notification title</string>
     <string name="moment_post_notify_body_template">Notification text</string>
     <string name="moment_post_notify_toast_template">Toast text</string>
-    <string name="moment_post_notify_template_hint">Leave blank for the default. Variables: %1$s</string>
+    <string name="moment_post_notify_template_hint">Variables: %1$s</string>
+    <string name="moment_post_notify_default_hint">Blank uses: %1$s</string>
+    <string name="moment_post_notify_sample_sender">name</string>
+    <string name="moment_post_notify_sample_content">text</string>
     <string name="moment_post_notify_channel_name">Moment posts</string>
     <string name="moment_post_notify_default_title">📣 A friend posted a Moment</string>
     <string name="moment_post_notify_body_default">%1$s posted a %2$s Moment</string>

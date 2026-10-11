@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,6 +40,7 @@ import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.ContactsSelector
 import dev.sherry.wcs.ui.content.TextButton
+import dev.sherry.wcs.ui.content.m3.BaseSupportingWidget
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
@@ -296,7 +298,22 @@ object MomentPostNotification : ClickableFeature(),
         var titleState by remember { mutableStateOf(titleTemplate) }
         var bodyState by remember { mutableStateOf(bodyTemplate) }
         var toastTextState by remember { mutableStateOf(toastTemplate) }
-        val templateHint = stringResource(R.string.moment_post_notify_template_hint, TEMPLATE_VARIABLES)
+        val variables = stringResource(R.string.moment_post_notify_template_hint, TEMPLATE_VARIABLES)
+        val senderSample = stringResource(R.string.moment_post_notify_sample_sender)
+        val contentSample = stringResource(R.string.moment_post_notify_sample_content)
+        val imageType = stringResource(MomentsContentType.IMG.nameRes)
+        val titleHint = stringResource(
+            R.string.moment_post_notify_default_hint,
+            stringResource(R.string.moment_post_notify_default_title),
+        )
+        val bodyHint = stringResource(
+            R.string.moment_post_notify_default_hint,
+            stringResource(R.string.moment_post_notify_body_with_text, senderSample, imageType, contentSample),
+        )
+        val toastHint = stringResource(
+            R.string.moment_post_notify_default_hint,
+            stringResource(R.string.moment_post_notify_toast_default, senderSample, imageType),
+        )
 
         AlertDialogContent(
             modifier = Modifier.fillMaxWidth(),
@@ -360,7 +377,7 @@ object MomentPostNotification : ClickableFeature(),
                                 dialogTitle = stringResource(R.string.moment_post_notify_title_template),
                                 confirmLabel = stringResource(R.string.dialog_confirm),
                                 dismissLabel = stringResource(R.string.dialog_cancel),
-                                valueHint = templateHint,
+                                valueHint = titleHint,
                             )
                         }
                         item(key = "body_template") {
@@ -375,7 +392,7 @@ object MomentPostNotification : ClickableFeature(),
                                 dialogTitle = stringResource(R.string.moment_post_notify_body_template),
                                 confirmLabel = stringResource(R.string.dialog_confirm),
                                 dismissLabel = stringResource(R.string.dialog_cancel),
-                                valueHint = templateHint,
+                                valueHint = bodyHint,
                             )
                         }
                         item(key = "toast_template") {
@@ -390,8 +407,17 @@ object MomentPostNotification : ClickableFeature(),
                                 dialogTitle = stringResource(R.string.moment_post_notify_toast_template),
                                 confirmLabel = stringResource(R.string.dialog_confirm),
                                 dismissLabel = stringResource(R.string.dialog_cancel),
-                                valueHint = templateHint,
+                                valueHint = toastHint,
                             )
+                        }
+                        item(key = "template_variables") {
+                            BaseSupportingWidget(title = variables) {
+                                Text(
+                                    text = TEMPLATE_VARIABLES,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
