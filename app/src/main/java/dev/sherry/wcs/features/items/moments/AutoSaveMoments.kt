@@ -23,6 +23,7 @@ import dev.sherry.wcs.utils.fs.createDirsSafe
 import kotlinx.coroutines.runBlocking
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.div
+import kotlin.io.path.fileSize
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.writeText
 import java.nio.file.Path
@@ -136,17 +137,18 @@ object AutoSaveMoments : AutoMomentsBase(),
     }
 
     private fun queryCachedTargetSnsIds(): List<Long> {
-        if (!WeDatabaseApi.isReady) return emptyList()
         val sql = """
             SELECT snsId, userName
             FROM SnsInfo
             WHERE snsId != 0
-              AND sourceType = 0
+              AND (sourceType & ${WeMomentsApi.AD_SOURCE_FLAG}) = 0
+              AND (sourceType = 0 OR (sourceType & ${WeMomentsApi.ACTIVE_SOURCE_MASK}) != 0)
             ORDER BY createTime DESC
         """.trimIndent()
 
         val result = mutableListOf<Long>()
-        WeDatabaseApi.rawQuery(sql, emptyArray()).use { cursor ->
+        // SnsInfo 只在朋友圈独立库里，用 WeDatabaseApi 查主消息库会直接 no such table
+        WeMomentsApi.rawQuerySnsInfo(sql).use { cursor ->
             while (cursor.moveToNext()) {
                 val snsId = cursor.getLong(0)
                 val owner = cursor.getString(1).orEmpty()
@@ -236,8 +238,9 @@ object AutoSaveMoments : AutoMomentsBase(),
         } ?: return false
 
         val videosReady = runBlocking { WeMomentsApi.ensureLivePhotoVideosCached(content) }
-        val resolved = WeMomentsApi.resolveMediaItems(content)
-        if (resolved == null) return false
+        val resolved = WeMomentsApi.resolveMediaItems(content) ?: return false
+        // 只存到封面图就返回 true 会把这条永久写进已保存集合，视频以后再也没有机会补
+        if (resolved.degradedLivePhotos) return false
 
         var ok = false
         for (index in images.indices) {
@@ -370,7 +373,9 @@ object AutoSaveMoments : AutoMomentsBase(),
     private class FsSaveTarget(val root: Path) : SaveTarget {
         override fun saveFromPath(relativeDir: String, fileName: String, sourcePath: String): Boolean {
             val dest = root.resolve(relativeDir).createDirsSafe().resolve(fileName)
-            return WeMomentsApi.copyExistingFile(sourcePath, dest.absolutePathString())
+            // 微信 VFS 的复制接口会把“调用成功”当成“写入成功”，目标路径上可能一个字节都没有
+            return WeMomentsApi.copyExistingFile(sourcePath, dest.absolutePathString()) &&
+                    dest.isRegularFile() && dest.fileSize() > 0L
         }
 
         override fun saveText(relativeDir: String, fileName: String, text: String): Boolean {
