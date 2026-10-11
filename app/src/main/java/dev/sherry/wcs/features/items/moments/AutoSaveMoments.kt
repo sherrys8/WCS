@@ -57,6 +57,7 @@ object AutoSaveMoments : AutoMomentsBase(),
     )
 
     override fun onEnable() {
+        startAutomation()
         WeDatabaseListenerApi.addListener(this)
         AutoRefresh.addListener(this)
         installTimelineHooks()
@@ -64,6 +65,7 @@ object AutoSaveMoments : AutoMomentsBase(),
     }
 
     override fun onDisable() {
+        stopAutomation()
         WeDatabaseListenerApi.removeListener(this)
         AutoRefresh.removeListener(this)
     }
@@ -219,7 +221,7 @@ object AutoSaveMoments : AutoMomentsBase(),
         val isImage = isImageContent && types.images
         val isText = !hasMedia && type == MomentsContentType.TEXT.typeId && types.text && content.contentText.isNotBlank()
 
-        var saved = when {
+        val mediaSaved = when {
             isLive -> saveLivePhoto(target, relativeDir, content)
             isVideo -> saveVideo(target, relativeDir, content)
             isImage -> saveImages(target, relativeDir, content)
@@ -227,9 +229,10 @@ object AutoSaveMoments : AutoMomentsBase(),
             else -> false
         }
         if (hasMedia && types.text && content.contentText.isNotBlank()) {
-            saved = saveText(target, relativeDir, content.contentText) || saved
+            // 文案只是附带产物：媒体没存上时不能由它把整条标成已保存，否则剩下的图和视频永远不会再补
+            saveText(target, relativeDir, content.contentText)
         }
-        return saved
+        return mediaSaved
     }
 
     private fun saveLivePhoto(target: SaveTarget, relativeDir: String, content: MomentContent): Boolean {
@@ -239,8 +242,6 @@ object AutoSaveMoments : AutoMomentsBase(),
 
         val videosReady = runBlocking { WeMomentsApi.ensureLivePhotoVideosCached(content) }
         val resolved = WeMomentsApi.resolveMediaItems(content) ?: return false
-        // 只存到封面图就返回 true 会把这条永久写进已保存集合，视频以后再也没有机会补
-        if (resolved.degradedLivePhotos) return false
 
         var ok = false
         for (index in images.indices) {
@@ -257,7 +258,8 @@ object AutoSaveMoments : AutoMomentsBase(),
                 }
             }
         }
-        return ok
+        // 视频缺位时封面先存着，但整条不算保存完成，下一轮还会来补
+        return ok && !resolved.degradedLivePhotos
     }
 
     private fun saveVideo(target: SaveTarget, relativeDir: String, content: MomentContent): Boolean {
@@ -361,6 +363,14 @@ object AutoSaveMoments : AutoMomentsBase(),
             }
         }
         savedSnsIds = updated
+    }
+
+    /** 只清去重记录，磁盘上已保存的文件不动。 */
+    @Synchronized
+    fun clearSavedRecords() {
+        savedSnsIds = emptySet()
+        handledSnsIds.clear()
+        lastAttemptAt.clear()
     }
 
     // ==================== 保存目标 ====================
