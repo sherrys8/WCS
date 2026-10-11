@@ -906,7 +906,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState()),
                 ) {
-                    SegmentedColumn {
+                    SegmentedColumn(title = stringResource(R.string.ui_group_ai_settings_title)) {
                         item {
                             TextFieldDialogWidget(
                                 title = stringResource(R.string.ui_group_ai_settings_base_url),
