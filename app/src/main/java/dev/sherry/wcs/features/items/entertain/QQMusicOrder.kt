@@ -40,6 +40,7 @@ import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.fs.KnownPaths
 import kotlin.io.path.absolutePathString
+import kotlin.io.path.div
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
