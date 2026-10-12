@@ -620,9 +620,8 @@ private fun nukeFeatureCategoryGroups(entries: List<NukeRootEntry>): List<List<N
         listOf(FeatureCategoryIds.CHAT, FeatureCategoryIds.CONTACTS_GROUPS, FeatureCategoryIds.PAYMENT),
         listOf(FeatureCategoryIds.MOMENTS, FeatureCategoryIds.SYSTEM_PRIVACY, FeatureCategoryIds.VOIP, FeatureCategoryIds.NOTIFICATIONS),
         listOf(FeatureCategoryIds.BEAUTIFY, FeatureCategoryIds.OFFICIAL_ACCOUNTS, FeatureCategoryIds.MINIAPPS, FeatureCategoryIds.CHANNELS),
-        listOf(FeatureCategoryIds.PROFILE, FeatureCategoryIds.DEBUG),
-        listOf(FeatureCategoryIds.SCRIPTING_JAVA),
-        listOf(FeatureCategoryIds.ENTERTAIN, FeatureCategoryIds.BATCH),
+        listOf(FeatureCategoryIds.PROFILE, FeatureCategoryIds.ENTERTAIN, FeatureCategoryIds.BATCH),
+        listOf(FeatureCategoryIds.SCRIPTING_JAVA, FeatureCategoryIds.SCRIPTING_PYTHON, FeatureCategoryIds.DEBUG),
         listOf(FeatureCategoryIds.HOME_SCREEN_MENU, FeatureCategoryIds.CONTACT_DETAILS),
     ).map { ids -> ids.map(byCategoryId::getValue) }.toMutableList()
     categoryGroups += entries.filter { it.destination == NukeDestination.ModuleDebug }
