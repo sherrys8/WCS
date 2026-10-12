@@ -174,6 +174,7 @@
 
 ## 娱乐
 
+* [QQ点歌](features/entertain/qq-music-order.md)
 * [图片旋转](features/entertain/image-rotation.md)
 * [彩虹文本](features/entertain/rainbow-text.md)
 * [清空资料信息](features/entertain/clear-profile-details.md)

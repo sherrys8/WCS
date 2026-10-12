@@ -1794,12 +1794,17 @@ object WeMessageApi : ApiFeature(), IResolveDex {
         musicUrl: String,
         musicDataUrl: String,
         thumbData: ByteArray?,
-        appId: String? = null
+        appId: String? = null,
+        songLyric: String = "",
+        songAlbumUrl: String = "",
     ): Boolean {
         return try {
             val mediaObject = WXMusicObject().apply {
                 this.musicUrl = musicUrl
                 this.musicDataUrl = musicDataUrl
+                // 歌词与专辑封面决定卡片点开后的滚动字幕；不传就是无声卡片的裸链接
+                this.songLyric = songLyric
+                this.songAlbumUrl = songAlbumUrl
             }
             val mediaMessage = WXMediaMessage().apply {
                 this.title = title
