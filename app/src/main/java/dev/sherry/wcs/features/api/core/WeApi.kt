@@ -1,6 +1,7 @@
 package dev.sherry.wcs.features.api.core
 
 import android.content.Context
+import android.content.Intent
 import dev.sherry.wcs.constants.PackageNames
 import dev.sherry.wcs.utils.RuntimeConfig
 import dev.sherry.wcs.utils.android.Intent
@@ -45,11 +46,14 @@ object WeApi {
         }
     }
 
+    /** 某个好友的朋友圈相册（按天分组那种页面），通知也要拿它拼 PendingIntent */
+    fun momentsAlbumIntent(context: Context, wxId: String): Intent = Intent {
+        setClassName(context.packageName, "${PackageNames.WECHAT}.plugin.sns.ui.SnsUserUI")
+        putExtra("sns_userName", wxId)
+    }
+
     fun openMoments(context: Context, wxId: String) {
-        context.startActivity(Intent {
-            setClassName(context.packageName, "${PackageNames.WECHAT}.plugin.sns.ui.SnsUserUI")
-            putExtra("sns_userName", wxId)
-        })
+        context.startActivity(momentsAlbumIntent(context, wxId))
     }
 
     enum class OpenContactDestination {

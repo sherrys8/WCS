@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,7 +39,6 @@ import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.ContactsSelector
 import dev.sherry.wcs.ui.content.TextButton
-import dev.sherry.wcs.ui.content.m3.BaseSupportingWidget
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
@@ -71,15 +69,31 @@ object MomentPostNotification : ClickableFeature(),
     private const val TBL_SNS_INFO = "SnsInfo"
     private const val CHANNEL_ID = "wcs_moment_post_v1"
     private const val LAUNCHER_UI = "com.tencent.mm.ui.LauncherUI"
-    private const val TIMELINE_UI = "com.tencent.mm.plugin.sns.ui.SnsTimeLineUI"
-    private const val MAX_NOTIFIED_RECORDS = 2000
+
+    /**
+     * 与首页 FAB 预设、负一屏、导航栏替换用的是同一个类。
+     * 旧写法 `SnsTimeLineUI` 起不来，通知点进去只会停在首页。
+     */
+    private const val TIMELINE_UI = "com.tencent.mm.plugin.sns.ui.improve.ImproveSnsTimelineUI"
+    private const val MAX_NOTIFIED_RECORDS = 1000
     private const val MAX_TEXT_CHARS = 500
 
-    private const val TEMPLATE_VARIABLES = "%sender% %wxid% %type% %content% %snsid%"
+    /**
+     * 模板变量说明，一个变量一行。变量名留在代码里——写进资源会让 aapt 把 `%s` 当格式符。
+     */
+    private val VARIABLE_HINTS = listOf(
+        "%sender%" to R.string.moment_post_notify_var_sender,
+        "%wxid%" to R.string.moment_post_notify_var_wxid,
+        "%type%" to R.string.moment_post_notify_var_type,
+        "%content%" to R.string.moment_post_notify_var_content,
+        "%snsid%" to R.string.moment_post_notify_var_snsid,
+    )
 
     private var targets by WePrefs.prefOption("moment_post_notify_targets", emptySet())
     private var systemNotification by WePrefs.prefOption("moment_post_notify_system", true)
     private var toastAlert by WePrefs.prefOption("moment_post_notify_toast", true)
+    private var openTimelineOnTap by WePrefs.prefOption("moment_post_notify_open_timeline", true)
+    private var openAuthorAlbumOnTap by WePrefs.prefOption("moment_post_notify_open_author", false)
     private var titleTemplate by WePrefs.prefOption("moment_post_notify_title_template", "")
     private var bodyTemplate by WePrefs.prefOption("moment_post_notify_body_template", "")
     private var toastTemplate by WePrefs.prefOption("moment_post_notify_toast_template", "")
@@ -161,7 +175,7 @@ object MomentPostNotification : ClickableFeature(),
             .ifBlank { defaultBody(sender, type, post.text) }
 
         if (systemNotification) {
-            runCatching { sendNotification(title, body, snsId) }
+            runCatching { sendNotification(title, body, snsId, post.owner) }
                 .onFailure { WeLogger.w(TAG, "failed to notify Moments post $key", it) }
         }
         if (toastAlert) {
@@ -202,7 +216,7 @@ object MomentPostNotification : ClickableFeature(),
 
     // ==================== 提醒呈现 ====================
 
-    private fun sendNotification(title: String, body: String, snsId: Long) {
+    private fun sendNotification(title: String, body: String, snsId: Long, owner: String) {
         val context = HostInfo.application
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         ensureChannel(manager)
@@ -222,7 +236,7 @@ object MomentPostNotification : ClickableFeature(),
             .setCategory(Notification.CATEGORY_MESSAGE)
             .setPriority(Notification.PRIORITY_HIGH)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
-            .setContentIntent(openTimelineIntent(context, snsId))
+            .setContentIntent(buildContentIntent(context, snsId, owner))
         manager.notify(("wcs_moments_" + java.lang.Long.toUnsignedString(snsId)).hashCode(), builder.build())
     }
 
@@ -238,18 +252,24 @@ object MomentPostNotification : ClickableFeature(),
         )
     }
 
-    private fun openTimelineIntent(context: Context, snsId: Long): PendingIntent {
+    /**
+     * 点通知的落点：底下永远垫一个微信首页，返回键能退回首页。
+     * 设置里两个落点开关互斥（开一个自动关另一个），所以这里最多命中一个。
+     */
+    private fun buildContentIntent(context: Context, snsId: Long, owner: String): PendingIntent {
         var flags = PendingIntent.FLAG_UPDATE_CURRENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
         val home = Intent().apply {
             component = ComponentName(context.packageName, LAUNCHER_UI)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
-        val timeline = Intent().apply {
-            component = ComponentName(context.packageName, TIMELINE_UI)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        }
-        return PendingIntent.getActivities(context, snsId.toInt(), arrayOf(home, timeline), flags)
+        val destination = when {
+            openAuthorAlbumOnTap -> WeApi.momentsAlbumIntent(context, owner)
+            openTimelineOnTap -> Intent().setClassName(context.packageName, TIMELINE_UI)
+            else -> null
+        } ?: return PendingIntent.getActivity(context, snsId.toInt(), home, flags)
+        destination.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivities(context, snsId.toInt(), arrayOf(home, destination), flags)
     }
 
     private fun defaultBody(sender: String, type: String, text: String): String =
@@ -295,24 +315,27 @@ object MomentPostNotification : ClickableFeature(),
         var targetsState by remember { mutableStateOf(targets) }
         var systemState by remember { mutableStateOf(systemNotification) }
         var toastState by remember { mutableStateOf(toastAlert) }
+        var openTimelineState by remember { mutableStateOf(openTimelineOnTap) }
+        var openAuthorState by remember { mutableStateOf(openAuthorAlbumOnTap) }
         var titleState by remember { mutableStateOf(titleTemplate) }
         var bodyState by remember { mutableStateOf(bodyTemplate) }
         var toastTextState by remember { mutableStateOf(toastTemplate) }
-        val variables = stringResource(R.string.moment_post_notify_template_hint, TEMPLATE_VARIABLES)
-        val senderSample = stringResource(R.string.moment_post_notify_sample_sender)
-        val contentSample = stringResource(R.string.moment_post_notify_sample_content)
-        val imageType = stringResource(MomentsContentType.IMG.nameRes)
+        val variables = stringResource(R.string.moment_post_notify_variables)
+        val variableHelp = VARIABLE_HINTS.joinToString("\n") { (token, labelRes) ->
+            stringResource(labelRes, token)
+        }
         val titleHint = stringResource(
             R.string.moment_post_notify_default_hint,
             stringResource(R.string.moment_post_notify_default_title),
         )
+        // 提示显示默认模板原样：把位置参数填成变量名本身，措辞跟着默认串走，各语言不会跑偏
         val bodyHint = stringResource(
             R.string.moment_post_notify_default_hint,
-            stringResource(R.string.moment_post_notify_body_with_text, senderSample, imageType, contentSample),
+            stringResource(R.string.moment_post_notify_body_with_text, "%sender%", "%type%", "%content%"),
         )
         val toastHint = stringResource(
             R.string.moment_post_notify_default_hint,
-            stringResource(R.string.moment_post_notify_toast_default, senderSample, imageType),
+            stringResource(R.string.moment_post_notify_toast_default, "%sender%", "%type%"),
         )
 
         AlertDialogContent(
@@ -359,6 +382,40 @@ object MomentPostNotification : ClickableFeature(),
                                 onCheckedChange = {
                                     toastState = it
                                     toastAlert = it
+                                },
+                            )
+                        }
+                        item(key = "open_timeline") {
+                            SwitchWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(R.string.moment_post_notify_open_timeline),
+                                description = stringResource(R.string.moment_post_notify_open_timeline_summary),
+                                enabled = systemState,
+                                checked = openTimelineState,
+                                onCheckedChange = {
+                                    openTimelineState = it
+                                    openTimelineOnTap = it
+                                    if (it) {
+                                        openAuthorState = false
+                                        openAuthorAlbumOnTap = false
+                                    }
+                                },
+                            )
+                        }
+                        item(key = "open_author") {
+                            SwitchWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(R.string.moment_post_notify_open_author),
+                                description = stringResource(R.string.moment_post_notify_open_author_summary),
+                                enabled = systemState,
+                                checked = openAuthorState,
+                                onCheckedChange = {
+                                    openAuthorState = it
+                                    openAuthorAlbumOnTap = it
+                                    if (it) {
+                                        openTimelineState = false
+                                        openTimelineOnTap = false
+                                    }
                                 },
                             )
                         }
@@ -411,13 +468,11 @@ object MomentPostNotification : ClickableFeature(),
                             )
                         }
                         item(key = "template_variables") {
-                            BaseSupportingWidget(title = variables) {
-                                Text(
-                                    text = TEMPLATE_VARIABLES,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                            BaseWidget(
+                                iconPlaceholder = false,
+                                title = variables,
+                                description = variableHelp,
+                            )
                         }
                     }
                 }
