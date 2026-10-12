@@ -322,7 +322,8 @@ object MomentPostNotification : ClickableFeature(),
         var toastTextState by remember { mutableStateOf(toastTemplate) }
         val variables = stringResource(R.string.moment_post_notify_variables)
         val variableHelp = VARIABLE_HINTS.joinToString("\n") { (token, labelRes) ->
-            stringResource(labelRes, token)
+            // joinToString 的转换 lambda 不是 @Composable 类型，这里只能用非组合的 localized()
+            localized(labelRes, token)
         }
         val titleHint = stringResource(
             R.string.moment_post_notify_default_hint,
