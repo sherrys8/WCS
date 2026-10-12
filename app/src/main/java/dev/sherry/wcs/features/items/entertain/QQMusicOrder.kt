@@ -364,11 +364,12 @@ object QQMusicOrder : ClickableFeature(), WeDatabaseListenerApi.IInsertListener 
         return content.substringBefore(marker).trim().takeIf { it.isNotEmpty() }
     }
 
-    private fun displayNameOf(wxId: String): String = friends().firstOrNull { it.wxId == wxId }?.displayName.orEmpty()
+    private fun displayNameOf(wxId: String): String = talkers().firstOrNull { it.wxId == wxId }?.displayName.orEmpty()
 
-    private fun avatarUrlOf(wxId: String): String = friends().firstOrNull { it.wxId == wxId }?.avatarUrl.orEmpty()
+    private fun avatarUrlOf(wxId: String): String = talkers().firstOrNull { it.wxId == wxId }?.avatarUrl.orEmpty()
 
-    private fun friends() = runCatching { WeDatabaseApi.getFriends() }
+    /** 白名单候选：好友 + 群聊，和批量操作那几个功能取同一份列表。 */
+    private fun talkers() = runCatching { WeDatabaseApi.getFriends() + WeDatabaseApi.getGroups() }
         .onFailure { WeLogger.w(TAG, "failed to read the contact list", it) }
         .getOrDefault(emptyList())
 
@@ -558,7 +559,7 @@ object QQMusicOrder : ClickableFeature(), WeDatabaseListenerApi.IInsertListener 
 
     private fun showTalkerPicker(context: ComponentActivity, onPicked: (Set<String>) -> Unit) {
         showComposeDialog(context) {
-            val contacts = remember { friends() }
+            val contacts = remember { talkers() }
             ContactsSelector(
                 title = stringResource(R.string.qq_music_order_talkers_picker),
                 contacts = contacts,
