@@ -102,7 +102,7 @@ object ParseVideo : ClickableFeature() {
 
     override val technicalId = "短视频解析"
     override val nameRes = R.string.feature_parse_video_name
-    override val categoryIds = listOf(FeatureCategoryIds.CHAT)
+    override val categoryIds = listOf(FeatureCategoryIds.ENTERTAIN)
     override val descriptionRes = R.string.feature_parse_video_description
 
     private const val TAG = "ParseVideo"
