@@ -120,8 +120,8 @@ object TextToSpeech :
 
     private var backend by prefOption("tts_backend", BACKEND_MOFA)
     private var doubaoCookie by prefOption("tts_doubao_cookie", "")
-    private var doubaoSpeaker by prefOption("tts_doubao_speaker", "zh_female_taozi_conversation_v4_wvae_bigtts")
-    private var doubaoSpeakerName by prefOption("tts_doubao_speaker_name", "桃子 · 女声对话")
+    private var doubaoSpeaker by prefOption("tts_doubao_speaker", "zh_female_shuangkuai_emo_v3_wvae_bigtts")
+    private var doubaoSpeakerName by prefOption("tts_doubao_speaker_name", "爽快 · 女声")
 
     /** 入口一: 长按聊天消息气泡的菜单 */
     private var entryBubble by prefOption("tts_entry_bubble", false)
@@ -142,8 +142,8 @@ object TextToSpeech :
 
     data class DoubaoVoice(val id: String, val label: String)
 
+    /** 离线兜底表：这些 id 都不在豆包推荐接口里，所以只有名字，没有头像和分类标签。 */
     val DOUBAO_VOICES = listOf(
-        DoubaoVoice("zh_female_taozi_conversation_v4_wvae_bigtts", "桃子 · 女声对话"),
         DoubaoVoice("zh_female_shuangkuai_emo_v3_wvae_bigtts", "爽快 · 女声"),
         DoubaoVoice("zh_female_tianmei_conversation_v4_wvae_bigtts", "甜美 · 女声"),
         DoubaoVoice("zh_female_qingche_moon_bigtts", "清澈 · 女声"),
