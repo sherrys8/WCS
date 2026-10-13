@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Auto_awesome
+import com.composables.icons.materialsymbols.outlined.Chevron_right
 import com.composables.icons.materialsymbols.outlined.Keyboard_arrow_down
 import com.composables.icons.materialsymbols.outlined.Settings
 import dev.sherry.wcs.R
@@ -152,6 +153,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
     private var ttsDoubaoCookie by prefOption("ai_reply_tts_doubao_cookie", "")
     private var ttsVoiceId by prefOption("ai_reply_tts_voice_id", "")
     private var ttsDoubaoSpeaker by prefOption("ai_reply_tts_doubao_speaker", "")
+    private var ttsDoubaoSpeakerName by prefOption("ai_reply_tts_doubao_speaker_name", "")
     private var ttsEmotion by prefOption("ai_reply_tts_emotion", TextToSpeech.EMOTIONS.first().first)
 
     private fun isDoubaoBackend(): Boolean = ttsBackend == TextToSpeech.BACKEND_DOUBAO
@@ -159,6 +161,11 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
     private fun effectiveVoiceId(): String =
         if (isDoubaoBackend()) ttsDoubaoSpeaker.ifBlank { TextToSpeech.DOUBAO_VOICES.first().id }
         else ttsVoiceId.ifBlank { TextToSpeech.DEFAULT_VOICES.first().voiceId }
+
+    /** 联网音色只有 id，行里要显示名字；名字与所选 id 不匹配时退回内置表标签，再退回 id 本身。 */
+    private fun doubaoSpeakerLabel(id: String): String =
+        if (ttsDoubaoSpeakerName.isNotBlank() && ttsDoubaoSpeaker == id) ttsDoubaoSpeakerName
+        else TextToSpeech.DOUBAO_VOICES.firstOrNull { it.id == id }?.label ?: id
 
     private fun emotionVector(): FloatArray =
         TextToSpeech.EMOTIONS.firstOrNull { it.first == ttsEmotion }?.second
@@ -885,11 +892,9 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
             mofangCustomVoices = loaded.second
         }
 
-        val systemVoiceOptions = (if (doubaoTts) {
-            TextToSpeech.DOUBAO_VOICES.map { DropdownOption(it.id, it.label) }
-        } else {
-            mofangVoices.map { DropdownOption(it.voiceId, it.label) }
-        } + DropdownOption(ttsVoiceState, ttsVoiceState)).distinctBy { it.value }
+        // 豆包走联网音色选择器，这里只剩魔方的系统音色列表
+        val systemVoiceOptions = (mofangVoices.map { DropdownOption(it.voiceId, it.label) } +
+            DropdownOption(ttsVoiceState, ttsVoiceState)).distinctBy { it.value }
         val customVoiceOptions = mofangCustomVoices.map { DropdownOption(it.voiceId, it.label) }
         val emotionOptions = TextToSpeech.EMOTIONS.map { DropdownOption(it.first, it.first) }
 
@@ -1057,16 +1062,36 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                 )
                             }
                             item {
-                                DropDownMenuWidget(
-                                    title = stringResource(R.string.ai_reply_tts_voice),
-                                    description = null,
-                                    value = ttsVoiceState,
-                                    options = systemVoiceOptions,
-                                    onValueChange = {
-                                        ttsVoiceState = it
-                                        if (doubaoTts) ttsDoubaoSpeaker = it else ttsVoiceId = it
-                                    },
-                                )
+                                if (doubaoTts) {
+                                    BaseWidget(
+                                        title = stringResource(R.string.ai_reply_tts_voice),
+                                        description = doubaoSpeakerLabel(ttsVoiceState),
+                                        onClick = {
+                                            showDoubaoVoicePicker(context, ttsVoiceState, ttsCookieState) { id, name ->
+                                                ttsVoiceState = id
+                                                ttsDoubaoSpeaker = id
+                                                ttsDoubaoSpeakerName = name
+                                            }
+                                        },
+                                        trailingContent = {
+                                            Icon(
+                                                imageVector = MaterialSymbols.Outlined.Chevron_right,
+                                                contentDescription = null,
+                                            )
+                                        },
+                                    )
+                                } else {
+                                    DropDownMenuWidget(
+                                        title = stringResource(R.string.ai_reply_tts_voice),
+                                        description = null,
+                                        value = ttsVoiceState,
+                                        options = systemVoiceOptions,
+                                        onValueChange = {
+                                            ttsVoiceState = it
+                                            ttsVoiceId = it
+                                        },
+                                    )
+                                }
                             }
                             item {
                                 DropDownMenuWidget(
