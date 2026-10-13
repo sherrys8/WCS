@@ -54,6 +54,7 @@ import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.ui.content.AlertDialogContent
+import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
@@ -119,6 +120,7 @@ object TextToSpeech :
     private var backend by prefOption("tts_backend", BACKEND_MOFA)
     private var doubaoCookie by prefOption("tts_doubao_cookie", "")
     private var doubaoSpeaker by prefOption("tts_doubao_speaker", "zh_female_taozi_conversation_v4_wvae_bigtts")
+    private var doubaoSpeakerName by prefOption("tts_doubao_speaker_name", "桃子 · 女声对话")
 
     /** 入口一: 长按聊天消息气泡的菜单 */
     private var entryBubble by prefOption("tts_entry_bubble", false)
@@ -325,27 +327,38 @@ object TextToSpeech :
 
                         Spacer(Modifier.height(8.dp))
 
-                        val mainOptions = if (isDoubao) {
-                            DOUBAO_VOICES.map { DropdownOption(it.id, it.label) }
-                        } else {
-                            voices.map { DropdownOption(it.voiceId, it.label) }
-                        }
+                        val mainOptions = voices.map { DropdownOption(it.voiceId, it.label) }
                         val customOptions = customVoices.map { DropdownOption(it.voiceId, it.label) }
                         val customCurrent = customOptions.any { it.value == voiceId }
 
                         Row(Modifier.fillMaxWidth()) {
                             Box(Modifier.weight(1f)) {
-                                DropDownMenuWidget(
-                                    title = if (isDoubao) "豆包音色" else "系统音色",
-                                    description = null,
-                                    value = voiceId,
-                                    options = if (mainOptions.any { it.value == voiceId }) mainOptions
-                                        else mainOptions + DropdownOption(voiceId, voiceId),
-                                    onValueChange = {
-                                        voiceId = it
-                                        if (isDoubao) doubaoSpeaker = it else selectedVoice = it
-                                    },
-                                )
+                                if (isDoubao) {
+                                    BaseWidget(
+                                        iconPlaceholder = true,
+                                        title = "豆包音色",
+                                        description = doubaoSpeakerName,
+                                        onClick = {
+                                            showDoubaoVoicePicker(context, voiceId, doubaoCookie) { id, name ->
+                                                voiceId = id
+                                                doubaoSpeaker = id
+                                                doubaoSpeakerName = name
+                                            }
+                                        },
+                                    )
+                                } else {
+                                    DropDownMenuWidget(
+                                        title = "系统音色",
+                                        description = null,
+                                        value = voiceId,
+                                        options = if (mainOptions.any { it.value == voiceId }) mainOptions
+                                            else mainOptions + DropdownOption(voiceId, voiceId),
+                                        onValueChange = {
+                                            voiceId = it
+                                            selectedVoice = it
+                                        },
+                                    )
+                                }
                             }
                             Spacer(Modifier.width(8.dp))
                             Box(Modifier.weight(1f)) {
