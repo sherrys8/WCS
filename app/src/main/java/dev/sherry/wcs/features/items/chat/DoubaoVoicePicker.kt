@@ -37,8 +37,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Check
 import com.composables.icons.materialsymbols.outlined.Pause
@@ -84,6 +87,7 @@ data class DoubaoVoiceInfo(
     val builtin: Boolean = false,
     val rank: Int = -1,
     val preview: String = "",
+    val icon: String = "",
 )
 
 private enum class DoubaoVoiceTab(val label: String) {
@@ -92,6 +96,7 @@ private enum class DoubaoVoiceTab(val label: String) {
     FEMALE("女声"),
     MALE("男声"),
     ROLE("角色"),
+    ENGLISH("英语"),
     ACCENT("口音"),
 }
 
@@ -216,6 +221,7 @@ object DoubaoVoiceStore {
             role = id.startsWith("ICL_"),
             rank = rank,
             preview = item.optJSONObject("preview")?.optString("preview_audio").orEmpty(),
+            icon = item.optJSONObject("icon")?.optString("url").orEmpty(),
         )
     }
 }
@@ -237,6 +243,7 @@ private fun matchesTab(voice: DoubaoVoiceInfo, tab: DoubaoVoiceTab): Boolean = w
     DoubaoVoiceTab.FEMALE -> voice.gender == "女"
     DoubaoVoiceTab.MALE -> voice.gender == "男"
     DoubaoVoiceTab.ROLE -> voice.role
+    DoubaoVoiceTab.ENGLISH -> voice.lang == "英语"
     DoubaoVoiceTab.ACCENT -> voice.accent.isNotBlank()
 }
 
@@ -370,9 +377,17 @@ fun showDoubaoVoicePicker(
                     Spacer(Modifier.height(6.dp))
 
                     val cachedAt = DoubaoVoiceStore.cachedAt()
+                    val onlineTotal = all.count { !it.builtin }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("已加载 ${all.count { !it.builtin }} 个在线音色")
+                            // 内置页报总量，其余页随点随换成这一类自己的条数。
+                            Text(
+                                if (tab == DoubaoVoiceTab.BUILTIN) {
+                                    "已加载 $onlineTotal 个在线音色"
+                                } else {
+                                    "已加载 ${all.count { matchesTab(it, tab) }} 个音色"
+                                }
+                            )
                             Text(
                                 when {
                                     status.isNotBlank() -> status
@@ -457,6 +472,15 @@ private fun VoiceRow(
             contentAlignment = Alignment.Center,
         ) {
             Text(voice.name.take(1), color = MaterialTheme.colorScheme.onSecondaryContainer)
+            if (voice.icon.isNotBlank()) {
+                // 头像盖在首字上：加载中、没有 icon 字段、或签名地址过期时，露出来的就是首字。
+                AsyncImage(
+                    model = voice.icon,
+                    contentDescription = null,
+                    modifier = Modifier.matchParentSize().clip(CircleShape),
+                    contentScale = ContentScale.Crop,
+                )
+            }
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {

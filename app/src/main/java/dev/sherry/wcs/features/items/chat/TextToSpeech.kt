@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.outlined.Chevron_right
 import com.composables.icons.materialsymbols.outlined.Compare_arrows
 import com.composables.icons.materialsymbols.outlined.Graphic_eq
 import com.composables.icons.materialsymbols.outlined.Pause
@@ -335,7 +336,6 @@ object TextToSpeech :
                             Box(Modifier.weight(1f)) {
                                 if (isDoubao) {
                                     BaseWidget(
-                                        iconPlaceholder = true,
                                         title = "豆包音色",
                                         description = doubaoSpeakerName,
                                         onClick = {
@@ -344,6 +344,12 @@ object TextToSpeech :
                                                 doubaoSpeaker = id
                                                 doubaoSpeakerName = name
                                             }
+                                        },
+                                        trailingContent = {
+                                            Icon(
+                                                imageVector = MaterialSymbols.Outlined.Chevron_right,
+                                                contentDescription = null,
+                                            )
                                         },
                                     )
                                 } else {
