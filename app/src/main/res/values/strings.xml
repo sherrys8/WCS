@@ -3071,6 +3071,10 @@
     <string name="beautify_bubble_delete_title">Delete bubble image</string>
     <string name="beautify_bubble_delete_confirm">Delete the imported %1$s bubble image?</string>
     <string name="beautify_bubble_title">Custom message bubbles</string>
+    <string name="beautify_bubble_shape_normal">Normal</string>
+    <string name="beautify_bubble_shape_red_packet">Red packet</string>
+    <string name="beautify_bubble_shape_transfer">Transfer</string>
+    <string name="beautify_bubble_color_inherited_hint">Text and background color follow the Normal tab.</string>
     <string name="beautify_me_page_title">Simplify the Me page</string>
     <string name="beautify_me_page_hide_moments">Hide Moments entry</string>
     <string name="beautify_me_page_hide_works">Hide Works entry</string>

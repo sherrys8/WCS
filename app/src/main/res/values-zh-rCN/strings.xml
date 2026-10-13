@@ -3118,6 +3118,10 @@
     <string name="beautify_bubble_delete_title">删除气泡图片</string>
     <string name="beautify_bubble_delete_confirm">确定删除%1$s已导入的气泡图片？</string>
     <string name="beautify_bubble_title">自定义消息气泡</string>
+    <string name="beautify_bubble_shape_normal">普通消息</string>
+    <string name="beautify_bubble_shape_red_packet">红包</string>
+    <string name="beautify_bubble_shape_transfer">转账</string>
+    <string name="beautify_bubble_color_inherited_hint">文字颜色与背景颜色沿用普通消息的设置</string>
     <string name="beautify_me_page_title">“我”页面精简</string>
     <string name="beautify_me_page_hide_moments">隐藏朋友圈标签</string>
     <string name="beautify_me_page_hide_works">隐藏作品标签</string>

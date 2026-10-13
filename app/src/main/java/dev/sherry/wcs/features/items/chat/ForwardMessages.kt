@@ -14,10 +14,10 @@ import dev.sherry.wcs.features.core.SwitchFeature
 import dev.sherry.wcs.ui.content.ContactsSelector
 import dev.sherry.wcs.ui.utils.ForwardIcon
 import dev.sherry.wcs.ui.utils.showComposeDialog
+import dev.sherry.wcs.utils.AudioUtils
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.showToast
 import dev.sherry.wcs.utils.android.showToastSuspend
-import dev.sherry.wcs.utils.serialization.XmlUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -120,7 +120,7 @@ object ForwardMessages : SwitchFeature(),
     }
 
     @Suppress("DEPRECATION")
-    private fun sendTo(toUser: String, msgInfo: MessageInfo): Boolean {
+    private suspend fun sendTo(toUser: String, msgInfo: MessageInfo): Boolean {
         return runCatching {
             when (msgInfo.type) {
                 MessageType.TEXT -> WeMessageApi.sendText(toUser, msgInfo.actualContent)
@@ -128,10 +128,12 @@ object ForwardMessages : SwitchFeature(),
                 MessageType.VOICE -> forwardVoice(toUser, msgInfo)
                 MessageType.VIDEO, MessageType.MICRO_VIDEO -> forwardVideo(toUser, msgInfo)
                 MessageType.STICKER, MessageType.SO_GOU_EMOJI -> forwardEmoji(toUser, msgInfo)
+                MessageType.FILE -> forwardFile(toUser, msgInfo)
                 MessageType.APP -> WeMessageApi.sendXmlAppMsg(toUser, msgInfo.actualContent)
                 MessageType.QUOTE -> WeMessageApi.sendText(toUser, msgInfo.quoteMsgActualContent!!)
                 else -> {
-                    showToast(localizedChatString(R.string.chat_forward_untested_type_warning))
+                    // A bare Toast here throws on this IO thread before the fallback could send.
+                    showToastSuspend(localizedChatString(R.string.chat_forward_untested_type_warning))
                     WeMessageApi.sendXmlAppMsg(toUser, msgInfo.actualContent)
                 }
             }
@@ -150,8 +152,16 @@ object ForwardMessages : SwitchFeature(),
     private fun forwardVoice(toUser: String, msgInfo: MessageInfo): Boolean {
         val encPath = msgInfo.imagePath ?: return false
         val voicePath = WeMessageApi.getVoiceFullPath(encPath)
-        val durationMs = XmlUtils.extractXmlAttr(msgInfo.content, "voicelength").toInt()
+        // voicelength is an XML element, not an attribute; measure the decoded amr like RepeatMessages does.
+        val durationMs = AudioUtils.getDurationMs(voicePath).toInt()
         return WeMessageApi.sendVoice(toUser, voicePath, durationMs)
+    }
+
+    private fun forwardFile(toUser: String, msgInfo: MessageInfo): Boolean {
+        val fileMessage = msgInfo.toFileMessage() ?: return false
+        if (fileMessage.isSenderUploading) return false
+        val filePath = WeMessageApi.downloadFile(msgInfo.instance) ?: return false
+        return WeMessageApi.sendFile(toUser, filePath, fileMessage.title)
     }
 
     private fun forwardVideo(toUser: String, msgInfo: MessageInfo): Boolean {
