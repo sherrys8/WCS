@@ -111,6 +111,9 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
 
     private const val GROUP_SUMMARY_MENU_ID = 777029
 
+    /** 单条消息喂给 AI 的字符上限 */
+    private const val AI_INPUT_MAX_CHARS = 600
+
     override fun onEnable() {
         WeChatMessageContextMenuApi.addProvider(this)
     }
@@ -1223,11 +1226,18 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
     /** 单条消息转 AI 输入行（对应 Hchat aiMessageLine）：[发送者]: 内容 */
     private fun aiMessageLine(msg: WeMessage, membersMap: Map<String, String>): String {
         val sender = if (msg.isSend != 0) "我" else resolveSenderName(extractSenderId(msg, membersMap), membersMap)
+        // 微信表情以 [呲牙] 这类代码存进 content，先换成真 emoji 再喂模型，情绪与语气才读得准
         var content = extractTextContent(msg, membersMap)
             .replace('\n', ' ')
             .replace('\r', ' ')
+            .replaceEmojis()
             .trim()
-        if (content.length > 600) content = content.substring(0, 600)
+        if (content.length > AI_INPUT_MAX_CHARS) {
+            var end = AI_INPUT_MAX_CHARS
+            // 真 emoji 占两个 char，正好切在代理对中间会让请求带上孤立代理字符
+            if (content[end - 1].isHighSurrogate() && content[end].isLowSurrogate()) end--
+            content = content.substring(0, end)
+        }
         return "[$sender]: $content"
     }
 
