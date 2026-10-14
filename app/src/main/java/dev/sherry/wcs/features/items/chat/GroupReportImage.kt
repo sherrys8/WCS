@@ -13,6 +13,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import dev.sherry.wcs.utils.fs.KnownPaths
 import dev.sherry.wcs.utils.fs.createDirsSafe
+import dev.sherry.wcs.utils.strings.replaceEmojis
 import java.io.FileOutputStream
 import java.nio.file.Path
 import kotlin.io.path.div
@@ -34,7 +35,7 @@ object GroupReportImage {
     private const val CARD_CORNER_RADIUS_PX = 50f   // 卡片圆角半径 50
     private const val CARD_BORDER_WIDTH_PX = 2f     // 卡片边框 2px
     private const val BLOCK_SPACING_PX = 18
-    private const val LIST_INDENT_PX = 56
+    private const val LIST_NEST_STEP_PX = 40    // 嵌套列表每多一级的额外缩进
     private const val QUOTE_INDENT_PX = 24
     private const val LINE_HEIGHT_RATIO = 1.4f
     private const val HEADER_TITLE_SIZE_PX = 56f
@@ -216,8 +217,9 @@ object GroupReportImage {
                     color = if (block is Block.Ordered) TEXT_COLOR else BULLET_COLOR
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 }
-                canvas.drawText(block.marker, 0f, blockPaint.fontMetrics.ascent * -1 + blockPaint.textSize / 2, bulletPaint)
-                canvas.translate(LIST_INDENT_PX.toFloat(), 0f)
+                // 与正文首行同一基线，否则符号会整体下沉半行
+                canvas.drawText(block.marker, 0f, layout.getLineBaseline(0).toFloat(), bulletPaint)
+                canvas.translate(contentIndentFor(block, blockPaint).toFloat(), 0f)
             }
             if (block is Block.Quote) {
                 val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ACCENT_COLOR }
@@ -257,11 +259,16 @@ object GroupReportImage {
             .build()
     }
 
-    private fun layoutWidthFor(block: Block, contentWidth: Int): Int = when (block) {
-        is Block.Bullet, is Block.Ordered -> contentWidth - LIST_INDENT_PX
-        is Block.Quote -> contentWidth - QUOTE_INDENT_PX
-        else -> contentWidth
+    private fun contentIndentFor(block: Block, paint: android.text.TextPaint): Int = when (block) {
+        is Block.Quote -> QUOTE_INDENT_PX
+        // 列表正文紧跟在标记之后缩进，宽度与屏幕端一样按标记实际宽度计算
+        is Block.Bullet -> paint.measureText(block.marker).toInt() + block.depth * LIST_NEST_STEP_PX
+        is Block.Ordered -> paint.measureText(block.marker).toInt() + block.depth * LIST_NEST_STEP_PX
+        else -> 0
     }
+
+    private fun layoutWidthFor(block: Block, paint: android.text.TextPaint, contentWidth: Int): Int =
+        contentWidth - contentIndentFor(block, paint)
 
     private fun buildLayout(block: Block, paint: android.text.TextPaint, contentWidth: Int): android.text.StaticLayout {
         val text = when (block) {
@@ -275,7 +282,7 @@ object GroupReportImage {
             is Block.Blank -> ""
         }
         return android.text.StaticLayout.Builder
-            .obtain(text, 0, text.length, paint, layoutWidthFor(block, contentWidth))
+            .obtain(text, 0, text.length, paint, layoutWidthFor(block, paint, contentWidth))
             .setIncludePad(false)
             .setLineSpacing(0f, LINE_HEIGHT_RATIO)
             .build()
@@ -315,8 +322,10 @@ object GroupReportImage {
         val marker: String
         data class Heading(val level: Int, val text: String) : Block { override val marker: String get() = "" }
         data class Paragraph(val text: String) : Block { override val marker: String get() = "" }
-        data class Bullet(val content: String) : Block { override val marker: String get() = "•" }
-        data class Ordered(val number: String, val content: String) : Block { override val marker: String get() = "$number. " }
+        data class Bullet(val content: String, val depth: Int) : Block { override val marker: String get() = "•  " }
+        data class Ordered(val number: String, val content: String, val depth: Int) : Block {
+            override val marker: String get() = "$number. "
+        }
         data class Quote(val content: String) : Block { override val marker: String get() = "" }
         data class Code(val code: String) : Block { override val marker: String get() = "" }
         data object Rule : Block { override val marker: String get() = "" }
@@ -324,6 +333,9 @@ object GroupReportImage {
     }
 
     private val ruleRe = Regex("""^ {0,3}([-*_])( *\1){2,} *$""")
+    private val headingRe = Regex("""^(#{1,6})\s+(.*)$""")
+    private val bulletRe = Regex("""^([-*+])\s+(.+)$""")
+    private val orderedRe = Regex("""^(\d+)[.)]\s+(.+)$""")
 
     private fun parseBlocks(markdown: String): List<Block> {
         val lines = markdown.replace("\r\n", "\n").replace("\r", "\n").split("\n")
@@ -357,7 +369,7 @@ object GroupReportImage {
                     i++
                 }
                 trimmed.startsWith("#") -> {
-                    val match = Regex("""^(#{1,6})\s+(.*)$""").matchEntire(trimmed)
+                    val match = headingRe.matchEntire(trimmed)
                     if (match != null) {
                         result.add(Block.Heading(match.groupValues[1].length, stripInlineMarkdown(match.groupValues[2].trim().trimEnd('#').trim())))
                     } else {
@@ -365,21 +377,42 @@ object GroupReportImage {
                     }
                     i++
                 }
-                trimmed.matches(Regex("""^[-*+]\s+.+""")) -> {
-                    result.add(Block.Bullet(stripInlineMarkdown(trimmed.replaceFirst(Regex("""^[-*+]\s+"""), ""))))
+                bulletRe.matches(trimmed) || orderedRe.matches(trimmed) -> {
+                    val ordered = orderedRe.matches(trimmed)
+                    val match = (if (ordered) orderedRe else bulletRe).matchEntire(trimmed)!!
+                    val markerIndent = line.length - line.trimStart().length
+                    val content = StringBuilder(stripInlineMarkdown(match.groupValues[2]))
                     i++
-                }
-                trimmed.matches(Regex("""^\d+[.)]\s+.+""")) -> {
-                    val match = Regex("""^(\d+)[.)]\s+(.*)$""").matchEntire(trimmed)!!
-                    result.add(Block.Ordered(match.groupValues[1], stripInlineMarkdown(match.groupValues[2])))
-                    i++
+                    // 列表项续行：比本项标记更缩进的普通行并入本项，与屏幕端 MarkdownText 的排版一致
+                    while (i < lines.size) {
+                        val next = lines[i]
+                        if (next.isBlank()) break
+                        val nextTrimmed = next.trim()
+                        if (next.length - next.trimStart().length <= markerIndent) break
+                        if (bulletRe.matches(nextTrimmed) || orderedRe.matches(nextTrimmed)) break
+                        content.append('\n').append(stripInlineMarkdown(nextTrimmed))
+                        i++
+                    }
+                    val depth = ((markerIndent + 1) / 3).coerceAtMost(2)
+                    val text = content.toString()
+                    result.add(
+                        if (ordered) Block.Ordered(match.groupValues[1], text, depth) else Block.Bullet(text, depth),
+                    )
                 }
                 else -> {
-                    // 普通段落：合并直到空行
+                    // 普通段落：合并直到空行，或遇到会另起一块的行（与屏幕端一致，避免列表被吞进上一段）
                     val para = StringBuilder(trimmed)
                     i++
-                    while (i < lines.size && lines[i].trim().isNotEmpty()) {
-                        para.append('\n').append(lines[i].trim())
+                    while (i < lines.size) {
+                        val next = lines[i]
+                        val nextTrimmed = next.trim()
+                        if (nextTrimmed.isEmpty() || nextTrimmed.startsWith("```") || nextTrimmed.startsWith(">") ||
+                            nextTrimmed.startsWith("#") || ruleRe.matches(nextTrimmed) ||
+                            bulletRe.matches(nextTrimmed) || orderedRe.matches(nextTrimmed)
+                        ) {
+                            break
+                        }
+                        para.append('\n').append(nextTrimmed)
                         i++
                     }
                     result.add(Block.Paragraph(stripInlineMarkdown(para.toString())))
@@ -408,6 +441,7 @@ object GroupReportImage {
         // 斜体 *x* / _x_
         s = Regex("""(?<!\*)\*([^*\n]+)\*(?!\*)""").replace(s) { it.groupValues[1] }
         s = Regex("""(?<!_)_([^_\n]+)_(?!_)""").replace(s) { it.groupValues[1] }
-        return s
+        // 微信表情代码 [呲牙] → 😁，否则长图里只会显示方括号原文
+        return s.replaceEmojis()
     }
 }
