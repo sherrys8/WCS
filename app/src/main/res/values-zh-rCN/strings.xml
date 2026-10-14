@@ -2803,13 +2803,7 @@
     <string name="chat_group_monitor_voice_import_failed">语音导入失败</string>
     <string name="chat_group_monitor_reply_delay">发送延时</string>
     <string name="chat_group_monitor_variables_title">可用变量</string>
-    <string name="chat_group_monitor_variables_hint">{userName} 微信昵称
-{groupNickname} 群内昵称
-{userWxid} 微信号
-{groupName} 群名称
-{time} 当前时间
-{oldGroupNickname} 改名前群昵称（仅改名模板）
-{newGroupNickname} 改名后群昵称（仅改名模板）</string>
+    <string name="chat_group_monitor_variables_hint">{userName} 微信昵称\n{groupNickname} 群内昵称\n{userWxid} 微信号\n{groupName} 群名称\n{time} 当前时间\n{oldGroupNickname} 改名前群昵称（仅改名模板）\n{newGroupNickname} 改名后群昵称（仅改名模板）</string>
     <string name="chat_group_monitor_default_join_text">欢迎 {userName} 加入本群！</string>
     <string name="chat_group_monitor_default_leave_text">{userName} 退出了群聊</string>
     <string name="chat_group_monitor_default_rename_text">{userName} 将群昵称从「{oldGroupNickname}」改为「{newGroupNickname}」</string>

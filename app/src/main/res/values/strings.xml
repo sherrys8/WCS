@@ -2823,13 +2823,7 @@ Time: {time}</string>
     <string name="chat_group_monitor_voice_import_failed">Failed to import the voice file</string>
     <string name="chat_group_monitor_reply_delay">Send delay</string>
     <string name="chat_group_monitor_variables_title">Available variables</string>
-    <string name="chat_group_monitor_variables_hint">{userName} WeChat nickname
-{groupNickname} group nickname
-{userWxid} WeChat ID
-{groupName} group name
-{time} current time
-{oldGroupNickname} old group nickname (rename template only)
-{newGroupNickname} new group nickname (rename template only)</string>
+    <string name="chat_group_monitor_variables_hint">{userName} WeChat nickname\n{groupNickname} group nickname\n{userWxid} WeChat ID\n{groupName} group name\n{time} current time\n{oldGroupNickname} old group nickname (rename template only)\n{newGroupNickname} new group nickname (rename template only)</string>
     <string name="chat_group_monitor_default_join_text">Welcome {userName} to the group!</string>
     <string name="chat_group_monitor_default_leave_text">{userName} left the group</string>
     <string name="chat_group_monitor_default_rename_text">{userName} changed their group nickname: {oldGroupNickname} → {newGroupNickname}</string>
