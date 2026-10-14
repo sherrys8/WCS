@@ -64,9 +64,9 @@ import dev.sherry.wcs.ui.content.m3.TextFieldDialogWidget
 import dev.sherry.wcs.ui.utils.MicIcon
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.AudioUtils
-import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.showToast
+import dev.sherry.wcs.utils.fs.KnownPaths
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -695,7 +695,7 @@ object TextToSpeech :
                         val msg = root.optString("msg").ifEmpty { root.optString("message") }
                         error = "code=${root.opt("code")} ${msg.ifEmpty { "未返回音频地址" }}"
                     } else {
-                        val dir = File(HostInfo.application.cacheDir, "wcs_tts").apply { mkdirs() }
+                        val dir = File(KnownPaths.moduleCache.toFile(), "wcs_tts").apply { mkdirs() }
                         val dest = File(dir, "tts_${System.currentTimeMillis()}.wav")
                         if (download(audioUrl, dest)) {
                             wavPath = dest.absolutePath
@@ -797,7 +797,7 @@ object TextToSpeech :
             if (bytes.isEmpty()) {
                 if (error.isEmpty()) error = "未收到音频数据"
             } else {
-                val dir = File(HostInfo.application.cacheDir, "wcs_tts").apply { mkdirs() }
+                val dir = File(KnownPaths.moduleCache.toFile(), "wcs_tts").apply { mkdirs() }
                 val dest = File(dir, "doubao_${System.currentTimeMillis()}.aac")
                 dest.writeBytes(bytes)
                 path = dest.absolutePath

@@ -42,6 +42,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.ImageLoader
+import coil3.disk.DiskCache
+import coil3.disk.directory
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Check
 import com.composables.icons.materialsymbols.outlined.Pause
@@ -50,6 +54,7 @@ import com.composables.icons.materialsymbols.outlined.Refresh
 import com.composables.icons.materialsymbols.outlined.Search
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.utils.showComposeDialog
+import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.showToast
 import dev.sherry.wcs.utils.fs.KnownPaths
@@ -58,6 +63,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import org.json.JSONObject
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
@@ -69,6 +75,22 @@ import kotlin.io.path.exists
 import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
+
+/**
+ * 只服务豆包头像：Coil 的默认磁盘缓存在 java.io.tmpdir 下的 coil3_disk_cache（微信内部目录，
+ * 得 root 才看得见），这里单独指到模块自己的外部缓存目录。刻意不复用也不改 GlobalImageLoader，
+ * 免得把联系人头像、Markdown、贴纸这些无关功能的图片缓存一起搬走。
+ */
+private val DoubaoAvatarImageLoader by lazy {
+    ImageLoader.Builder(HostInfo.application)
+        .components { add(OkHttpNetworkFetcherFactory()) }
+        .diskCache {
+            DiskCache.Builder()
+                .directory(File(KnownPaths.moduleCache.toFile(), "doubao_avatars"))
+                .build()
+        }
+        .build()
+}
 
 /**
  * 豆包音色库的一条记录。[rank] 是接口返回顺序，用来判定推荐位；内置 9 条没有在线
@@ -477,6 +499,7 @@ private fun VoiceRow(
                 AsyncImage(
                     model = voice.icon,
                     contentDescription = null,
+                    imageLoader = DoubaoAvatarImageLoader,
                     modifier = Modifier.matchParentSize().clip(CircleShape),
                     contentScale = ContentScale.Crop,
                 )
