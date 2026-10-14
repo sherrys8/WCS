@@ -11,6 +11,14 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.BackgroundColorSpan
+import android.text.style.ForegroundColorSpan
+import android.text.style.StrikethroughSpan
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
+import android.text.style.UnderlineSpan
 import dev.sherry.wcs.utils.fs.KnownPaths
 import dev.sherry.wcs.utils.fs.createDirsSafe
 import dev.sherry.wcs.utils.strings.replaceEmojis
@@ -55,6 +63,12 @@ object GroupReportImage {
     private val CODE_BG_COLOR = Color.parseColor("#F2F3F5")
     private val BULLET_COLOR = Color.parseColor("#3C3C3C")
     private val DIVIDER_COLOR = Color.parseColor("#C1D7CF")
+
+    private const val STYLE_BOLD = 1
+    private const val STYLE_ITALIC = 2
+    private const val STYLE_MONO = 4
+    private const val STYLE_STRIKE = 8
+    private const val STYLE_LINK = 16
 
     /** 生成长图并写入模块缓存目录，返回文件路径 */
     fun renderToFile(title: String, subtitle: String, footer: String, markdown: String): Path {
@@ -271,7 +285,7 @@ object GroupReportImage {
         contentWidth - contentIndentFor(block, paint)
 
     private fun buildLayout(block: Block, paint: android.text.TextPaint, contentWidth: Int): android.text.StaticLayout {
-        val text = when (block) {
+        val raw = when (block) {
             is Block.Heading -> block.text
             is Block.Bullet -> block.content
             is Block.Ordered -> block.content
@@ -281,6 +295,8 @@ object GroupReportImage {
             is Block.Rule -> ""
             is Block.Blank -> ""
         }
+        // 代码块原样输出（等宽、不解析行内标记），其余把 Markdown 符号渲染成样式而不是删掉
+        val text: CharSequence = if (block is Block.Code) raw else styleInline(raw)
         return android.text.StaticLayout.Builder
             .obtain(text, 0, text.length, paint, layoutWidthFor(block, paint, contentWidth))
             .setIncludePad(false)
@@ -360,7 +376,7 @@ object GroupReportImage {
                     result.add(Block.Code(codeLines.joinToString("\n")))
                 }
                 trimmed.startsWith(">") -> {
-                    result.add(Block.Quote(stripInlineMarkdown(trimmed.removePrefix(">").trimStart())))
+                    result.add(Block.Quote(trimmed.removePrefix(">").trimStart()))
                     i++
                 }
                 ruleRe.matches(trimmed) -> {
@@ -371,9 +387,9 @@ object GroupReportImage {
                 trimmed.startsWith("#") -> {
                     val match = headingRe.matchEntire(trimmed)
                     if (match != null) {
-                        result.add(Block.Heading(match.groupValues[1].length, stripInlineMarkdown(match.groupValues[2].trim().trimEnd('#').trim())))
+                        result.add(Block.Heading(match.groupValues[1].length, match.groupValues[2].trim().trimEnd('#').trim()))
                     } else {
-                        result.add(Block.Paragraph(stripInlineMarkdown(trimmed)))
+                        result.add(Block.Paragraph(trimmed))
                     }
                     i++
                 }
@@ -381,7 +397,7 @@ object GroupReportImage {
                     val ordered = orderedRe.matches(trimmed)
                     val match = (if (ordered) orderedRe else bulletRe).matchEntire(trimmed)!!
                     val markerIndent = line.length - line.trimStart().length
-                    val content = StringBuilder(stripInlineMarkdown(match.groupValues[2]))
+                    val content = StringBuilder(match.groupValues[2])
                     i++
                     // 列表项续行：比本项标记更缩进的普通行并入本项，与屏幕端 MarkdownText 的排版一致
                     while (i < lines.size) {
@@ -390,7 +406,7 @@ object GroupReportImage {
                         val nextTrimmed = next.trim()
                         if (next.length - next.trimStart().length <= markerIndent) break
                         if (bulletRe.matches(nextTrimmed) || orderedRe.matches(nextTrimmed)) break
-                        content.append('\n').append(stripInlineMarkdown(nextTrimmed))
+                        content.append('\n').append(nextTrimmed)
                         i++
                     }
                     val depth = ((markerIndent + 1) / 3).coerceAtMost(2)
@@ -415,33 +431,118 @@ object GroupReportImage {
                         para.append('\n').append(nextTrimmed)
                         i++
                     }
-                    result.add(Block.Paragraph(stripInlineMarkdown(para.toString())))
+                    result.add(Block.Paragraph(para.toString()))
                 }
             }
         }
         return result
     }
 
-    /** 去掉行内 Markdown 符号（粗体/斜体/删除线/行内代码/链接/转义），避免其原样显示在图片中。 */
-    private fun stripInlineMarkdown(text: String): String {
-        var s = text
-        // 转义（仅 Markdown 相关字符）\x → x
-        s = Regex("""\\([\\`*_{}\[\]()#+\-.!|>])""").replace(s) { it.groupValues[1] }
-        // 行内代码 `code`
-        s = Regex("""`([^`]*)`""").replace(s) { it.groupValues[1] }
-        // 链接 [label](url) → label
-        s = Regex("""\[([^\]]*)]\([^)]*\)""").replace(s) { it.groupValues[1] }
-        // 粗斜体 ***x***
-        s = Regex("""\*\*\*(.*?)\*\*\*""").replace(s) { it.groupValues[1] }
-        // 粗体 **x** / __x__
-        s = Regex("""\*\*(.*?)\*\*""").replace(s) { it.groupValues[1] }
-        s = Regex("""__(.*?)__""").replace(s) { it.groupValues[1] }
-        // 删除线 ~~x~~
-        s = Regex("""~~(.*?)~~""").replace(s) { it.groupValues[1] }
-        // 斜体 *x* / _x_
-        s = Regex("""(?<!\*)\*([^*\n]+)\*(?!\*)""").replace(s) { it.groupValues[1] }
-        s = Regex("""(?<!_)_([^_\n]+)_(?!_)""").replace(s) { it.groupValues[1] }
-        // 微信表情代码 [呲牙] → 😁，否则长图里只会显示方括号原文
-        return s.replaceEmojis()
+    /**
+     * 行内 Markdown → 带样式的 CharSequence。符号集与屏幕端 MarkdownText 一致（粗体、斜体、
+     * 粗斜体、删除线、行内代码、链接、反斜杠转义），不再像以前那样把符号直接删掉留下纯文本。
+     * 微信表情代码 [呲牙] 在纯文本片段上换成 emoji，否则长图里只有方括号原文。
+     */
+    private fun styleInline(markdown: String): CharSequence {
+        val body = StringBuilder()
+        val spans = ArrayList<Pair<IntRange, Any>>()
+        for (seg in inlineSegments(markdown, 0, markdown.length, 0)) {
+            if (seg.text.isEmpty()) continue
+            val from = body.length
+            body.append(seg.text)
+            val range = from..body.length
+            if (seg.flags and STYLE_BOLD != 0) spans += range to StyleSpan(Typeface.BOLD)
+            if (seg.flags and STYLE_ITALIC != 0) spans += range to StyleSpan(Typeface.ITALIC)
+            if (seg.flags and STYLE_MONO != 0) {
+                spans += range to TypefaceSpan("monospace")
+                spans += range to BackgroundColorSpan(CODE_BG_COLOR)
+            }
+            if (seg.flags and STYLE_STRIKE != 0) spans += range to StrikethroughSpan()
+            if (seg.flags and STYLE_LINK != 0) {
+                spans += range to UnderlineSpan()
+                spans += range to ForegroundColorSpan(ACCENT_COLOR)
+            }
+        }
+        val out = SpannableString(body)
+        spans.forEach { (range, span) -> out.setSpan(span, range.first, range.last, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        return out
     }
+
+    /** 递归拆行内标记；返回的片段按顺序拼接就是去掉标记后的纯文本。 */
+    private fun inlineSegments(md: String, start: Int, end: Int, flags: Int): List<Segment> {
+        val out = ArrayList<Segment>()
+        val literal = StringBuilder()
+        fun flush() {
+            if (literal.isNotEmpty()) {
+                out += Segment(literal.toString().replaceEmojis(), flags)
+                literal.setLength(0)
+            }
+        }
+        var i = start
+        while (i < end) {
+            val c = md[i]
+            if (c == '\\' && i + 1 < end) {
+                literal.append(md[i + 1])
+                i += 2
+                continue
+            }
+            if (c == '`') {
+                val close = md.indexOf('`', i + 1)
+                if (close in i + 1 until end) {
+                    flush()
+                    out += Segment(md.substring(i + 1, close).replaceEmojis(), flags or STYLE_MONO)
+                    i = close + 1
+                    continue
+                }
+            }
+            if (c == '[') {
+                val labelEnd = md.indexOf(']', i + 1)
+                val urlEnd = if (labelEnd > 0 && labelEnd + 1 < end && md[labelEnd + 1] == '(') {
+                    md.indexOf(')', labelEnd + 2)
+                } else {
+                    -1
+                }
+                if (urlEnd in labelEnd + 2 until end) {
+                    flush()
+                    out += inlineSegments(md, i + 1, labelEnd, flags or STYLE_LINK)
+                    i = urlEnd + 1
+                    continue
+                }
+            }
+            if (c == '~' && md.startsWith("~~", i)) {
+                val close = md.indexOf("~~", i + 2)
+                if (close in i + 2 until end - 1) {
+                    flush()
+                    out += inlineSegments(md, i + 2, close, flags or STYLE_STRIKE)
+                    i = close + 2
+                    continue
+                }
+            }
+            if (c == '*' || c == '_') {
+                val run = when {
+                    md.startsWith("***", i) -> 3
+                    md.startsWith("$c$c", i) -> 2
+                    else -> 1
+                }
+                val close = md.indexOf(c.toString().repeat(run), i + run)
+                if (close >= i + run && close + run <= end) {
+                    flush()
+                    val inner = when (run) {
+                        3 -> flags or STYLE_BOLD or STYLE_ITALIC
+                        2 -> flags or STYLE_BOLD
+                        else -> flags or STYLE_ITALIC
+                    }
+                    out += inlineSegments(md, i + run, close, inner)
+                    i = close + run
+                    continue
+                }
+            }
+            literal.append(c)
+            i++
+        }
+        flush()
+        return out
+    }
+
+    private class Segment(val text: String, val flags: Int)
 }
