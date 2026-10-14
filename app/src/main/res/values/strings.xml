@@ -682,7 +682,7 @@
     <string name="feature_modify_text_message_display_name">Modify text message display</string>
     <string name="feature_modify_text_message_display_description">Add a menu item to the message long press menu to modify any bubble locally; persists across re-entering the chat. Tap the feature row to manage the block list</string>
     <string name="feature_monitor_group_member_operations_name">Group member behavior monitoring</string>
-    <string name="feature_monitor_group_member_operations_description">Monitor group members’ behavior of leaving the group and changing group nicknames</string>
+    <string name="feature_monitor_group_member_operations_description">Monitor members joining, leaving and changing group nicknames, with optional automatic replies</string>
     <string name="feature_quick_back_to_bottom_name">Quick jump to latest message</string>
     <string name="feature_quick_back_to_bottom_description">When the chat interface is far away from the latest news, reuse the "x new messages" bubble in the lower right corner to display "Back to Latest", and click one button to return to the latest news.</string>
     <string name="feature_quick_remove_quote_name">Quickly clear quotes</string>
@@ -2769,6 +2769,71 @@
     <string name="chat_group_member_left">left the group</string>
     <string name="chat_group_member_no_nickname">(none)</string>
     <string name="chat_group_member_nickname_changed">changed their group nickname: %1$s → %2$s</string>
+    <string name="chat_group_member_joined">joined the group</string>
+    <string name="chat_group_monitor_notice_title">In-chat notices (this device only)</string>
+    <string name="chat_group_monitor_notice_leave">Notice on leaving</string>
+    <string name="chat_group_monitor_notice_join">Notice on joining</string>
+    <string name="chat_group_monitor_notice_rename">Notice on nickname change</string>
+    <string name="chat_group_monitor_scope_title">Applies to</string>
+    <string name="chat_group_monitor_scope_all">All groups</string>
+    <string name="chat_group_monitor_scope_selected">Selected groups only</string>
+    <string name="chat_group_monitor_select_groups">Select groups</string>
+    <string name="chat_group_monitor_groups_empty">Nothing selected yet, applies to every group</string>
+    <string name="chat_group_monitor_groups_count">%1$d groups selected</string>
+    <string name="chat_group_monitor_reply_title">Auto reply</string>
+    <string name="chat_group_monitor_reply_master">Enable auto reply</string>
+    <string name="chat_group_monitor_reply_warning">Sends real messages to the group as you, which may risk account limits</string>
+    <string name="chat_group_monitor_reply_join">Reply when a member joins</string>
+    <string name="chat_group_monitor_reply_leave">Reply when a member leaves</string>
+    <string name="chat_group_monitor_reply_rename">Reply on nickname change</string>
+    <string name="chat_group_monitor_reply_join_template">Join reply template</string>
+    <string name="chat_group_monitor_reply_leave_template">Leave reply template</string>
+    <string name="chat_group_monitor_reply_rename_template">Rename reply template</string>
+    <string name="chat_group_monitor_reply_prompt_type">Reply format</string>
+    <string name="chat_group_monitor_prompt_text">Text</string>
+    <string name="chat_group_monitor_prompt_card">Card</string>
+    <string name="chat_group_monitor_prompt_both">Text and card</string>
+    <string name="chat_group_monitor_reply_both_order">Order when both are sent</string>
+    <string name="chat_group_monitor_order_text_first">Text first</string>
+    <string name="chat_group_monitor_order_card_first">Card first</string>
+    <string name="chat_group_monitor_reply_join_card_title">Join card title</string>
+    <string name="chat_group_monitor_reply_join_card_desc">Join card description</string>
+    <string name="chat_group_monitor_reply_leave_card_title">Leave card title</string>
+    <string name="chat_group_monitor_reply_leave_card_desc">Leave card description</string>
+    <string name="chat_group_monitor_reply_rename_card_title">Rename card title</string>
+    <string name="chat_group_monitor_reply_rename_card_desc">Rename card description</string>
+    <string name="chat_group_monitor_default_join_card_title">Welcome {userName}</string>
+    <string name="chat_group_monitor_default_join_card_desc">Group: {groupName}
+Time: {time}</string>
+    <string name="chat_group_monitor_default_leave_card_title">Left the group: {userName}</string>
+    <string name="chat_group_monitor_default_leave_card_desc">WeChat ID: {userWxid}
+Time: {time}</string>
+    <string name="chat_group_monitor_default_rename_card_title">{userName} changed their group nickname</string>
+    <string name="chat_group_monitor_default_rename_card_desc">Before: {oldGroupNickname}
+After: {newGroupNickname}
+Time: {time}</string>
+    <string name="chat_group_monitor_reply_voice_order">Voice message</string>
+    <string name="chat_group_monitor_voice_none">Don't send</string>
+    <string name="chat_group_monitor_voice_before">Before the prompt</string>
+    <string name="chat_group_monitor_voice_after">After the prompt</string>
+    <string name="chat_group_monitor_reply_join_voice">Voice on join</string>
+    <string name="chat_group_monitor_reply_leave_voice">Voice on leave</string>
+    <string name="chat_group_monitor_reply_rename_voice">Voice on rename</string>
+    <string name="chat_group_monitor_voice_unset">Not selected</string>
+    <string name="chat_group_monitor_voice_import_failed">Failed to import the voice file</string>
+    <string name="chat_group_monitor_reply_delay">Send delay</string>
+    <string name="chat_group_monitor_variables_title">Available variables</string>
+    <string name="chat_group_monitor_variables_hint">{userName} WeChat nickname
+{groupNickname} group nickname
+{userWxid} WeChat ID
+{groupName} group name
+{time} current time
+{oldGroupNickname} old group nickname (rename template only)
+{newGroupNickname} new group nickname (rename template only)</string>
+    <string name="chat_group_monitor_default_join_text">Welcome {userName} to the group!</string>
+    <string name="chat_group_monitor_default_leave_text">{userName} left the group</string>
+    <string name="chat_group_monitor_default_rename_text">{userName} changed their group nickname: {oldGroupNickname} → {newGroupNickname}</string>
+    <string name="unit_seconds">s</string>
     <string name="chat_sticker_selected_image_read_failed">Failed to read the selected image</string>
     <string name="chat_sticker_selected_image_empty">The selected image is empty</string>
     <string name="chat_sticker_send_failed">Failed to send sticker</string>

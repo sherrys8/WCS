@@ -648,7 +648,7 @@
     <string name="feature_modify_text_message_display_name">修改文本消息显示</string>
     <string name="feature_modify_text_message_display_description">向消息长按菜单添加菜单项，可修改任意气泡的本地显示文本，重进聊天仍然生效；点击功能行可管理屏蔽名单</string>
     <string name="feature_monitor_group_member_operations_name">群成员行为监控</string>
-    <string name="feature_monitor_group_member_operations_description">监控群成员的退群与修改群昵称行为</string>
+    <string name="feature_monitor_group_member_operations_description">监控群成员的进群、退群与修改群昵称，可选自动回复</string>
     <string name="feature_quick_back_to_bottom_name">快捷回底</string>
     <string name="feature_quick_back_to_bottom_description">聊天界面离最新消息超过一定距离时, 复用右下角「x条新消息」气泡显示「回到最新」, 点击一键回到最新消息</string>
     <string name="feature_quick_remove_quote_name">快捷清除引用</string>
@@ -2749,6 +2749,71 @@
     <string name="chat_group_member_left">退出了群组</string>
     <string name="chat_group_member_no_nickname">（无）</string>
     <string name="chat_group_member_nickname_changed">修改群昵称：%1$s → %2$s</string>
+    <string name="chat_group_member_joined">加入了群组</string>
+    <string name="chat_group_monitor_notice_title">会话内提示（仅本机可见）</string>
+    <string name="chat_group_monitor_notice_leave">退群提示</string>
+    <string name="chat_group_monitor_notice_join">进群提示</string>
+    <string name="chat_group_monitor_notice_rename">改名提示</string>
+    <string name="chat_group_monitor_scope_title">生效范围</string>
+    <string name="chat_group_monitor_scope_all">全部群聊</string>
+    <string name="chat_group_monitor_scope_selected">仅所选群聊</string>
+    <string name="chat_group_monitor_select_groups">选择群聊</string>
+    <string name="chat_group_monitor_groups_empty">尚未选择，默认对所有群生效</string>
+    <string name="chat_group_monitor_groups_count">已选择 %1$d 个群</string>
+    <string name="chat_group_monitor_reply_title">自动回复</string>
+    <string name="chat_group_monitor_reply_master">启用自动回复</string>
+    <string name="chat_group_monitor_reply_warning">会以你的身份真实发送到群里，可能触发账号风控</string>
+    <string name="chat_group_monitor_reply_join">进群回复</string>
+    <string name="chat_group_monitor_reply_leave">退群回复</string>
+    <string name="chat_group_monitor_reply_rename">改名回复</string>
+    <string name="chat_group_monitor_reply_join_template">进群模板</string>
+    <string name="chat_group_monitor_reply_leave_template">退群模板</string>
+    <string name="chat_group_monitor_reply_rename_template">改名模板</string>
+    <string name="chat_group_monitor_reply_prompt_type">回复形态</string>
+    <string name="chat_group_monitor_prompt_text">文本</string>
+    <string name="chat_group_monitor_prompt_card">卡片</string>
+    <string name="chat_group_monitor_prompt_both">文本和卡片</string>
+    <string name="chat_group_monitor_reply_both_order">两者顺序</string>
+    <string name="chat_group_monitor_order_text_first">文本在前</string>
+    <string name="chat_group_monitor_order_card_first">卡片在前</string>
+    <string name="chat_group_monitor_reply_join_card_title">进群卡片标题</string>
+    <string name="chat_group_monitor_reply_join_card_desc">进群卡片描述</string>
+    <string name="chat_group_monitor_reply_leave_card_title">退群卡片标题</string>
+    <string name="chat_group_monitor_reply_leave_card_desc">退群卡片描述</string>
+    <string name="chat_group_monitor_reply_rename_card_title">改名卡片标题</string>
+    <string name="chat_group_monitor_reply_rename_card_desc">改名卡片描述</string>
+    <string name="chat_group_monitor_default_join_card_title">欢迎 {userName}</string>
+    <string name="chat_group_monitor_default_join_card_desc">群名称：{groupName}
+时间：{time}</string>
+    <string name="chat_group_monitor_default_leave_card_title">离群：{userName}</string>
+    <string name="chat_group_monitor_default_leave_card_desc">微信号：{userWxid}
+时间：{time}</string>
+    <string name="chat_group_monitor_default_rename_card_title">{userName} 修改了群昵称</string>
+    <string name="chat_group_monitor_default_rename_card_desc">旧：{oldGroupNickname}
+新：{newGroupNickname}
+时间：{time}</string>
+    <string name="chat_group_monitor_reply_voice_order">语音消息</string>
+    <string name="chat_group_monitor_voice_none">不发送</string>
+    <string name="chat_group_monitor_voice_before">提示之前</string>
+    <string name="chat_group_monitor_voice_after">提示之后</string>
+    <string name="chat_group_monitor_reply_join_voice">进群语音</string>
+    <string name="chat_group_monitor_reply_leave_voice">退群语音</string>
+    <string name="chat_group_monitor_reply_rename_voice">改名语音</string>
+    <string name="chat_group_monitor_voice_unset">未选择</string>
+    <string name="chat_group_monitor_voice_import_failed">语音导入失败</string>
+    <string name="chat_group_monitor_reply_delay">发送延时</string>
+    <string name="chat_group_monitor_variables_title">可用变量</string>
+    <string name="chat_group_monitor_variables_hint">{userName} 微信昵称
+{groupNickname} 群内昵称
+{userWxid} 微信号
+{groupName} 群名称
+{time} 当前时间
+{oldGroupNickname} 改名前群昵称（仅改名模板）
+{newGroupNickname} 改名后群昵称（仅改名模板）</string>
+    <string name="chat_group_monitor_default_join_text">欢迎 {userName} 加入本群！</string>
+    <string name="chat_group_monitor_default_leave_text">{userName} 退出了群聊</string>
+    <string name="chat_group_monitor_default_rename_text">{userName} 将群昵称从「{oldGroupNickname}」改为「{newGroupNickname}」</string>
+    <string name="unit_seconds">秒</string>
     <string name="chat_sticker_selected_image_read_failed">无法读取所选图片</string>
     <string name="chat_sticker_selected_image_empty">所选图片内容为空</string>
     <string name="chat_sticker_send_failed">表情发送失败</string>
