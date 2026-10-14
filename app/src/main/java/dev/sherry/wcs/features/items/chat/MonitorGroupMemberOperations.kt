@@ -81,6 +81,7 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.div
+import kotlin.io.path.outputStream
 
 /**
  * 群成员行为监控：监听 chatroom 行的写入，比对新旧成员表与 roomdata，
@@ -591,7 +592,7 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
                                             ) { selected ->
                                                 groups = selected
                                                 scopeGroups = selected
-                                                showToast(stringResource(R.string.chat_group_monitor_groups_count, selected.size))
+                                                showToast(localizedChatString(R.string.chat_group_monitor_groups_count, selected.size))
                                                 onDismiss()
                                             }
                                         }
@@ -627,6 +628,7 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
                             DropDownMenuWidget(
                                 iconPlaceholder = false,
                                 title = stringResource(R.string.chat_group_monitor_reply_prompt_type),
+                                description = null,
                                 value = promptType,
                                 enabled = replyOn,
                                 options = listOf(
@@ -642,6 +644,7 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
                                 DropDownMenuWidget(
                                     iconPlaceholder = false,
                                     title = stringResource(R.string.chat_group_monitor_reply_both_order),
+                                    description = null,
                                     value = bothOrder,
                                     options = listOf(
                                         DropdownOption(ORDER_TEXT_FIRST, stringResource(R.string.chat_group_monitor_order_text_first)),
@@ -655,6 +658,7 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
                             DropDownMenuWidget(
                                 iconPlaceholder = false,
                                 title = stringResource(R.string.chat_group_monitor_reply_voice_order),
+                                description = null,
                                 value = voiceOrder,
                                 enabled = replyOn,
                                 options = listOf(
@@ -695,17 +699,17 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
                         TemplateRows(
                             enabled = replyOn && replyJoinOn,
                             promptType = promptType,
-                            textLabel = stringResource(R.string.chat_group_monitor_reply_join_template),
+                            textLabelRes = R.string.chat_group_monitor_reply_join_template,
                             textValue = joinText,
                             onTextChange = { joinText = it; replyJoinText = it.trim() },
-                            cardTitleLabel = stringResource(R.string.chat_group_monitor_reply_join_card_title),
+                            cardTitleLabelRes = R.string.chat_group_monitor_reply_join_card_title,
                             cardTitleValue = joinCardTitle,
                             onCardTitleChange = { joinCardTitle = it; replyJoinCardTitle = it.trim() },
-                            cardDescLabel = stringResource(R.string.chat_group_monitor_reply_join_card_desc),
+                            cardDescLabelRes = R.string.chat_group_monitor_reply_join_card_desc,
                             cardDescValue = joinCardDesc,
                             onCardDescChange = { joinCardDesc = it; replyJoinCardDesc = it.trim() },
                             voiceOrder = voiceOrder,
-                            voiceLabel = stringResource(R.string.chat_group_monitor_reply_join_voice),
+                            voiceLabelRes = R.string.chat_group_monitor_reply_join_voice,
                             voicePath = joinVoice,
                             onPickVoice = {
                                 pickVoice = { path -> joinVoice = path; replyJoinVoice = path }
@@ -715,17 +719,17 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
                         TemplateRows(
                             enabled = replyOn && replyLeaveOn,
                             promptType = promptType,
-                            textLabel = stringResource(R.string.chat_group_monitor_reply_leave_template),
+                            textLabelRes = R.string.chat_group_monitor_reply_leave_template,
                             textValue = leaveText,
                             onTextChange = { leaveText = it; replyLeaveText = it.trim() },
-                            cardTitleLabel = stringResource(R.string.chat_group_monitor_reply_leave_card_title),
+                            cardTitleLabelRes = R.string.chat_group_monitor_reply_leave_card_title,
                             cardTitleValue = leaveCardTitle,
                             onCardTitleChange = { leaveCardTitle = it; replyLeaveCardTitle = it.trim() },
-                            cardDescLabel = stringResource(R.string.chat_group_monitor_reply_leave_card_desc),
+                            cardDescLabelRes = R.string.chat_group_monitor_reply_leave_card_desc,
                             cardDescValue = leaveCardDesc,
                             onCardDescChange = { leaveCardDesc = it; replyLeaveCardDesc = it.trim() },
                             voiceOrder = voiceOrder,
-                            voiceLabel = stringResource(R.string.chat_group_monitor_reply_leave_voice),
+                            voiceLabelRes = R.string.chat_group_monitor_reply_leave_voice,
                             voicePath = leaveVoice,
                             onPickVoice = {
                                 pickVoice = { path -> leaveVoice = path; replyLeaveVoice = path }
@@ -735,17 +739,17 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
                         TemplateRows(
                             enabled = replyOn && replyRenameOn,
                             promptType = promptType,
-                            textLabel = stringResource(R.string.chat_group_monitor_reply_rename_template),
+                            textLabelRes = R.string.chat_group_monitor_reply_rename_template,
                             textValue = renameText,
                             onTextChange = { renameText = it; replyRenameText = it.trim() },
-                            cardTitleLabel = stringResource(R.string.chat_group_monitor_reply_rename_card_title),
+                            cardTitleLabelRes = R.string.chat_group_monitor_reply_rename_card_title,
                             cardTitleValue = renameCardTitle,
                             onCardTitleChange = { renameCardTitle = it; replyRenameCardTitle = it.trim() },
-                            cardDescLabel = stringResource(R.string.chat_group_monitor_reply_rename_card_desc),
+                            cardDescLabelRes = R.string.chat_group_monitor_reply_rename_card_desc,
                             cardDescValue = renameCardDesc,
                             onCardDescChange = { renameCardDesc = it; replyRenameCardDesc = it.trim() },
                             voiceOrder = voiceOrder,
-                            voiceLabel = stringResource(R.string.chat_group_monitor_reply_rename_voice),
+                            voiceLabelRes = R.string.chat_group_monitor_reply_rename_voice,
                             voicePath = renameVoice,
                             onPickVoice = {
                                 pickVoice = { path -> renameVoice = path; replyRenameVoice = path }
@@ -787,21 +791,20 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
      * 一类事件的模板行：形态为「文本」只出文本框，「卡片」只出标题与描述，「两者」三样都出。
      * 清空任一框并确定即恢复该语言下的默认文案。
      */
-    @Composable
     private fun SegmentedColumnScope.TemplateRows(
         enabled: Boolean,
         promptType: Int,
-        textLabel: String,
+        textLabelRes: Int,
         textValue: String,
         onTextChange: (String) -> Unit,
-        cardTitleLabel: String,
+        cardTitleLabelRes: Int,
         cardTitleValue: String,
         onCardTitleChange: (String) -> Unit,
-        cardDescLabel: String,
+        cardDescLabelRes: Int,
         cardDescValue: String,
         onCardDescChange: (String) -> Unit,
         voiceOrder: Int,
-        voiceLabel: String,
+        voiceLabelRes: Int,
         voicePath: String,
         onPickVoice: () -> Unit,
     ) {
@@ -809,9 +812,9 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
         if (promptType != PROMPT_CARD) {
             item {
                 TextFieldDialogWidget(
-                    title = textLabel,
+                    title = stringResource(textLabelRes),
                     value = textValue,
-                    dialogTitle = textLabel,
+                    dialogTitle = stringResource(textLabelRes),
                     confirmLabel = stringResource(R.string.dialog_confirm),
                     dismissLabel = stringResource(R.string.dialog_cancel),
                     singleLine = false,
@@ -822,9 +825,9 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
         if (promptType == PROMPT_CARD || promptType == PROMPT_BOTH) {
             item {
                 TextFieldDialogWidget(
-                    title = cardTitleLabel,
+                    title = stringResource(cardTitleLabelRes),
                     value = cardTitleValue,
-                    dialogTitle = cardTitleLabel,
+                    dialogTitle = stringResource(cardTitleLabelRes),
                     confirmLabel = stringResource(R.string.dialog_confirm),
                     dismissLabel = stringResource(R.string.dialog_cancel),
                     singleLine = false,
@@ -833,9 +836,9 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
             }
             item {
                 TextFieldDialogWidget(
-                    title = cardDescLabel,
+                    title = stringResource(cardDescLabelRes),
                     value = cardDescValue,
-                    dialogTitle = cardDescLabel,
+                    dialogTitle = stringResource(cardDescLabelRes),
                     confirmLabel = stringResource(R.string.dialog_confirm),
                     dismissLabel = stringResource(R.string.dialog_cancel),
                     singleLine = false,
@@ -847,7 +850,7 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
             item {
                 BaseWidget(
                     iconPlaceholder = false,
-                    title = voiceLabel,
+                    title = stringResource(voiceLabelRes),
                     description = if (voicePath.isEmpty()) {
                         stringResource(R.string.chat_group_monitor_voice_unset)
                     } else {
