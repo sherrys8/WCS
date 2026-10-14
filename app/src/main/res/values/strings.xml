@@ -2813,7 +2813,7 @@ Time: {time}</string>
 After: {newGroupNickname}
 Time: {time}</string>
     <string name="chat_group_monitor_reply_voice_order">Voice message</string>
-    <string name="chat_group_monitor_voice_none">Don't send</string>
+    <string name="chat_group_monitor_voice_none">Do not send</string>
     <string name="chat_group_monitor_voice_before">Before the prompt</string>
     <string name="chat_group_monitor_voice_after">After the prompt</string>
     <string name="chat_group_monitor_reply_join_voice">Voice on join</string>
