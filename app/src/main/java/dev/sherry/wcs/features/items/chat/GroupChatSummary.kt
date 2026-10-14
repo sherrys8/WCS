@@ -93,6 +93,7 @@ import dev.sherry.wcs.utils.android.copyToClipboard
 import dev.sherry.wcs.utils.android.showToast
 import dev.sherry.wcs.utils.android.showToastSuspend
 import dev.sherry.wcs.utils.strings.isGroupChatWxId
+import dev.sherry.wcs.utils.strings.replaceEmojis
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -422,7 +423,7 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
                                 Spacer(Modifier.height(8.dp))
                             }
                             MarkdownText(
-                                markdown = result,
+                                markdown = result.replaceEmojis(),
                                 modifier = Modifier.fillMaxWidth(),
                                 style = MaterialTheme.typography.bodySmall,
                             )
