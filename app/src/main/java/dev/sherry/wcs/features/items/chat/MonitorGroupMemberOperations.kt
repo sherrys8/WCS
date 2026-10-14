@@ -474,12 +474,12 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
 
     override fun onClick(context: ComponentActivity) {
         showComposeDialog(context) {
-            MemberMonitorSettings(context = context, onDismiss = onDismiss)
+            MemberMonitorSettings(context = context, dismissParent = onDismiss)
         }
     }
 
     @Composable
-    private fun MemberMonitorSettings(context: ComponentActivity, onDismiss: () -> Unit) {
+    private fun MemberMonitorSettings(context: ComponentActivity, dismissParent: () -> Unit) {
         var allGroups by remember { mutableStateOf(scopeAll) }
         var groups by remember { mutableStateOf(scopeGroups) }
         var leaveNotice by remember { mutableStateOf(noticeLeave) }
@@ -583,6 +583,8 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
                                         stringResource(R.string.chat_group_monitor_groups_count, groups.size)
                                     },
                                     onClick = {
+                                        // 这里两个 onDismiss 都指子弹窗自己的 scope.onDismiss；
+                                        // 父级回调刻意叫 dismissParent，同名参数会把它盖掉
                                         showComposeDialog(context) {
                                             ContactsSelector(
                                                 title = stringResource(R.string.chat_group_monitor_select_groups),
@@ -678,24 +680,6 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
                                 onCheckedChange = { replyJoinOn = it; replyJoin = it },
                             )
                         }
-                        item {
-                            SwitchWidget(
-                                iconPlaceholder = false,
-                                title = stringResource(R.string.chat_group_monitor_reply_leave),
-                                enabled = replyOn,
-                                checked = replyLeaveOn,
-                                onCheckedChange = { replyLeaveOn = it; replyLeave = it },
-                            )
-                        }
-                        item {
-                            SwitchWidget(
-                                iconPlaceholder = false,
-                                title = stringResource(R.string.chat_group_monitor_reply_rename),
-                                enabled = replyOn,
-                                checked = replyRenameOn,
-                                onCheckedChange = { replyRenameOn = it; replyRename = it },
-                            )
-                        }
                         TemplateRows(
                             enabled = replyOn && replyJoinOn,
                             promptType = promptType,
@@ -716,6 +700,15 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
                                 voicePicker.launch("audio/*")
                             },
                         )
+                        item {
+                            SwitchWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(R.string.chat_group_monitor_reply_leave),
+                                enabled = replyOn,
+                                checked = replyLeaveOn,
+                                onCheckedChange = { replyLeaveOn = it; replyLeave = it },
+                            )
+                        }
                         TemplateRows(
                             enabled = replyOn && replyLeaveOn,
                             promptType = promptType,
@@ -736,6 +729,15 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
                                 voicePicker.launch("audio/*")
                             },
                         )
+                        item {
+                            SwitchWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(R.string.chat_group_monitor_reply_rename),
+                                enabled = replyOn,
+                                checked = replyRenameOn,
+                                onCheckedChange = { replyRenameOn = it; replyRename = it },
+                            )
+                        }
                         TemplateRows(
                             enabled = replyOn && replyRenameOn,
                             promptType = promptType,
@@ -782,7 +784,7 @@ object MonitorGroupMemberOperations : ClickableFeature(), IResolveDex, WeDatabas
                 }
             },
             dismissButton = {
-                TextButton(onDismiss) { Text(stringResource(R.string.dialog_close)) }
+                TextButton(dismissParent) { Text(stringResource(R.string.dialog_close)) }
             },
         )
     }
