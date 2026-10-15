@@ -1,5 +1,6 @@
 package dev.sherry.wcs.features.items.chat_input_bar_menu
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -12,13 +13,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,9 +32,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -52,9 +59,12 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Check_circle
+import com.composables.icons.materialsymbols.outlined.Close
+import com.composables.icons.materialsymbols.outlined.Content_copy
 import com.composables.icons.materialsymbols.outlined.Chevron_right
+import com.composables.icons.materialsymbols.outlined.Delete
+import com.composables.icons.materialsymbols.outlined.Error
 import com.composables.icons.materialsymbols.outlined.Keyboard_arrow_down
-import com.composables.icons.materialsymbols.outlined.Keyboard_arrow_up
 import com.composables.icons.materialsymbols.outlined.Tune
 import com.composables.icons.materialsymbols.outlined.Video_file
 import dev.sherry.wcs.R
@@ -580,6 +590,10 @@ object ParseVideo : ClickableFeature() {
                 qualityList = qualities,
                 imageList = images,
                 coverUrl = primaryCoverUrl,
+                // 实况笔记走主线路时，video_list 里是每张静帧各自的动图（彼此独立），不是同一视频的清晰度；
+                // 不置位就会被当成档位，下载/发送只取选中的那一条，其余动图静默丢失。
+                // 普通视频帖的 images 只有封面一张，多清晰度仍按档位走，不受这里影响。
+                downloadAllVideos = images.size > 1 && videoEntries.size > 1,
             )
         }
     }
@@ -935,24 +949,44 @@ object ParseVideo : ClickableFeature() {
         return sentCount
     }
 
-    /** 图集横滑缩略图行（混合内容独立区块与纯图集结果共用）。 */
+    /** 图集横滑缩略图行：最多露 4 张，其余折成末张的「+N」蒙层（混合内容独立区块与纯图集结果共用）。 */
     @Composable
     private fun GalleryThumbsRow(images: List<String>) {
+        val shown = images.take(4)
+        val hidden = images.size - shown.size
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
         ) {
-            images.forEachIndexed { index, imgUrl ->
-                AsyncImage(
-                    model = imgUrl,
-                    contentDescription = "$index",
-                    modifier = Modifier
-                        .size(width = 96.dp, height = 128.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop,
-                )
+            shown.forEachIndexed { index, imgUrl ->
+                Box {
+                    AsyncImage(
+                        model = imgUrl,
+                        contentDescription = "$index",
+                        modifier = Modifier
+                            .size(width = 72.dp, height = 96.dp)
+                            .clip(RoundedCornerShape(9.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                    if (hidden > 0 && index == shown.lastIndex) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 72.dp, height = 96.dp)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(Color.Black.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "+$hidden",
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -979,7 +1013,6 @@ fun showParseDialog(context: android.content.Context) {
             var routeMenuExpanded by remember { mutableStateOf(false) }
             // 主线路 pid（左下角「线路N」选择框，1~7）：仅自动/主线路时展示，选择持久化
             var selectedPid by remember { mutableIntStateOf(parsePid) }
-            var pidMenuExpanded by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
             val appContext = LocalContext.current.applicationContext
 
@@ -1268,30 +1301,115 @@ fun showParseDialog(context: android.content.Context) {
                 ROUTE_BACKUP3 to R.string.parse_video_route_backup3,
             )
 
-            AlertDialogContent(
-                title = {
+            /** 从剪贴板重读一次链接：弹窗打开时只自动读过一次，用户中途复制就得靠这里。 */
+            fun pasteFromClipboard() {
+                val extracted = readTextFromClipboard(appContext)?.let { extractVideoUrl(it) }.orEmpty()
+                if (extracted.isEmpty()) {
+                    showToast(localizedChatInputString(R.string.parse_video_link_empty))
+                    return
+                }
+                link = extracted
+            }
+
+            fun saveCover() {
+                val url = directCoverUrl
+                if (url.isBlank() || savingCover) return
+                savingCover = true
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val dir = ensureSaveDir()
+                            val ext = if (url.contains(".png")) "png" else "jpg"
+                            val out = java.io.File(dir, "cover-${UUID.randomUUID()}.$ext")
+                            val req = Request.Builder().url(url).get().build()
+                            httpClient.newCall(req).execute().use { resp ->
+                                require(resp.isSuccessful) { "HTTP ${resp.code}" }
+                                resp.body.byteStream().use { ins -> out.outputStream().use { ins.copyTo(it) } }
+                            }
+                            out
+                        }
+                    }
+                    savingCover = false
+                    result.fold(
+                        onSuccess = { file ->
+                            showToast(
+                                localizedChatInputString(R.string.parse_video_cover_saved) +
+                                    " (${"%.1f".format(file.length() / 1024.0)}KB)",
+                            )
+                        },
+                        onFailure = { e ->
+                            WeLogger.e(TAG, "save cover failed", e)
+                            errorMsg = e.message ?: localizedChatInputString(R.string.parse_video_download_failed, e.toString())
+                        },
+                    )
+                }
+            }
+
+            val footerStatus = when {
+                sending -> localizedChatInputString(R.string.parse_video_sending)
+                downloading -> localizedChatInputString(R.string.parse_video_downloading) +
+                    downloadProgress.takeIf { it > 0f }?.let { " ${(it * 100).toInt()}%" }.orEmpty()
+                downloadedFiles.isNotEmpty() -> buildString {
+                    append(localizedChatInputString(R.string.parse_video_downloaded))
+                    if (downloadedFiles.size > 1) {
+                        append(" ×")
+                        append(downloadedFiles.size)
+                    }
+                    append(" (")
+                    append("%.1f".format(downloadedFiles.sumOf { it.length() } / 1024.0 / 1024.0))
+                    append("MB)")
+                }
+                else -> ""
+            }
+
+            Surface(
+                shape = MaterialTheme.shapes.extraLarge,
+                tonalElevation = 6.dp,
+                modifier = Modifier
+                    .padding(4.dp)
+                    .fillMaxWidth()
+                    .wrapContentHeight(),
+            ) {
+                Column {
+                    // ===== 头部：标题 + 线路药丸（线路与线路N 合一菜单）+ 关闭 =====
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
                             text = stringResource(R.string.feature_parse_video_name),
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        // 右上角齿轮：像文字转语音切音色一样手动切换解析线路（选择持久化，手动弹窗与自动回复共用）
+                        Spacer(Modifier.weight(1f))
                         Box {
                             CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
-                                IconButton(
+                                FilledTonalButton(
                                     onClick = { routeMenuExpanded = true },
-                                    modifier = Modifier.size(36.dp),
+                                    modifier = Modifier.height(30.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp),
                                 ) {
                                     Icon(
                                         MaterialSymbols.Outlined.Tune,
                                         contentDescription = stringResource(R.string.parse_video_route_settings),
-                                        modifier = Modifier.size(20.dp),
+                                        modifier = Modifier.size(15.dp),
+                                    )
+                                    Spacer(Modifier.width(5.dp))
+                                    Text(
+                                        text = routePillLabel(selectedRoute, selectedPid),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.widthIn(max = 150.dp),
+                                    )
+                                    Icon(
+                                        MaterialSymbols.Outlined.Keyboard_arrow_down,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
                                     )
                                 }
                             }
@@ -1321,42 +1439,71 @@ fun showParseDialog(context: android.content.Context) {
                                             )
                                         },
                                     )
+                                    // 线路N 只属于自动/主线路：内联在选中项下面，选完不关菜单
+                                    if (selectedRoute == value && (value == ROUTE_AUTO || value == ROUTE_PRIMARY)) {
+                                        RoutePidRow(selectedPid) { n ->
+                                            selectedPid = n
+                                            parsePid = n
+                                        }
+                                    }
                                 }
                             }
                         }
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                            IconButton(
+                                onClick = onDismiss,
+                                enabled = !loading && !sending,
+                                modifier = Modifier.size(34.dp),
+                            ) {
+                                Icon(
+                                    MaterialSymbols.Outlined.Close,
+                                    contentDescription = stringResource(R.string.dialog_close),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
                     }
-                },
-                text = {
+
+                    HorizontalDivider(Modifier.padding(horizontal = 20.dp))
+
+                    // ===== 正文（滚动）=====
                     Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        OutlinedTextField(
+                        TextField(
                             value = link,
                             onValueChange = { link = it },
                             enabled = !loading,
                             label = { Text(stringResource(R.string.parse_video_link_hint)) },
-                            placeholder = {
-                                Text(stringResource(R.string.parse_video_link_placeholder))
+                            placeholder = { Text(stringResource(R.string.parse_video_link_placeholder)) },
+                            trailingIcon = {
+                                IconButton(onClick = { pasteFromClipboard() }, enabled = !loading) {
+                                    Icon(
+                                        MaterialSymbols.Outlined.Content_copy,
+                                        contentDescription = stringResource(R.string.parse_video_link_hint),
+                                    )
+                                }
                             },
+                            shape = RoundedCornerShape(16.dp),
+                            minLines = 1,
+                            maxLines = 3,
                             modifier = Modifier.fillMaxWidth(),
-                            minLines = 2,
-                            maxLines = 4,
                         )
-
-                        Spacer(Modifier.height(6.dp))
 
                         CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Button(
+                                FilledTonalButton(
                                     onClick = { doConvert() },
                                     modifier = Modifier.weight(1f).height(34.dp),
-                                    enabled = !loading && !downloading && !sending,
                                     contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                    enabled = !loading && !downloading && !sending,
                                 ) {
                                     Text(
                                         stringResource(R.string.parse_video_convert),
@@ -1366,8 +1513,8 @@ fun showParseDialog(context: android.content.Context) {
                                 Button(
                                     onClick = { doSendNow() },
                                     modifier = Modifier.weight(1f).height(34.dp),
-                                    enabled = !loading && !downloading && !sending,
                                     contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                    enabled = !loading && !downloading && !sending,
                                 ) {
                                     Text(
                                         stringResource(R.string.parse_video_send),
@@ -1377,419 +1524,416 @@ fun showParseDialog(context: android.content.Context) {
                             }
                         }
 
-                        Spacer(Modifier.height(6.dp))
-
                         if (loading) {
-                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.padding(end = 12.dp),
-                                    strokeWidth = 3.dp,
-                                )
-                                Text(stringResource(R.string.parse_video_loading))
-                            }
-                        }
-
-                        errorMsg?.let { err ->
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = err,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-
-                        // ===== 解析结果卡片（封面 + 信息 + 清晰度 + 保存封面） =====
-                        parseResult?.let { r ->
-                            val data = r.parsedData() ?: return@let
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Column(Modifier.padding(12.dp)) {
-                                    // 混合内容（视频/实况 + 图集并存）：图集区块在前、视频区块在下，各带独立下载按钮
-                                    val isMixed = r.hasVideo() && r.imageList.isNotEmpty()
-                                    if (isMixed) {
-                                        Text(
-                                            text = stringResource(R.string.parse_video_section_gallery),
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
-                                        Spacer(Modifier.height(6.dp))
-                                        GalleryThumbsRow(r.imageList)
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            text = localizedChatInputString(R.string.parse_video_gallery_detected, r.imageList.size),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                        Spacer(Modifier.height(6.dp))
-                                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
-                                            OutlinedButton(
-                                                onClick = { doDownload(images = true) },
-                                                enabled = !downloading && !sending,
-                                                modifier = Modifier.height(34.dp),
-                                                contentPadding = ButtonDefaults.ExtraSmallContentPadding,
-                                            ) {
-                                                Text(
-                                                    stringResource(R.string.parse_video_download_images_btn),
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                )
-                                            }
-                                        }
-                                        Spacer(Modifier.height(8.dp))
-                                        HorizontalDivider()
-                                        Spacer(Modifier.height(8.dp))
-                                        Text(
-                                            text = stringResource(R.string.parse_video_section_video),
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
-                                        Spacer(Modifier.height(6.dp))
-                                    }
-                                    Row(verticalAlignment = Alignment.Top) {
-                                        if (directCoverUrl.isNotBlank()) {
-                                            AsyncImage(
-                                                model = directCoverUrl,
-                                                contentDescription = null,
-                                                modifier = Modifier
-                                                    .size(width = 108.dp, height = 144.dp)
-                                                    .clip(RoundedCornerShape(10.dp)),
-                                                contentScale = ContentScale.Crop,
-                                            )
-                                            Spacer(Modifier.width(12.dp))
-                                        }
-                                        Column(Modifier.weight(1f)) {
-                                            if (data.video_title.isNotBlank()) {
-                                                Text(
-                                                    text = data.video_title,
-                                                    style = MaterialTheme.typography.titleSmall,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    maxLines = 4,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                )
-                                            }
-                                            data.author?.let { author ->
-                                                Spacer(Modifier.height(4.dp))
-                                                Text(
-                                                    text = author.name,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                )
-                                            }
-                                            if (qualityList.size > 1 && !r.downloadAllVideos) {
-                                                Spacer(Modifier.height(8.dp))
-                                                var expanded by remember { mutableStateOf(false) }
-                                                val selectedLabel = qualityList
-                                                    .firstOrNull { it.second == selectedQualityUrl }?.first
-                                                    ?: qualityList.firstOrNull()?.first
-                                                    ?: "选择清晰度"
-                                                Box {
-                                                    OutlinedTextField(
-                                                        value = selectedLabel,
-                                                        onValueChange = {},
-                                                        readOnly = true,
-                                                        label = { Text(stringResource(R.string.parse_video_quality_label)) },
-                                                        trailingIcon = {
-                                                            IconButton(onClick = { expanded = !expanded }) {
-                                                                Icon(
-                                                                    if (expanded) MaterialSymbols.Outlined.Keyboard_arrow_up
-                                                                    else MaterialSymbols.Outlined.Keyboard_arrow_down,
-                                                                    null,
-                                                                )
-                                                            }
-                                                        },
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                    )
-                                                    DropdownMenu(
-                                                        expanded = expanded,
-                                                        onDismissRequest = { expanded = false },
-                                                    ) {
-                                                        qualityList.forEach { (label, url) ->
-                                                            DropdownMenuItem(
-                                                                text = { Text(label) },
-                                                                onClick = {
-                                                                    selectedQualityUrl = url
-                                                                    expanded = false
-                                                                },
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(Modifier.height(10.dp))
-
-                                    if (directCoverUrl.isNotBlank()) {
-                                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
-                                            OutlinedButton(
-                                                onClick = {
-                                                    savingCover = true
-                                                    scope.launch {
-                                                        val result = withContext(Dispatchers.IO) {
-                                                            runCatching {
-                                                                val dir = ensureSaveDir()
-                                                                val ext = if (directCoverUrl.contains(".png")) "png" else "jpg"
-                                                                val out = java.io.File(dir, "cover-${UUID.randomUUID()}.$ext")
-                                                                val req = Request.Builder().url(directCoverUrl).get().build()
-                                                                httpClient.newCall(req).execute().use { resp ->
-                                                                    require(resp.isSuccessful) { "HTTP ${resp.code}" }
-                                                                    resp.body.byteStream().use { ins ->
-                                                                        out.outputStream().use { ins.copyTo(it) }
-                                                                    }
-                                                                }
-                                                                out
-                                                            }
-                                                        }
-                                                        savingCover = false
-                                                        result.fold(
-                                                            onSuccess = { file ->
-                                                                showToast(
-                                                                    localizedChatInputString(R.string.parse_video_cover_saved) +
-                                                                        " (${"%.1f".format(file.length() / 1024.0)}KB)",
-                                                                )
-                                                            },
-                                                            onFailure = { e ->
-                                                                WeLogger.e(TAG, "save cover failed", e)
-                                                                errorMsg = e.message ?: "保存封面失败"
-                                                            },
-                                                        )
-                                                    }
-                                                },
-                                                enabled = !savingCover,
-                                                modifier = Modifier.height(34.dp),
-                                                contentPadding = ButtonDefaults.ExtraSmallContentPadding,
-                                            ) {
-                                                Text(
-                                                    if (savingCover) stringResource(R.string.parse_video_saving_cover)
-                                                    else stringResource(R.string.parse_video_save_cover),
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                )
-                                            }
-                                        }
-                                        Spacer(Modifier.height(8.dp))
-                                    }
-
-                                    // ===== 混合内容：视频区块尾部的数量提示 + 独立下载按钮 =====
-                                    if (isMixed) {
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            text = localizedChatInputString(
-                                                R.string.parse_video_videos_detected,
-                                                qualityList.size.takeIf { it > 0 } ?: 1,
-                                            ),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                        Spacer(Modifier.height(6.dp))
-                                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
-                                            OutlinedButton(
-                                                onClick = { doDownload(images = false) },
-                                                enabled = !downloading && !sending,
-                                                modifier = Modifier.height(34.dp),
-                                                contentPadding = ButtonDefaults.ExtraSmallContentPadding,
-                                            ) {
-                                                Text(
-                                                    stringResource(
-                                                        if (r.downloadAllVideos) R.string.parse_video_download_all_videos_btn
-                                                        else R.string.parse_video_download_video_btn,
-                                                    ),
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    // ===== 图集预览（纯图集结果保持原位展示；混合内容已上移为独立区块） =====
-                                    if (!isMixed && r.imageList.isNotEmpty()) {
-                                        Spacer(Modifier.height(8.dp))
-                                        GalleryThumbsRow(r.imageList)
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            text = localizedChatInputString(R.string.parse_video_gallery_detected, r.imageList.size),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-
-                                // ===== 下载状态 =====
-
-                                when {
-                                    downloading || sending -> {
-                                        Spacer(Modifier.height(8.dp))
-                                        Column(modifier = Modifier.fillMaxWidth()) {
-                                            val percent = (downloadProgress * 100).toInt()
-                                            LinearProgressIndicator(
-                                                progress = { downloadProgress.coerceIn(0f, 1f) },
-                                                modifier = Modifier.fillMaxWidth(),
-                                            )
-                                            Spacer(Modifier.height(4.dp))
-                                            Text(
-                                                text = if (sending) {
-                                                    localizedChatInputString(R.string.parse_video_sending)
-                                                } else if (percent >= 100) {
-                                                    localizedChatInputString(R.string.parse_video_downloading)
-                                                } else {
-                                                    localizedChatInputString(R.string.parse_video_downloading) +
-                                                        " $percent%"
-                                                },
-                                                style = MaterialTheme.typography.bodySmall,
-                                            )
-                                        }
-                                    }
-                                    downloadedFiles.isNotEmpty() -> {
-                                        Spacer(Modifier.height(8.dp))
-                                        val totalSize = downloadedFiles.sumOf { it.length() }
-                                        Text(
-                                            text = buildString {
-                                                append(localizedChatInputString(R.string.parse_video_downloaded))
-                                                if (downloadedFiles.size > 1) {
-                                                    append(" ×")
-                                                    append(downloadedFiles.size)
-                                                }
-                                                append(" (")
-                                                append("%.1f".format(totalSize / 1024.0 / 1024.0))
-                                                append("MB)")
-                                            },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp),
+                                        strokeWidth = 3.dp,
+                                    )
+                                    Text(
+                                        stringResource(R.string.parse_video_loading),
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
                                 }
                             }
                         }
+
+                        errorMsg?.let { err ->
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.errorContainer,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.Top,
+                                    horizontalArrangement = Arrangement.spacedBy(9.dp),
+                                ) {
+                                    Icon(
+                                        MaterialSymbols.Outlined.Error,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Text(
+                                        text = err,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                        }
+
+                        parseResult?.let { r ->
+                            val data = r.parsedData() ?: return@let
+                            ParseResultCard(
+                                result = r,
+                                data = data,
+                                qualityList = qualityList,
+                                selectedQualityUrl = selectedQualityUrl,
+                                onQuality = { selectedQualityUrl = it },
+                                directCoverUrl = directCoverUrl,
+                                savingCover = savingCover,
+                                onSaveCover = { saveCover() },
+                                busy = downloading || sending,
+                                onDownloadImages = { doDownload(images = true) },
+                                onDownloadVideo = { doDownload(images = false) },
+                            )
                         }
                     }
-                },
-                confirmButton = {
-                    // 底部按钮数量随解析/下载状态增长，硬排一行会把文字挤成竖排：
-                    // 改用 FlowRow，每个按钮按自身宽度换行
-                    val r = parseResult
-                    val hasVideo = r?.hasVideo() == true
-                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            // 线路选择：当前线路为自动/主线路时可选线路1~线路7（数字作为 pid 传给主线路接口）
-                            if (selectedRoute == ROUTE_AUTO || selectedRoute == ROUTE_PRIMARY) {
-                                Box {
-                                    OutlinedButton(
-                                        onClick = { pidMenuExpanded = true },
-                                        modifier = Modifier.height(34.dp),
-                                        contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+
+                    // ===== 吸底：进度条 + 状态位 + 唯一主操作 =====
+                    val busy = downloading || sending
+                    if (busy) {
+                        LinearProgressIndicator(
+                            progress = { downloadProgress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp),
+                        )
+                    }
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = footerStatus,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (downloadedFiles.isNotEmpty() && !busy) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                            if (downloadedFiles.isNotEmpty()) {
+                                IconButton(onClick = { deleteDownloadedFile() }, enabled = !busy) {
+                                    Icon(
+                                        MaterialSymbols.Outlined.Delete,
+                                        contentDescription = stringResource(R.string.parse_video_delete),
+                                    )
+                                }
+                                Button(
+                                    onClick = { sendDownloadedFiles() },
+                                    enabled = !busy,
+                                    modifier = Modifier.height(40.dp),
+                                ) {
+                                    Text(stringResource(R.string.parse_video_send_files))
+                                }
+                            } else {
+                                parseResult?.let { r ->
+                                    val gallery = r.imageList.isNotEmpty()
+                                    Button(
+                                        onClick = {
+                                            if (gallery) doDownloadAll() else doDownload(images = false)
+                                        },
+                                        enabled = !busy,
+                                        modifier = Modifier.height(40.dp),
                                     ) {
                                         Text(
-                                            stringResource(R.string.parse_video_line_option, selectedPid),
-                                            style = MaterialTheme.typography.labelMedium,
+                                            if (downloading) {
+                                                stringResource(R.string.parse_video_downloading)
+                                            } else {
+                                                stringResource(
+                                                    if (gallery) R.string.parse_video_download_all_files
+                                                    else R.string.parse_video_download,
+                                                )
+                                            },
                                         )
-                                        Icon(
-                                            MaterialSymbols.Outlined.Keyboard_arrow_down,
-                                            contentDescription = null,
-                                        )
-                                    }
-                                    DropdownMenu(
-                                        expanded = pidMenuExpanded,
-                                        onDismissRequest = { pidMenuExpanded = false },
-                                    ) {
-                                        (1..7).forEach { n ->
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.parse_video_line_option, n)) },
-                                                trailingIcon = {
-                                                    if (selectedPid == n) {
-                                                        Icon(
-                                                            MaterialSymbols.Outlined.Check_circle,
-                                                            contentDescription = null,
-                                                            tint = MaterialTheme.colorScheme.primary,
-                                                        )
-                                                    }
-                                                },
-                                                onClick = {
-                                                    selectedPid = n
-                                                    parsePid = n
-                                                    pidMenuExpanded = false
-                                                },
-                                            )
-                                        }
                                     }
                                 }
                             }
-                            TextButton(
-                                onClick = onDismiss,
-                                enabled = !loading && !sending,
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** 线路药丸文案：只取线路名的短前缀（切掉括号里的说明），完整名在菜单里，避免药丸被省略号截成一截废话。 */
+    @Composable
+    private fun routePillLabel(route: String, pid: Int): String {
+        val labelRes = when (route) {
+            ROUTE_PRIMARY -> R.string.parse_video_route_primary
+            ROUTE_BACKUP -> R.string.parse_video_route_backup
+            ROUTE_BACKUP2 -> R.string.parse_video_route_backup2
+            ROUTE_BACKUP3 -> R.string.parse_video_route_backup3
+            else -> R.string.parse_video_route_auto
+        }
+        val base = stringResource(labelRes).substringBefore('（').substringBefore('(').trim()
+        return if (route == ROUTE_AUTO || route == ROUTE_PRIMARY) {
+            "$base · ${stringResource(R.string.parse_video_line_option, pid)}"
+        } else {
+            base
+        }
+    }
+
+    /** 线路N（主线路 pid 1~7）：跟在选中线路那一行下面，点完不关菜单。 */
+    @Composable
+    private fun RoutePidRow(selectedPid: Int, onPick: (Int) -> Unit) {
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+            Row(
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                (1..7).forEach { n ->
+                    if (n == selectedPid) {
+                        Button(
+                            onClick = { onPick(n) },
+                            modifier = Modifier.size(30.dp),
+                            contentPadding = PaddingValues(0.dp),
+                        ) {
+                            Text(n.toString(), style = MaterialTheme.typography.labelMedium)
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { onPick(n) },
+                            modifier = Modifier.size(30.dp),
+                            contentPadding = PaddingValues(0.dp),
+                        ) {
+                            Text(n.toString(), style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** 解析结果卡：图集与视频各自一张子卡（子卡头带数量与自己的下载动作），纯视频不渲染段头。 */
+    @Composable
+    private fun ParseResultCard(
+        result: VideoParseResult,
+        data: VideoData,
+        qualityList: List<Pair<String, String>>,
+        selectedQualityUrl: String,
+        onQuality: (String) -> Unit,
+        directCoverUrl: String,
+        savingCover: Boolean,
+        onSaveCover: () -> Unit,
+        busy: Boolean,
+        onDownloadImages: () -> Unit,
+        onDownloadVideo: () -> Unit,
+    ) {
+        val gallery = result.imageList
+        val mixed = result.hasVideo() && gallery.isNotEmpty()
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (gallery.isNotEmpty()) {
+                    ResultSection(
+                        title = stringResource(R.string.parse_video_section_gallery),
+                        detail = localizedChatInputString(R.string.parse_video_gallery_detected, gallery.size),
+                        action = if (mixed) {
+                            {
+                                SectionAction(
+                                    label = stringResource(R.string.parse_video_download_images_btn),
+                                    enabled = !busy,
+                                    onClick = onDownloadImages,
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                        content = { GalleryThumbsRow(gallery) },
+                    )
+                }
+                if (result.hasVideo()) {
+                    if (mixed) {
+                        ResultSection(
+                            title = stringResource(R.string.parse_video_section_video),
+                            detail = localizedChatInputString(
+                                R.string.parse_video_videos_detected,
+                                qualityList.size.takeIf { it > 0 } ?: 1,
+                            ),
+                            action = {
+                                SectionAction(
+                                    label = stringResource(R.string.parse_video_download_video_btn),
+                                    enabled = !busy,
+                                    onClick = onDownloadVideo,
+                                )
+                            },
+                            content = {
+                                VideoBlock(
+                                    data = data,
+                                    qualityList = qualityList,
+                                    downloadAllVideos = result.downloadAllVideos,
+                                    selectedQualityUrl = selectedQualityUrl,
+                                    onQuality = onQuality,
+                                    directCoverUrl = directCoverUrl,
+                                    savingCover = savingCover,
+                                    onSaveCover = onSaveCover,
+                                )
+                            },
+                        )
+                    } else {
+                        VideoBlock(
+                            data = data,
+                            qualityList = qualityList,
+                            downloadAllVideos = result.downloadAllVideos,
+                            selectedQualityUrl = selectedQualityUrl,
+                            onQuality = onQuality,
+                            directCoverUrl = directCoverUrl,
+                            savingCover = savingCover,
+                            onSaveCover = onSaveCover,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ResultSection(
+        title: String,
+        detail: String,
+        action: (@Composable () -> Unit)?,
+        content: @Composable () -> Unit,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    action?.invoke()
+                }
+                content()
+            }
+        }
+    }
+
+    @Composable
+    private fun SectionAction(label: String, enabled: Boolean, onClick: () -> Unit) {
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+            TextButton(onClick = onClick, enabled = enabled) {
+                Text(label, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+
+    @Composable
+    private fun VideoBlock(
+        data: VideoData,
+        qualityList: List<Pair<String, String>>,
+        downloadAllVideos: Boolean,
+        selectedQualityUrl: String,
+        onQuality: (String) -> Unit,
+        directCoverUrl: String,
+        savingCover: Boolean,
+        onSaveCover: () -> Unit,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (directCoverUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = directCoverUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(width = 96.dp, height = 128.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (data.video_title.isNotBlank()) {
+                        Text(
+                            text = data.video_title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    data.author?.let { author ->
+                        Text(
+                            text = author.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (directCoverUrl.isNotBlank()) {
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                            OutlinedButton(
+                                onClick = onSaveCover,
+                                enabled = !savingCover,
                                 modifier = Modifier.height(34.dp),
+                                contentPadding = ButtonDefaults.ExtraSmallContentPadding,
                             ) {
                                 Text(
-                                    stringResource(R.string.dialog_cancel),
+                                    if (savingCover) {
+                                        stringResource(R.string.parse_video_saving_cover)
+                                    } else {
+                                        stringResource(R.string.parse_video_save_cover)
+                                    },
                                     style = MaterialTheme.typography.labelMedium,
                                 )
                             }
-                            // 解析成功后下载按钮常驻，下载完再追加发送/删除
-                            if (r != null) {
-                                // 纯视频保持单下载按钮；有图集（含混合）改为「下载全部文件」一键取视频+图集
-                                if (hasVideo && r.imageList.isEmpty()) {
-                                    Button(
-                                        onClick = { doDownload(images = false) },
-                                        enabled = !downloading && !sending,
-                                        modifier = Modifier.height(34.dp),
-                                        contentPadding = ButtonDefaults.ExtraSmallContentPadding,
-                                    ) {
-                                        Text(
-                                            stringResource(
-                                                if (r.downloadAllVideos) R.string.parse_video_download_all_videos_btn
-                                                else R.string.parse_video_download,
-                                            ),
-                                            style = MaterialTheme.typography.labelMedium,
-                                        )
-                                    }
-                                }
-                                if (r.imageList.isNotEmpty()) {
-                                    Button(
-                                        onClick = { doDownloadAll() },
-                                        enabled = !downloading && !sending,
-                                        modifier = Modifier.height(34.dp),
-                                        contentPadding = ButtonDefaults.ExtraSmallContentPadding,
-                                    ) {
-                                        Text(
-                                            if (downloading) stringResource(R.string.parse_video_downloading)
-                                            else stringResource(R.string.parse_video_download_all_files),
-                                            style = MaterialTheme.typography.labelMedium,
-                                        )
-                                    }
-                                }
-                                if (downloadedFiles.isNotEmpty()) {
-                                    Button(
-                                        onClick = { sendDownloadedFiles() },
-                                        enabled = !downloading && !sending,
-                                        modifier = Modifier.height(34.dp),
-                                        contentPadding = ButtonDefaults.ExtraSmallContentPadding,
-                                    ) {
-                                        Text(
-                                            stringResource(R.string.parse_video_send_files),
-                                            style = MaterialTheme.typography.labelMedium,
-                                        )
-                                    }
-                                    OutlinedButton(
-                                        onClick = { deleteDownloadedFile() },
-                                        modifier = Modifier.height(34.dp),
-                                        contentPadding = ButtonDefaults.ExtraSmallContentPadding,
-                                    ) {
-                                        Text(
-                                            stringResource(R.string.parse_video_delete),
-                                            color = MaterialTheme.colorScheme.error,
-                                            style = MaterialTheme.typography.labelMedium,
-                                        )
-                                    }
-                                }
-                            }
                         }
                     }
-                },
-                dismissButton = null,
-                textTopSpacing = 6.dp,
-            )
+                }
+            }
+            // 多视频直链/实况动图（downloadAllVideos）不是档位，不给选
+            if (qualityList.size > 1 && !downloadAllVideos) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    qualityList.forEach { (label, url) ->
+                        FilterChip(
+                            selected = url == selectedQualityUrl,
+                            onClick = { onQuality(url) },
+                            label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                        )
+                    }
+                }
+            }
         }
     }
 }
