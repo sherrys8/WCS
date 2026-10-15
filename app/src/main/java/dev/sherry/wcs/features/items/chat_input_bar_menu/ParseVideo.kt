@@ -107,36 +107,36 @@ object ParseVideo : ClickableFeature() {
 
     private const val TAG = "ParseVideo"
 
-    /** 主解析线路：dy.51web.eu.org（抖音多清晰度无水印），token 由用户在设置里自带。 */
-    private const val PARSE_API_PRIMARY = "https://dy.51web.eu.org/api/parse"
-    private const val PARSE_API_PRIMARY_ORIGIN = "https://dy.51web.eu.org"
+    /** 主解析线路：api.51web.eu.org（抖音多清晰度无水印），token 由用户在设置里自带。 */
+    private const val PARSE_API_PRIMARY = "https://api.51web.eu.org/api/parse"
+    private const val PARSE_API_PRIMARY_ORIGIN = "https://api.51web.eu.org"
 
-    /** 备用解析线路：kit9 聚合解析（主线路失败时自动切换）。 */
+    /** 备用解析线路1：kit9 聚合解析。 */
     private const val PARSE_API = "https://apis.kit9.cn/api/aggregate_videos/api.php"
     private const val PARSE_API_ORIGIN = "https://apis.kit9.cn"
 
-    /** 小红书解析线路：dovis（识别到小红书链接时直接使用，不经前两条线路）。 */
-    private const val PARSE_API_XHS = "http://api.dovis.work/api/xhs.php?url="
-    private const val PARSE_API_XHS_ORIGIN = "http://api.dovis.work"
+    /** 备用解析线路2：bug 抖音原画（data.url 是原画直链，video_backup 给降级档位）。 */
+    private const val PARSE_API_BACKUP2 = "https://api.bugpk.com/api/douyin"
+    private const val PARSE_API_BACKUP2_ORIGIN = "https://api.bugpk.com"
+
+    /** 备用解析线路3：bug 聚合 svparse 网关，需要 API Key，响应结构与备用线路2 同构。 */
+    private const val PARSE_API_BACKUP3 = "https://api-new.ifphp.com/api/svparse"
+    private const val PARSE_API_BACKUP3_ORIGIN = "https://api-new.ifphp.com"
+
     private const val DEFAULT_BUFFER_SIZE = 8192
 
     /** 线路选择（解析弹窗右上角可切换，持久化到偏好）。auto = 按默认优先级回退；其余固定走所选线路。 */
     private const val ROUTE_AUTO = "auto"
     private const val ROUTE_PRIMARY = "primary"
     private const val ROUTE_BACKUP = "backup"
-    private const val ROUTE_XHS = "xhs"
+    private const val ROUTE_BACKUP2 = "backup2"
+    private const val ROUTE_BACKUP3 = "backup3"
 
     private val urlRegex = Regex("""https?://[\w\-._~:/?#\[\]@!$&'()*+,;=%]+""")
 
     /** 抖音分享链接（v.douyin.com 短链 / www.douyin.com / iesdouyin 等）。 */
     private val douyinUrlRegex = Regex(
         """https?://(?:[\w\-.]*douyin\.com|v\.douyin\.com|iesdouyin\.com)/[\w\-._~:/?#\[\]@!$&'()*+,;=%]+""",
-        RegexOption.IGNORE_CASE,
-    )
-
-    /** 小红书分享链接（xiaohongshu.com / xhslink.com / xhslink.cn 短链）。 */
-    private val xhsUrlRegex = Regex(
-        """https?://(?:[\w\-.]*xiaohongshu\.com|xhslink\.com|xhslink\.cn)/[\w\-._~:/?#\[\]@!$&'()*+,;=%]+""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -154,6 +154,7 @@ object ParseVideo : ClickableFeature() {
 
     /** 主线路 token，与汽水线路同思路由用户自带；为空时主线路不可用，auto 直接走备用线路。 */
     private var primaryToken by prefOption("parse_video_primary_token", "")
+    private var backup3Key by prefOption("parse_video_backup3_key", "")
 
     private fun defaultSaveDir(): String =
         (KnownPaths.downloads / "ParseVideo").absolutePathString()
@@ -200,6 +201,7 @@ object ParseVideo : ClickableFeature() {
         showComposeDialog(context) {
             var autoReplyChecked by remember { mutableStateOf(autoReply) }
             var primaryTokenState by remember { mutableStateOf(primaryToken) }
+            var backup3KeyState by remember { mutableStateOf(backup3Key) }
             var whitelistRevision by remember { mutableIntStateOf(0) }
             val whitelistCount = remember(whitelistRevision) { autoReplyWhitelist.size }
             AlertDialogContent(
@@ -268,6 +270,26 @@ object ParseVideo : ClickableFeature() {
                                 )
                             }
                         }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        SegmentedColumn(title = stringResource(R.string.parse_video_backup3_route_group)) {
+                            item {
+                                TextFieldDialogWidget(
+                                    title = stringResource(R.string.parse_video_backup3_key),
+                                    value = backup3KeyState,
+                                    onValueChange = {
+                                        backup3KeyState = it
+                                        backup3Key = it.trim()
+                                    },
+                                    dialogTitle = stringResource(R.string.parse_video_backup3_key),
+                                    confirmLabel = stringResource(R.string.dialog_confirm),
+                                    dismissLabel = stringResource(R.string.dialog_cancel),
+                                    valueHint = stringResource(R.string.parse_video_backup3_key_hint),
+                                    password = true,
+                                )
+                            }
+                        }
                     }
                 },
                 dismissButton = {
@@ -308,13 +330,13 @@ object ParseVideo : ClickableFeature() {
         val code: Int,
         val msg: String,
         val data: JsonElement?,
-        /** 主线路返回的多清晰度列表（备用线路为空）；(label, url) 按清晰度降序。 */
+        /** 主线路与备用线路2返回的多清晰度列表（备用线路1为空）；(label, url) 按清晰度降序。 */
         val qualityList: List<Pair<String, String>> = emptyList(),
         /** 图集（图片列表，无视频时非空）。 */
         val imageList: List<String> = emptyList(),
         /** 主线路直出封面；若与图集任一张相同则置空（以图集为准，UI 不再显示封面）。 */
         val coverUrl: String = "",
-        /** 备用线路多视频直链：不供逐档选择，下载时全部取下（qualityList 此时即视频列表，与图集同思路）。 */
+        /** 备用线路1的多视频直链：不供逐档选择，下载时全部取下（qualityList 此时即视频列表，与图集同思路）。 */
         val downloadAllVideos: Boolean = false,
     ) {
         /** 把 data(JsonElement) 解析成 VideoData 对象，兼容 data 为字符串(错误信息)的情况 */
@@ -347,7 +369,7 @@ object ParseVideo : ClickableFeature() {
         val avatar: String = "",
     )
 
-    // ==================== 主线路（dy.51web.eu.org）数据模型 ====================
+    // ==================== 主线路（api.51web.eu.org）数据模型 ====================
 
     /** 51web 解析响应：{code, msg, data:{title, video_list:[{url,level,isDisclaimer}], cover, images}}（music 字段已不使用，靠 ignoreUnknownKeys 忽略） */
     @Serializable
@@ -372,28 +394,46 @@ object ParseVideo : ClickableFeature() {
         val isDisclaimer: Boolean = false,
     )
 
-    // ==================== 小红书线路（dovis）数据模型 ====================
+    // ==================== bug 系线路（备用线路2 / 备用线路3）共用数据模型 ====================
 
     /**
-     * dovis 小红书解析响应：{code, msg, data:{author, authorID, title, desc, avatar, cover, url, imgurl}}。
-     * 视频笔记：直链在 `url`；图集笔记：`url` 缺省，图片直链列表在 `imgurl`。
+     * bug 系解析响应：{code, msg, platform, data:{title, cover, url, quality, label, images,
+     * video_backup:[{label,quality,url}], author}}。svparse 网关多给一个 `data.label`（如「原画」），
+     * 抖音原画接口没有则回落到 quality。`images` 在视频笔记里是空数组，图集笔记里的元素形态未实测，
+     * 故按 JsonElement 收再筛字符串。
      */
     @Serializable
-    private data class XhsParseResult(
+    private data class BugParseResult(
         val code: Int = 0,
         val msg: String = "",
-        val data: XhsParseData? = null,
+        val message: String = "",
+        val data: BugData? = null,
     )
 
     @Serializable
-    private data class XhsParseData(
-        val author: String? = null,
-        val title: String? = null,
-        val desc: String? = null,
-        val avatar: String? = null,
-        val cover: String? = null,
-        val url: String? = null,
-        val imgurl: List<String> = emptyList(),
+    private data class BugData(
+        val title: String = "",
+        val cover: String = "",
+        val url: String = "",
+        val quality: String = "",
+        val label: String = "",
+        val images: List<JsonElement> = emptyList(),
+        val video_backup: List<BugVideo> = emptyList(),
+        val author: BugAuthor? = null,
+    )
+
+    @Serializable
+    private data class BugVideo(
+        val label: String = "",
+        val quality: String = "",
+        val url: String = "",
+    )
+
+    @Serializable
+    private data class BugAuthor(
+        val name: String = "",
+        val id: String = "",
+        val avatar: String = "",
     )
 
     // ==================== 解析 + 下载 + 发送 ====================
@@ -444,12 +484,6 @@ object ParseVideo : ClickableFeature() {
         .build()
 
     private fun parseVideo(link: String): Result<VideoParseResult> = runCatching {
-        // 小红书链接（xiaohongshu.com / xhslink 短链）固定走 dovis 小红书线路：
-        // 前两条线路不支持小红书，逐级失败回退只会白等两轮超时
-        val isXhsLink = xhsUrlRegex.containsMatchIn(link)
-        if (isXhsLink && parseRoute != ROUTE_XHS) {
-            return@runCatching parseByXhs(link).getOrElse { throw it }
-        }
         when (parseRoute) {
             // 用户手动指定线路：严格只走所选线路，失败直接报错，不再静默回退
             ROUTE_PRIMARY -> {
@@ -457,19 +491,17 @@ object ParseVideo : ClickableFeature() {
                 parseByPrimary(link).getOrElse { throw it }
             }
             ROUTE_BACKUP -> parseByBackup(link).getOrElse { throw it }
-            ROUTE_XHS -> parseByXhs(link).getOrElse { throw it }
-            // 默认：主线路优先（多清晰度无水印）；失败/无有效地址自动回退 kit9 聚合解析
+            ROUTE_BACKUP2 -> parseByBackup2(link).getOrElse { throw it }
+            ROUTE_BACKUP3 -> parseByBackup3(link).getOrElse { throw it }
+            // 默认：主线路优先（多清晰度无水印）；失败后依次回退备用线路1、备用线路2
             else -> {
                 if (primaryToken.isBlank()) {
-                    WeLogger.i(TAG, "primary token not configured; using backup route")
-                    return@runCatching parseByBackup(link).getOrElse { throw it }
+                    WeLogger.i(TAG, "primary token not configured; using backup routes")
+                    return@runCatching parseByBackups(link)
                 }
                 parseByPrimary(link).getOrElse { primaryError ->
-                    WeLogger.w(TAG, "primary parse failed, fallback to backup: ${primaryError.message}")
-                    parseByBackup(link).getOrElse { backupError ->
-                        WeLogger.w(TAG, "backup parse also failed: ${backupError.message}")
-                        throw backupError
-                    }
+                    WeLogger.w(TAG, "primary parse failed, falling back to backups: ${primaryError.message}")
+                    parseByBackups(link)
                 }
             }
         }
@@ -479,7 +511,7 @@ object ParseVideo : ClickableFeature() {
         if (primaryToken.isBlank()) error("未设置主线路 token，请在「短视频解析」设置中填写")
     }
 
-    /** 主线路：dy.51web.eu.org。结果映射成统一的 VideoParseResult 供 UI 层无感消费。 */
+    /** 主线路：api.51web.eu.org。结果映射成统一的 VideoParseResult 供 UI 层无感消费。 */
     private fun parseByPrimary(link: String): Result<VideoParseResult> = runCatching {
         // pid 为线路编号（1~7，用户左下角「线路N」选择框决定），传数字而非「线路N」文本
         val url = PARSE_API_PRIMARY +
@@ -522,6 +554,93 @@ object ParseVideo : ClickableFeature() {
                 coverUrl = primaryCoverUrl,
             )
         }
+    }
+
+    /** 依次尝试备用线路1、2、3；备用线路3 没配 Key 时不参与，抛出最后一个真正尝试过的线路的错误。 */
+    private fun parseByBackups(link: String): VideoParseResult =
+        parseByBackup(link).getOrElse { backupError ->
+            WeLogger.w(TAG, "backup1 parse failed, falling back: ${backupError.message}")
+            parseByBackup2(link).getOrElse { backup2Error ->
+                if (backup3Key.isBlank()) {
+                    WeLogger.w(TAG, "backup2 also failed and backup3 key is not set: ${backup2Error.message}")
+                    throw backup2Error
+                }
+                WeLogger.w(TAG, "backup2 parse failed, fallback to backup3: ${backup2Error.message}")
+                parseByBackup3(link).getOrElse { backup3Error ->
+                    WeLogger.w(TAG, "backup3 parse also failed: ${backup3Error.message}")
+                    throw backup3Error
+                }
+            }
+        }
+
+    /** 备用线路2：bug 抖音原画，无需 Key。 */
+    private fun parseByBackup2(link: String): Result<VideoParseResult> = runCatching {
+        val url = PARSE_API_BACKUP2 + "?url=" + java.net.URLEncoder.encode(link, "UTF-8")
+        fetchBugRoute(url, PARSE_API_BACKUP2_ORIGIN, "备用线路2")
+    }
+
+    /** 备用线路3：bug 聚合 svparse 网关，Key 走查询参数。 */
+    private fun parseByBackup3(link: String): Result<VideoParseResult> = runCatching {
+        requireBackup3Key()
+        val url = PARSE_API_BACKUP3 +
+            "?key=" + java.net.URLEncoder.encode(backup3Key, "UTF-8") +
+            "&url=" + java.net.URLEncoder.encode(link, "UTF-8")
+        fetchBugRoute(url, PARSE_API_BACKUP3_ORIGIN, "备用线路3")
+    }
+
+    private fun requireBackup3Key() {
+        if (backup3Key.isBlank()) error("未设置备用线路3 API Key，请在「短视频解析」设置中填写")
+    }
+
+    private fun fetchBugRoute(url: String, origin: String, routeName: String): VideoParseResult {
+        val request = browserParseRequest(url, origin)
+        httpClient.newCall(request).execute().use { resp ->
+            if (!resp.isSuccessful) error("$routeName 请求失败: HTTP ${resp.code}")
+            val body = resp.body?.string() ?: error("$routeName 响应为空")
+            val result = json.decodeFromString<BugParseResult>(body)
+            val failure = result.msg.ifBlank { result.message }
+            require(result.code == 200) { failure.ifBlank { "$routeName 解析失败 (code=${result.code})" } }
+            return toBugParseResult(result.data ?: error("$routeName 返回数据为空"), routeName)
+        }
+    }
+
+    /** 原画直链在 data.url，video_backup 是降级档位，一并映射成清晰度列表。 */
+    private fun toBugParseResult(data: BugData, routeName: String): VideoParseResult {
+        val images = data.images.filterIsInstance<JsonPrimitive>()
+            .map { it.content }
+            .filter { it.startsWith("http") }
+        val mainLabel = data.label.ifBlank {
+            data.quality.takeUnless { it.isBlank() || it.equals("original", ignoreCase = true) }
+                ?: localizedChatInputString(R.string.parse_video_quality_original)
+        }
+        val qualities = buildList {
+            if (data.url.startsWith("http")) add(mainLabel to data.url)
+            data.video_backup.forEach { entry ->
+                if (entry.url.startsWith("http")) {
+                    add(entry.quality.ifBlank { entry.label }.ifBlank { mainLabel } to entry.url)
+                }
+            }
+        }
+        if (qualities.isEmpty() && images.isEmpty()) error("$routeName 未返回可用的视频/图片地址")
+        WeLogger.i(TAG, "$routeName parse ok, qualities=${qualities.map { it.first }}, images=${images.size}")
+        return VideoParseResult(
+            code = 200,
+            msg = "success",
+            data = json.parseToJsonElement(
+                json.encodeToString(
+                    VideoData(
+                        video_title = data.title,
+                        video_cover = data.cover,
+                        video_link = data.url,
+                        author = data.author?.takeIf { it.name.isNotBlank() }?.let {
+                            AuthorData(user_id = it.id, name = it.name, avatar = it.avatar)
+                        },
+                    ),
+                ),
+            ),
+            qualityList = qualities,
+            imageList = images,
+        )
     }
 
     /** kit9 直链里的 br 查询参数（码率 kbps），用于给多档位直链命名；解析不出返回 null。 */
@@ -605,42 +724,6 @@ object ParseVideo : ClickableFeature() {
         }
     }
 
-    /** 小红书解析线路：dovis（http 接口，视频直链无水印；支持 xiaohongshu.com / xhslink 短链）。 */
-    private fun parseByXhs(link: String): Result<VideoParseResult> = runCatching {
-        val url = PARSE_API_XHS + java.net.URLEncoder.encode(link, "UTF-8")
-        // 后端用请求方 UA 抓取小红书页面，默认 okhttp UA 会得到 502
-        val request = browserParseRequest(url, PARSE_API_XHS_ORIGIN)
-        httpClient.newCall(request).execute().use { resp ->
-            if (!resp.isSuccessful) error("小红书线路请求失败: HTTP ${resp.code}")
-            val body = resp.body?.string() ?: error("小红书线路响应为空")
-            val result = json.decodeFromString<XhsParseResult>(body)
-            require(result.code == 200) { result.msg.ifBlank { "小红书线路解析失败 (code=${result.code})" } }
-            val data = result.data ?: error("小红书线路返回数据为空")
-            val videoUrl = data.url.orEmpty().takeIf { it.startsWith("http") }
-            val images = data.imgurl.filter { it.startsWith("http") }
-            if (videoUrl == null && images.isEmpty()) error("小红书线路未返回可用的视频/图片地址")
-            WeLogger.i(TAG, "xhs parse ok, video=${videoUrl != null}, images=${images.size}")
-            VideoParseResult(
-                code = 200,
-                msg = "success",
-                data = json.parseToJsonElement(
-                    json.encodeToString(
-                        VideoData(
-                            video_title = data.title.orEmpty().ifBlank { data.desc.orEmpty() },
-                            video_cover = data.cover.orEmpty(),
-                            video_link = videoUrl.orEmpty(),
-                            author = data.author.takeIf { !it.isNullOrBlank() }?.let {
-                                AuthorData(name = it, avatar = data.avatar.orEmpty())
-                            },
-                        ),
-                    ),
-                ),
-                qualityList = emptyList(),
-                imageList = images,
-            )
-        }
-    }
-
     /**
      * 从粘贴的分享文案中提取首个 http(s) 链接。
      * 抖音/快手等平台复制出来的是整段分享文案（含口令、表情、说明文字），
@@ -679,7 +762,7 @@ object ParseVideo : ClickableFeature() {
         outPath
     }
 
-    // ==================== 抖音/小红书链接自动解析回复 ====================
+    // ==================== 抖音链接自动解析回复 ====================
 
     /** 临时发送用目录：外部存储 Download/WcS/ParseVideoTemp（不再落微信内部 cache，便于用户查看与清理） */
     private fun tempSendDir(): java.io.File =
@@ -695,7 +778,7 @@ object ParseVideo : ClickableFeature() {
 
     /**
      * 当某条新消息满足条件时自动触发:
-     * 会话在白名单中 + 非自己发送 + 文本含抖音/小红书分享链接 -> 解析 -> 下载到临时目录 -> 发回该会话。
+     * 会话在白名单中 + 非自己发送 + 文本含抖音分享链接 -> 解析 -> 下载到临时目录 -> 发回该会话。
      * 白名单为空时全部不生效。由 hookBefore 在消息入库前调用, 不阻塞入库流程。
      */
     private fun handleAutoReply(msgInfo: MessageInfo) {
@@ -706,7 +789,7 @@ object ParseVideo : ClickableFeature() {
             if (msgInfo.isSelfSender) return
 
             val text = msgInfo.humanReadableRepr
-            val link = extractDouyinUrl(text).ifEmpty { extractXhsUrl(text) }
+            val link = extractDouyinUrl(text)
             if (link.isEmpty()) return
 
             val dedupKey = "${msgInfo.talker}|$link"
@@ -726,10 +809,6 @@ object ParseVideo : ClickableFeature() {
     /** 从消息文本中提取抖音分享链接；非抖音链接返回空串。链接外层标注的双引号一并去除。 */
     private fun extractDouyinUrl(raw: String): String =
         douyinUrlRegex.find(raw)?.value?.trim('"', '“', '”') ?: ""
-
-    /** 从消息文本中提取小红书分享链接；非小红书链接返回空串。链接外层标注的双引号一并去除。 */
-    private fun extractXhsUrl(raw: String): String =
-        xhsUrlRegex.find(raw)?.value?.trim('"', '“', '”') ?: ""
 
     /** 真正执行解析 + 下载 + 发送。所有流程在地线程执行, 调用方已持锁。 */
     private suspend fun doAutoReply(talker: String, link: String) {
@@ -1124,7 +1203,8 @@ fun showParseDialog(context: android.content.Context) {
                 ROUTE_AUTO to R.string.parse_video_route_auto,
                 ROUTE_PRIMARY to R.string.parse_video_route_primary,
                 ROUTE_BACKUP to R.string.parse_video_route_backup,
-                ROUTE_XHS to R.string.parse_video_route_xhs,
+                ROUTE_BACKUP2 to R.string.parse_video_route_backup2,
+                ROUTE_BACKUP3 to R.string.parse_video_route_backup3,
             )
 
             AlertDialogContent(
