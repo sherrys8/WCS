@@ -165,7 +165,11 @@ object ParseVideo : ClickableFeature() {
     private fun ensureSaveDir(): java.io.File =
         java.io.File(currentSaveDir()).apply { mkdirs() }
 
-    private val json = Json { ignoreUnknownKeys = true }
+    /** coerceInputValues：bug 系线路在图集/实况笔记里把 `url`、`duration` 直出为 JSON null，非空属性带默认值时按默认值收。 */
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+    }
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -336,9 +340,12 @@ object ParseVideo : ClickableFeature() {
         val imageList: List<String> = emptyList(),
         /** 主线路直出封面；若与图集任一张相同则置空（以图集为准，UI 不再显示封面）。 */
         val coverUrl: String = "",
-        /** 备用线路1的多视频直链：不供逐档选择，下载时全部取下（qualityList 此时即视频列表，与图集同思路）。 */
+        /** 备用线路1的多视频直链、备用线路2/3 的实况动图：不供逐档选择，下载时全部取下（qualityList 此时即视频列表，与图集同思路）。 */
         val downloadAllVideos: Boolean = false,
     ) {
+        /** 有没有可下载的动态内容：单视频直链在 data.video_link，多视频与实况直链在 qualityList。 */
+        fun hasVideo(): Boolean = qualityList.isNotEmpty() || parsedData()?.video_link?.isNotBlank() == true
+
         /** 把 data(JsonElement) 解析成 VideoData 对象，兼容 data 为字符串(错误信息)的情况 */
         fun parsedData(): VideoData? {
             if (code != 200) return null
@@ -398,9 +405,13 @@ object ParseVideo : ClickableFeature() {
 
     /**
      * bug 系解析响应：{code, msg, platform, data:{title, cover, url, quality, label, images,
-     * video_backup:[{label,quality,url}], author}}。svparse 网关多给一个 `data.label`（如「原画」），
-     * 抖音原画接口没有则回落到 quality。`images` 在视频笔记里是空数组，图集笔记里的元素形态未实测，
-     * 故按 JsonElement 收再筛字符串。
+     * live_photo, video_backup:[{label,quality,url}], author}}。svparse 网关多给一个 `data.label`（如「原画」），
+     * 抖音原画接口没有则回落到 quality。
+     *
+     * 三种笔记形态实测（2026-10-15，两条线路各 3 条链接）：
+     * - 视频：`type=video`，`url` 为原画直链，`images`/`live_photo` 为空数组。
+     * - 图集：`type=image`，`images` 是**字符串数组**（原图直链），`url`/`duration` 为 null，`video_backup` 空。
+     * - 实况：`type=live`，`images` 仍是静帧字符串数组，动图在 `live_photo[{image,video}]`，`url` 同样为 null。
      */
     @Serializable
     private data class BugParseResult(
@@ -417,15 +428,29 @@ object ParseVideo : ClickableFeature() {
         val url: String = "",
         val quality: String = "",
         val label: String = "",
+        val width: Int = 0,
+        val height: Int = 0,
+        val size_label: String = "",
         val images: List<JsonElement> = emptyList(),
+        val live_photo: List<BugLivePhoto> = emptyList(),
         val video_backup: List<BugVideo> = emptyList(),
         val author: BugAuthor? = null,
+    )
+
+    /** 实况图：静帧 + 对应的动图 mp4。 */
+    @Serializable
+    private data class BugLivePhoto(
+        val image: String = "",
+        val video: String = "",
     )
 
     @Serializable
     private data class BugVideo(
         val label: String = "",
         val quality: String = "",
+        val width: Int = 0,
+        val height: Int = 0,
+        val size_label: String = "",
         val url: String = "",
     )
 
@@ -604,7 +629,7 @@ object ParseVideo : ClickableFeature() {
         }
     }
 
-    /** 原画直链在 data.url，video_backup 是降级档位，一并映射成清晰度列表。 */
+    /** 原画直链在 data.url，video_backup 是降级档位，实况动图在 live_photo，一并映射成清晰度列表。 */
     private fun toBugParseResult(data: BugData, routeName: String): VideoParseResult {
         val images = data.images.filterIsInstance<JsonPrimitive>()
             .map { it.content }
@@ -613,16 +638,32 @@ object ParseVideo : ClickableFeature() {
             data.quality.takeUnless { it.isBlank() || it.equals("original", ignoreCase = true) }
                 ?: localizedChatInputString(R.string.parse_video_quality_original)
         }
+        val livePhotos = data.live_photo.filter { it.video.startsWith("http") }
+        val liveLabel = localizedChatInputString(R.string.parse_video_quality_live)
         val qualities = buildList {
-            if (data.url.startsWith("http")) add(mainLabel to data.url)
+            if (data.url.startsWith("http")) {
+                add(bugQualityLabel(mainLabel, data.width, data.height, data.size_label) to data.url)
+            }
             data.video_backup.forEach { entry ->
                 if (entry.url.startsWith("http")) {
-                    add(entry.quality.ifBlank { entry.label }.ifBlank { mainLabel } to entry.url)
+                    add(
+                        bugQualityLabel("", entry.width, entry.height, entry.size_label)
+                            .ifBlank { entry.quality.ifBlank { entry.label }.ifBlank { mainLabel } } to entry.url,
+                    )
                 }
+            }
+            livePhotos.forEachIndexed { index, entry ->
+                val label = if (livePhotos.size > 1) "$liveLabel ${index + 1}" else liveLabel
+                add(label to entry.video)
             }
         }
         if (qualities.isEmpty() && images.isEmpty()) error("$routeName 未返回可用的视频/图片地址")
-        WeLogger.i(TAG, "$routeName parse ok, qualities=${qualities.map { it.first }}, images=${images.size}")
+        WeLogger.i(
+            TAG,
+            "$routeName parse ok, qualities=${qualities.map { it.first }}, images=${images.size}, live=${livePhotos.size}",
+        )
+        // 只有视频帖单独显示封面：图集与实况的 cover 是同一画面的 360p 缩略图，已由下方图集行呈现
+        val coverUrl = if (images.isEmpty()) data.cover.takeIf { it.startsWith("http") }.orEmpty() else ""
         return VideoParseResult(
             code = 200,
             msg = "success",
@@ -640,7 +681,25 @@ object ParseVideo : ClickableFeature() {
             ),
             qualityList = qualities,
             imageList = images,
+            coverUrl = coverUrl,
+            // 实况动图是彼此独立的视频，不是同一视频的清晰度：走 kit9 的「全部下载」通路，不出口档位选择
+            downloadAllVideos = livePhotos.size > 1,
         )
+    }
+
+    /**
+     * bug 系档位命名。降级档没有可靠的语义名——同一个 576×1024 的转码产物，抖音原画接口标 `1024p`、
+     * svparse 标 `576p`，只有宽高对得上，所以直接用分辨率当名字；再统一补上分辨率与体积，
+     * 免得两条线路同名的「原画」（6.12MB 与 39.26MB）在下拉里看不出区别。
+     */
+    private fun bugQualityLabel(name: String, width: Int, height: Int, sizeLabel: String): String {
+        val spec = if (width > 0 && height > 0) "$width×$height" else ""
+        val head = listOf(name, spec).filter { it.isNotBlank() }.joinToString(" ")
+        return when {
+            head.isBlank() -> sizeLabel
+            sizeLabel.isBlank() -> head
+            else -> "$head · $sizeLabel"
+        }
     }
 
     /** kit9 直链里的 br 查询参数（码率 kbps），用于给多档位直链命名；解析不出返回 null。 */
@@ -996,8 +1055,7 @@ fun showParseDialog(context: android.content.Context) {
                     loading = false
                     parsed.fold(
                         onSuccess = { r ->
-                            val hasVideo = r.parsedData()?.video_link?.isNotBlank() == true
-                            if (r.code != 200 || (!hasVideo && r.imageList.isEmpty())) {
+                            if (r.code != 200 || (!r.hasVideo() && r.imageList.isEmpty())) {
                                 pendingSendAfterParse = false
                                 errorMsg = r.msg.ifBlank { localizedChatInputString(R.string.parse_video_api_error) }
                                 return@fold
@@ -1331,8 +1389,8 @@ fun showParseDialog(context: android.content.Context) {
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Column(Modifier.padding(12.dp)) {
-                                    // 混合内容（视频+图集并存）：图集区块在前、视频区块在下，各带独立下载按钮
-                                    val isMixed = data.video_link.isNotBlank() && r.imageList.isNotEmpty()
+                                    // 混合内容（视频/实况 + 图集并存）：图集区块在前、视频区块在下，各带独立下载按钮
+                                    val isMixed = r.hasVideo() && r.imageList.isNotEmpty()
                                     if (isMixed) {
                                         Text(
                                             text = stringResource(R.string.parse_video_section_gallery),
@@ -1574,8 +1632,7 @@ fun showParseDialog(context: android.content.Context) {
                     // 底部按钮数量随解析/下载状态增长，硬排一行会把文字挤成竖排：
                     // 改用 FlowRow，每个按钮按自身宽度换行
                     val r = parseResult
-                    val data = r?.parsedData()
-                    val hasVideo = data?.video_link?.isNotBlank() == true
+                    val hasVideo = r?.hasVideo() == true
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),

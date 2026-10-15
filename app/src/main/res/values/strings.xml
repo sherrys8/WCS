@@ -4231,6 +4231,7 @@ Time: {time}</string>
     <string name="parse_video_route_backup2">Backup 2 (bug · Douyin original)</string>
     <string name="parse_video_route_backup3">Backup 3 (bug aggregate)</string>
     <string name="parse_video_quality_original">Original</string>
+    <string name="parse_video_quality_live">Live photo</string>
     <string name="parse_video_route_changed">Parse route switched: %1$s</string>
     <string name="parse_video_line_option">Line %1$d</string>
     <string name="parse_video_primary_route_group">Primary route (51web)</string>

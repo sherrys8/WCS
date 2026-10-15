@@ -4262,6 +4262,7 @@
     <string name="parse_video_route_backup2">备用线路2（bug 抖音原画）</string>
     <string name="parse_video_route_backup3">备用线路3（bug 聚合）</string>
     <string name="parse_video_quality_original">原画</string>
+    <string name="parse_video_quality_live">实况</string>
     <string name="parse_video_route_changed">解析线路已切换：%1$s</string>
     <string name="parse_video_line_option">线路%1$d</string>
     <string name="parse_video_primary_route_group">主解析线路（51web）</string>
