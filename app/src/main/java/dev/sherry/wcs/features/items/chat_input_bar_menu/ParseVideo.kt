@@ -35,6 +35,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -60,7 +61,7 @@ import coil3.compose.AsyncImage
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Check_circle
 import com.composables.icons.materialsymbols.outlined.Close
-import com.composables.icons.materialsymbols.outlined.Content_copy
+import com.composables.icons.materialsymbols.outlined.Content_paste_go
 import com.composables.icons.materialsymbols.outlined.Chevron_right
 import com.composables.icons.materialsymbols.outlined.Delete
 import com.composables.icons.materialsymbols.outlined.Error
@@ -1483,12 +1484,21 @@ fun showParseDialog(context: android.content.Context) {
                             trailingIcon = {
                                 IconButton(onClick = { pasteFromClipboard() }, enabled = !loading) {
                                     Icon(
-                                        MaterialSymbols.Outlined.Content_copy,
+                                        MaterialSymbols.Outlined.Content_paste_go,
                                         contentDescription = stringResource(R.string.parse_video_link_hint),
                                     )
                                 }
                             },
                             shape = RoundedCornerShape(16.dp),
+                            // 填充式输入框自带一条贴底的下划线指示器（未聚焦 = onSurfaceVariant，近黑）。
+                            // 它是画满整宽的直线条，而这里把容器改成了 16dp 圆角，圆角把底边收进去、线还留在原处，
+                            // 于是看着像浮在输入框下面的一道黑线。设计稿要的是无边线的圆角块，直接把指示器关掉。
+                            colors = TextFieldDefaults.colors(
+                                unfocusedIndicatorColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent,
+                                errorIndicatorColor = Color.Transparent,
+                            ),
                             minLines = 1,
                             maxLines = 3,
                             modifier = Modifier.fillMaxWidth(),
