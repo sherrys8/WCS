@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -22,12 +23,14 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -1273,17 +1276,24 @@ fun showParseDialog(context: android.content.Context) {
                     ) {
                         Text(
                             text = stringResource(R.string.feature_parse_video_name),
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             modifier = Modifier.weight(1f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         // 右上角齿轮：像文字转语音切音色一样手动切换解析线路（选择持久化，手动弹窗与自动回复共用）
                         Box {
-                            IconButton(onClick = { routeMenuExpanded = true }) {
-                                Icon(
-                                    MaterialSymbols.Outlined.Tune,
-                                    contentDescription = stringResource(R.string.parse_video_route_settings),
-                                )
+                            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                                IconButton(
+                                    onClick = { routeMenuExpanded = true },
+                                    modifier = Modifier.size(36.dp),
+                                ) {
+                                    Icon(
+                                        MaterialSymbols.Outlined.Tune,
+                                        contentDescription = stringResource(R.string.parse_video_route_settings),
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
                             }
                             DropdownMenu(
                                 expanded = routeMenuExpanded,
@@ -1320,8 +1330,7 @@ fun showParseDialog(context: android.content.Context) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                            .padding(vertical = 4.dp),
+                            .verticalScroll(rememberScrollState()),
                     ) {
                         OutlinedTextField(
                             value = link,
@@ -1336,29 +1345,39 @@ fun showParseDialog(context: android.content.Context) {
                             maxLines = 4,
                         )
 
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(6.dp))
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Button(
-                                onClick = { doConvert() },
-                                modifier = Modifier.weight(1f),
-                                enabled = !loading && !downloading && !sending,
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Text(stringResource(R.string.parse_video_convert))
-                            }
-                            Button(
-                                onClick = { doSendNow() },
-                                modifier = Modifier.weight(1f),
-                                enabled = !loading && !downloading && !sending,
-                            ) {
-                                Text(stringResource(R.string.parse_video_send))
+                                Button(
+                                    onClick = { doConvert() },
+                                    modifier = Modifier.weight(1f).height(34.dp),
+                                    enabled = !loading && !downloading && !sending,
+                                    contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                ) {
+                                    Text(
+                                        stringResource(R.string.parse_video_convert),
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                }
+                                Button(
+                                    onClick = { doSendNow() },
+                                    modifier = Modifier.weight(1f).height(34.dp),
+                                    enabled = !loading && !downloading && !sending,
+                                    contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                ) {
+                                    Text(
+                                        stringResource(R.string.parse_video_send),
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                }
                             }
                         }
 
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(6.dp))
 
                         if (loading) {
                             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1382,7 +1401,6 @@ fun showParseDialog(context: android.content.Context) {
                         // ===== 解析结果卡片（封面 + 信息 + 清晰度 + 保存封面） =====
                         parseResult?.let { r ->
                             val data = r.parsedData() ?: return@let
-                            Spacer(Modifier.height(8.dp))
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -1405,16 +1423,23 @@ fun showParseDialog(context: android.content.Context) {
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
-                                        Spacer(Modifier.height(8.dp))
-                                        OutlinedButton(
-                                            onClick = { doDownload(images = true) },
-                                            enabled = !downloading && !sending,
-                                        ) {
-                                            Text(stringResource(R.string.parse_video_download_images_btn))
+                                        Spacer(Modifier.height(6.dp))
+                                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                                            OutlinedButton(
+                                                onClick = { doDownload(images = true) },
+                                                enabled = !downloading && !sending,
+                                                modifier = Modifier.height(34.dp),
+                                                contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                            ) {
+                                                Text(
+                                                    stringResource(R.string.parse_video_download_images_btn),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                )
+                                            }
                                         }
-                                        Spacer(Modifier.height(10.dp))
+                                        Spacer(Modifier.height(8.dp))
                                         HorizontalDivider()
-                                        Spacer(Modifier.height(10.dp))
+                                        Spacer(Modifier.height(8.dp))
                                         Text(
                                             text = stringResource(R.string.parse_video_section_video),
                                             style = MaterialTheme.typography.titleSmall,
@@ -1498,46 +1523,51 @@ fun showParseDialog(context: android.content.Context) {
                                     Spacer(Modifier.height(10.dp))
 
                                     if (directCoverUrl.isNotBlank()) {
-                                        OutlinedButton(
-                                            onClick = {
-                                                savingCover = true
-                                                scope.launch {
-                                                    val result = withContext(Dispatchers.IO) {
-                                                        runCatching {
-                                                            val dir = ensureSaveDir()
-                                                            val ext = if (directCoverUrl.contains(".png")) "png" else "jpg"
-                                                            val out = java.io.File(dir, "cover-${UUID.randomUUID()}.$ext")
-                                                            val req = Request.Builder().url(directCoverUrl).get().build()
-                                                            httpClient.newCall(req).execute().use { resp ->
-                                                                require(resp.isSuccessful) { "HTTP ${resp.code}" }
-                                                                resp.body.byteStream().use { ins ->
-                                                                    out.outputStream().use { ins.copyTo(it) }
+                                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    savingCover = true
+                                                    scope.launch {
+                                                        val result = withContext(Dispatchers.IO) {
+                                                            runCatching {
+                                                                val dir = ensureSaveDir()
+                                                                val ext = if (directCoverUrl.contains(".png")) "png" else "jpg"
+                                                                val out = java.io.File(dir, "cover-${UUID.randomUUID()}.$ext")
+                                                                val req = Request.Builder().url(directCoverUrl).get().build()
+                                                                httpClient.newCall(req).execute().use { resp ->
+                                                                    require(resp.isSuccessful) { "HTTP ${resp.code}" }
+                                                                    resp.body.byteStream().use { ins ->
+                                                                        out.outputStream().use { ins.copyTo(it) }
+                                                                    }
                                                                 }
+                                                                out
                                                             }
-                                                            out
                                                         }
+                                                        savingCover = false
+                                                        result.fold(
+                                                            onSuccess = { file ->
+                                                                showToast(
+                                                                    localizedChatInputString(R.string.parse_video_cover_saved) +
+                                                                        " (${"%.1f".format(file.length() / 1024.0)}KB)",
+                                                                )
+                                                            },
+                                                            onFailure = { e ->
+                                                                WeLogger.e(TAG, "save cover failed", e)
+                                                                errorMsg = e.message ?: "保存封面失败"
+                                                            },
+                                                        )
                                                     }
-                                                    savingCover = false
-                                                    result.fold(
-                                                        onSuccess = { file ->
-                                                            showToast(
-                                                                localizedChatInputString(R.string.parse_video_cover_saved) +
-                                                                    " (${"%.1f".format(file.length() / 1024.0)}KB)",
-                                                            )
-                                                        },
-                                                        onFailure = { e ->
-                                                            WeLogger.e(TAG, "save cover failed", e)
-                                                            errorMsg = e.message ?: "保存封面失败"
-                                                        },
-                                                    )
-                                                }
-                                            },
-                                            enabled = !savingCover,
-                                        ) {
-                                            Text(
-                                                if (savingCover) stringResource(R.string.parse_video_saving_cover)
-                                                else stringResource(R.string.parse_video_save_cover),
-                                            )
+                                                },
+                                                enabled = !savingCover,
+                                                modifier = Modifier.height(34.dp),
+                                                contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                            ) {
+                                                Text(
+                                                    if (savingCover) stringResource(R.string.parse_video_saving_cover)
+                                                    else stringResource(R.string.parse_video_save_cover),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                )
+                                            }
                                         }
                                         Spacer(Modifier.height(8.dp))
                                     }
@@ -1553,17 +1583,22 @@ fun showParseDialog(context: android.content.Context) {
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
-                                        Spacer(Modifier.height(8.dp))
-                                        OutlinedButton(
-                                            onClick = { doDownload(images = false) },
-                                            enabled = !downloading && !sending,
-                                        ) {
-                                            Text(
-                                                stringResource(
-                                                    if (r.downloadAllVideos) R.string.parse_video_download_all_videos_btn
-                                                    else R.string.parse_video_download_video_btn,
-                                                ),
-                                            )
+                                        Spacer(Modifier.height(6.dp))
+                                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                                            OutlinedButton(
+                                                onClick = { doDownload(images = false) },
+                                                enabled = !downloading && !sending,
+                                                modifier = Modifier.height(34.dp),
+                                                contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                            ) {
+                                                Text(
+                                                    stringResource(
+                                                        if (r.downloadAllVideos) R.string.parse_video_download_all_videos_btn
+                                                        else R.string.parse_video_download_video_btn,
+                                                    ),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                )
+                                            }
                                         }
                                     }
 
@@ -1579,12 +1614,11 @@ fun showParseDialog(context: android.content.Context) {
                                         )
                                     }
 
-                                Spacer(Modifier.height(8.dp))
-
                                 // ===== 下载状态 =====
 
                                 when {
                                     downloading || sending -> {
+                                        Spacer(Modifier.height(8.dp))
                                         Column(modifier = Modifier.fillMaxWidth()) {
                                             val percent = (downloadProgress * 100).toInt()
                                             LinearProgressIndicator(
@@ -1606,6 +1640,7 @@ fun showParseDialog(context: android.content.Context) {
                                         }
                                     }
                                     downloadedFiles.isNotEmpty() -> {
+                                        Spacer(Modifier.height(8.dp))
                                         val totalSize = downloadedFiles.sumOf { it.length() }
                                         Text(
                                             text = buildString {
@@ -1633,92 +1668,127 @@ fun showParseDialog(context: android.content.Context) {
                     // 改用 FlowRow，每个按钮按自身宽度换行
                     val r = parseResult
                     val hasVideo = r?.hasVideo() == true
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        // 线路选择：当前线路为自动/主线路时可选线路1~线路7（数字作为 pid 传给主线路接口）
-                        if (selectedRoute == ROUTE_AUTO || selectedRoute == ROUTE_PRIMARY) {
-                            Box {
-                                OutlinedButton(onClick = { pidMenuExpanded = true }) {
-                                    Text(stringResource(R.string.parse_video_line_option, selectedPid))
-                                    Icon(
-                                        MaterialSymbols.Outlined.Keyboard_arrow_down,
-                                        contentDescription = null,
-                                    )
-                                }
-                                DropdownMenu(
-                                    expanded = pidMenuExpanded,
-                                    onDismissRequest = { pidMenuExpanded = false },
-                                ) {
-                                    (1..7).forEach { n ->
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.parse_video_line_option, n)) },
-                                            trailingIcon = {
-                                                if (selectedPid == n) {
-                                                    Icon(
-                                                        MaterialSymbols.Outlined.Check_circle,
-                                                        contentDescription = null,
-                                                        tint = MaterialTheme.colorScheme.primary,
-                                                    )
-                                                }
-                                            },
-                                            onClick = {
-                                                selectedPid = n
-                                                parsePid = n
-                                                pidMenuExpanded = false
-                                            },
+                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            // 线路选择：当前线路为自动/主线路时可选线路1~线路7（数字作为 pid 传给主线路接口）
+                            if (selectedRoute == ROUTE_AUTO || selectedRoute == ROUTE_PRIMARY) {
+                                Box {
+                                    OutlinedButton(
+                                        onClick = { pidMenuExpanded = true },
+                                        modifier = Modifier.height(34.dp),
+                                        contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.parse_video_line_option, selectedPid),
+                                            style = MaterialTheme.typography.labelMedium,
                                         )
+                                        Icon(
+                                            MaterialSymbols.Outlined.Keyboard_arrow_down,
+                                            contentDescription = null,
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = pidMenuExpanded,
+                                        onDismissRequest = { pidMenuExpanded = false },
+                                    ) {
+                                        (1..7).forEach { n ->
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.parse_video_line_option, n)) },
+                                                trailingIcon = {
+                                                    if (selectedPid == n) {
+                                                        Icon(
+                                                            MaterialSymbols.Outlined.Check_circle,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                        )
+                                                    }
+                                                },
+                                                onClick = {
+                                                    selectedPid = n
+                                                    parsePid = n
+                                                    pidMenuExpanded = false
+                                                },
+                                            )
+                                        }
                                     }
                                 }
                             }
-                        }
-                        TextButton(onClick = onDismiss, enabled = !loading && !sending) {
-                            Text(stringResource(R.string.dialog_cancel))
-                        }
-                        // 解析成功后下载按钮常驻，下载完再追加发送/删除
-                        if (r != null) {
-                            // 纯视频保持单下载按钮；有图集（含混合）改为「下载全部文件」一键取视频+图集
-                            if (hasVideo && r.imageList.isEmpty()) {
-                                Button(
-                                    onClick = { doDownload(images = false) },
-                                    enabled = !downloading && !sending,
-                                ) {
-                                    Text(
-                                        stringResource(
-                                            if (r.downloadAllVideos) R.string.parse_video_download_all_videos_btn
-                                            else R.string.parse_video_download,
-                                        ),
-                                    )
-                                }
+                            TextButton(
+                                onClick = onDismiss,
+                                enabled = !loading && !sending,
+                                modifier = Modifier.height(34.dp),
+                            ) {
+                                Text(
+                                    stringResource(R.string.dialog_cancel),
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
                             }
-                            if (r.imageList.isNotEmpty()) {
-                                Button(
-                                    onClick = { doDownloadAll() },
-                                    enabled = !downloading && !sending,
-                                ) {
-                                    Text(
-                                        if (downloading) stringResource(R.string.parse_video_downloading)
-                                        else stringResource(R.string.parse_video_download_all_files),
-                                    )
+                            // 解析成功后下载按钮常驻，下载完再追加发送/删除
+                            if (r != null) {
+                                // 纯视频保持单下载按钮；有图集（含混合）改为「下载全部文件」一键取视频+图集
+                                if (hasVideo && r.imageList.isEmpty()) {
+                                    Button(
+                                        onClick = { doDownload(images = false) },
+                                        enabled = !downloading && !sending,
+                                        modifier = Modifier.height(34.dp),
+                                        contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                    ) {
+                                        Text(
+                                            stringResource(
+                                                if (r.downloadAllVideos) R.string.parse_video_download_all_videos_btn
+                                                else R.string.parse_video_download,
+                                            ),
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                    }
                                 }
-                            }
-                            if (downloadedFiles.isNotEmpty()) {
-                                Button(
-                                    onClick = { sendDownloadedFiles() },
-                                    enabled = !downloading && !sending,
-                                ) { Text(stringResource(R.string.parse_video_send_files)) }
-                                OutlinedButton(onClick = { deleteDownloadedFile() }) {
-                                    Text(
-                                        stringResource(R.string.parse_video_delete),
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
+                                if (r.imageList.isNotEmpty()) {
+                                    Button(
+                                        onClick = { doDownloadAll() },
+                                        enabled = !downloading && !sending,
+                                        modifier = Modifier.height(34.dp),
+                                        contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                    ) {
+                                        Text(
+                                            if (downloading) stringResource(R.string.parse_video_downloading)
+                                            else stringResource(R.string.parse_video_download_all_files),
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                    }
+                                }
+                                if (downloadedFiles.isNotEmpty()) {
+                                    Button(
+                                        onClick = { sendDownloadedFiles() },
+                                        enabled = !downloading && !sending,
+                                        modifier = Modifier.height(34.dp),
+                                        contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.parse_video_send_files),
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                    }
+                                    OutlinedButton(
+                                        onClick = { deleteDownloadedFile() },
+                                        modifier = Modifier.height(34.dp),
+                                        contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.parse_video_delete),
+                                            color = MaterialTheme.colorScheme.error,
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 },
                 dismissButton = null,
+                textTopSpacing = 6.dp,
             )
         }
     }
