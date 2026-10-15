@@ -356,6 +356,7 @@ Prefer these over raw Compose controls:
 - **语言裁剪为「英语 + 简体中文」**：删除 `values-zh-rTW/strings.xml`（唯一繁体资源文件）、`values/strings.xml` 里的 `language_traditional_chinese`、`LanguageSelection.TRADITIONAL_CHINESE` 与 `SupportedLocale.TRADITIONAL_CHINESE`；`LocaleResolver.mapSystemLocale` 把 `"zh"` 一律映射到简体（原先按 Hant / TW / HK / MO 分繁体），所以繁体设备升级后仍看中文而不是掉回英文。设置页与 Nuke 的语言选项列表各去掉繁体项，`app/build.gradle.kts` 的 `localeFilters` 只剩 `zh-rCN`。同步：`xtask/src/i18n_check.rs`（目录守卫不再豁免 rTW、目标清单只剩 rCN、4 个单测的 fixture 与断言重排）、`LocaleResolverTest`（删繁体断言，新测试 `allChineseSystemLocalesResolveToSimplifiedChinese` 覆盖 9 个中文 tag）、`docs/development/i18n.md`、`docs/translations/{index,TRANSLATORS,GLOSSARY}.md`、`docs/module-settings.md`
 - CI 单 flavor 化 `684cb3d2`（见 CI 节）；备份分支 `backup/dev-sherry-20260926` = `b02c2c79` 已推 `sherrys8/WeKit`（远端仓库至今仍叫 `WeKit`；`backup/*` 不在 CI 分支过滤内，不触发构建）
 - **WCS 分支改名（彻底换皮）** `478398df`→`0d6a6589`→`a5a5c390`→批次 4：包名 `dev.ujhhgtg.wekit` → `dev.sherry.wcs`，品牌按 `wekit`→`wcs`、`WeKit`→`WcS`、`WEKIT`→`WCS`、`weKit`→`wcS` 四条规则全量替换。改动面：7 棵源码树 git mv（app main/standard/test、annotation-scanner src+bin、python-runtime-api、python-runtime runtime/kotlin+python 包、stubs）+ `app/schemas` 目录；`libs.versions.toml` 的 namespace 同时是 applicationId；两个 xposed 入口清单与 KSP services 文件；keep 规则；manifest taskAffinity；crate `wcs-native`/`wcs-llama`/`wcs-zygisk`、`libwcs_*.so`、go 模块目录、python 容器包 `wcs/`；xtask 与 `verify-dual-apk.py`；ci.yml 的 artifact/keystore/缓存路径与 job 守卫；`module.prop` 的 id/name/author；四个下载源与展示跳转 → `sherrys8/WCS`。全仓 `wekit` 残留只剩 `WeAgentDatabase` 迁移里的 `'WEKIT_ROUTER'`（历史数据值，故意保留）
+- **视频解析弹窗紧凑化** `57001ad2`：标题 24→22sp（显式 `titleLarge+Bold` 覆盖 `AlertDialogContent` 注入的 `headlineSmall`）、右上齿轮 24→20dp 图标 + 36dp 盒；转换/发送、下载图片、保存封面、下载全部视频、下载文件、发送文件、删除、取消、线路选择按钮统一 34dp 高 + `ExtraSmallContentPadding` + `labelMedium`；字段→按钮、按钮→卡片 8→6dp，卡内分割线两侧 10→8dp，`textTopSpacing` 12→6dp，删掉卡片尾部与滚动列多余 padding（下载状态区各自补回 8dp）；六处 `CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp)` 关掉 M3 的 48dp 最小交互盒（机制见 Critical Context）。只动 `ParseVideo.kt`，共享 `AlertDialogContent` 未碰；CI 绿（`build` 13m3s + `upload-telegram`）
 
 ### In Progress
 - 「修改文本消息显示」+ 表情 span 方案**已回退**：`9413da4d`（写回时继承原文的表情 span）装到真机后**模块无法注入微信**，`07fd425b` 单独 revert 掉它，保留可编辑名单 `50b18a27` 与 `#` 分隔符 `99d61e54`。被丢的提交留在本地 ref `backup/dev-sherry-20260927` = `9413da4d`。**未证实是 span 改动导致的注入失败**——若回退包仍无法注入，要往更早查（`b02c2c79` 的 auto-accept/`modifyContactRemark`、上游合并、或设备侧模块开关/版本）
@@ -383,6 +384,7 @@ Prefer these over raw Compose controls:
 2. 文字转语音豆包后端：`1d2f285a` 已推送且 `build` 绿，待真机跑完「豆包 → 魔方 → 豆包」往返验证（音色列表、自定义音色、生成结果）；若魔方 toast 带出 `code=`，据此决定是否补错误分型
 3. 豆包未做客户端节流：约 6 次快请求即触发 `710022002` block，如实际使用中频繁撞墙，再补最小间隔与冷却提示
 4. 「修改文本消息显示」可编辑屏蔽名单 `50b18a27` + 分隔符 `#` 的 `99d61e54` 已推、CI 均绿：待真机确认名单确实生效且行集干净，再按 In Progress 条目删掉每行标注与失效的 `chat_modify_text_diag` 三语言串
+5. 视频解析弹窗紧凑化 `57001ad2` 已推、CI 绿：待真机确认标题/齿轮变小、按钮 34dp、各段间隙按稿收紧；六处关掉了 48dp 最小触控盒，留意按钮是否变得难点
 
 ## Critical Context
 - **WCS 改名留下的运行期耦合（真机/资产侧，CI 绿了也不代表没事）**：
@@ -420,6 +422,7 @@ Prefer these over raw Compose controls:
 - 三卡默认全部关闭，需在设置中手动开启
 - API 无账号认证，无法播放会员歌曲
 - `httpGet` 已添加 `User-Agent` 和 `Accept` 请求头
+- **M3 组件 48dp 最小交互尺寸会顶住布局**：Button/IconButton 自带 `minimumInteractiveComponentSize()`，只写 `Modifier.height(34.dp)` 时视觉会缩（内部 `defaultMinSize` 的 40dp 被固定高度压住），但布局盒仍占 48dp，Spacer 间隙改小了也看不出效果。要真正收紧需把组件裹进 `CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp)`（先例 `ui/panel/StickerPanelSheet.kt:2173`，公开 API、无需 @OptIn；`Menu.kt` 不用该 Local，DropdownMenu 不受影响），代价是触控区 <48dp。`ParseVideo.kt` 的齿轮/转换发送行/下载类按钮/底部按钮组共 6 处这么做
 
 ## Relevant Files
 - `.../home_page_cards/HomePageCards.kt`: 主入口，`ClickableFeature`，弹窗设置含子卡片开关/顺序/字体颜色/背景/汽水音乐 Token
@@ -437,4 +440,5 @@ Prefer these over raw Compose controls:
 - `.../chat/ModifyTextMessageDisplay.kt`: 修改文本消息显示，`ClickableFeature`（点击功能行 = 屏蔽名单设置弹窗）+ 长按菜单 provider + `WeChatMessageViewApi.ICreateViewListener`；`TextTarget` 三态（TextView / 自绘宿主字段 / 菜单 View 自身字段+setter）、可编辑屏蔽名单（偏好 `modify_text_display_host_blacklist`，键 `id` 或 `类简单名#id`）、偏好 `modify_text_message_display_overrides` 存「原文→替换」并在每次绑定重放；弹窗底部诊断区块已移除，`buildSubtreeDump` 只写 `WeLogger.i`；每行的 `类名#id` 标注仍在（屏蔽键的可抄来源，待删）
 - `.../features/api/ui/WeChatMessageViewApi.kt`: 消息 View 绑定监听（`onBindView`/`onViewRecycled`），新增 `getMessageOfView(view)` 供监听方按 View 取 `MessageInfo`
 - `.../ui/utils/ViewUtils.kt`: `allViews`（前序 DFS，含自身）与 `findViewsWhich`/`findViewWhich`，遍历气泡子树统一走这里
+- `.../chat_input_bar_menu/ParseVideo.kt`: 视频解析弹窗 `showParseDialog`（主线路 + 备用线路1/2/3、图集/实况/混合结果卡片、下载与保存封面）；紧凑化：按钮统一 34dp + 六处 `LocalMinimumInteractiveComponentSize 0.dp` + 间隙按设计稿收紧
 - `.github/workflows/ci.yml`: CI 配置，含 `upload-telegram` job；`build` 已改为只编 standard flavor
