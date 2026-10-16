@@ -647,7 +647,11 @@ object ParseVideo : ClickableFeature() {
         }
     }
 
-    /** 原画直链在 data.url，video_backup 是降级档位，实况动图在 live_photo，一并映射成清晰度列表。 */
+    /**
+     * 原画直链在 data.url，video_backup 是降级档位，实况动图在 live_photo，一并映射成清晰度列表。
+     * 存在动图时不收 video_backup：动图之间是独立视频，降级档只是同一原画的另一份，
+     * 混在一起会让「全部下载」发出重复视频。
+     */
     private fun toBugParseResult(data: BugData, routeName: String): VideoParseResult {
         val images = data.images.filterIsInstance<JsonPrimitive>()
             .map { it.content }
@@ -662,12 +666,14 @@ object ParseVideo : ClickableFeature() {
             if (data.url.startsWith("http")) {
                 add(bugQualityLabel(mainLabel, data.width, data.height, data.size_label) to data.url)
             }
-            data.video_backup.forEach { entry ->
-                if (entry.url.startsWith("http")) {
-                    add(
-                        bugQualityLabel("", entry.width, entry.height, entry.size_label)
-                            .ifBlank { entry.quality.ifBlank { entry.label }.ifBlank { mainLabel } } to entry.url,
-                    )
+            if (livePhotos.isEmpty()) {
+                data.video_backup.forEach { entry ->
+                    if (entry.url.startsWith("http")) {
+                        add(
+                            bugQualityLabel("", entry.width, entry.height, entry.size_label)
+                                .ifBlank { entry.quality.ifBlank { entry.label }.ifBlank { mainLabel } } to entry.url,
+                        )
+                    }
                 }
             }
             livePhotos.forEachIndexed { index, entry ->
@@ -690,7 +696,10 @@ object ParseVideo : ClickableFeature() {
                     VideoData(
                         video_title = data.title,
                         video_cover = data.cover,
-                        video_link = data.url,
+                        // 实况笔记没有原画（url 为 null）：单动图时 qualityList 只有一条、走不了「全部下载」，
+                        // 下游只读 video_link，不回落就会拿到空串而一条视频都不发
+                        video_link = data.url.takeIf { it.startsWith("http") }
+                            ?: livePhotos.firstOrNull()?.video.orEmpty(),
                         author = data.author?.takeIf { it.name.isNotBlank() }?.let {
                             AuthorData(user_id = it.id, name = it.name, avatar = it.avatar)
                         },
@@ -701,7 +710,7 @@ object ParseVideo : ClickableFeature() {
             imageList = images,
             coverUrl = coverUrl,
             // 实况动图是彼此独立的视频，不是同一视频的清晰度：走 kit9 的「全部下载」通路，不出口档位选择
-            downloadAllVideos = livePhotos.size > 1,
+            downloadAllVideos = livePhotos.isNotEmpty(),
         )
     }
 
