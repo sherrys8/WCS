@@ -3177,6 +3177,8 @@
     <string name="beautify_bubble_delete_title">删除气泡图片</string>
     <string name="beautify_bubble_delete_confirm">确定删除%1$s已导入的气泡图片？</string>
     <string name="beautify_bubble_title">自定义消息气泡</string>
+    <string name="beautify_bubble_press_scale">按压缩放反馈</string>
+    <string name="beautify_bubble_press_scale_description">长按普通气泡时轻微缩放，气泡越高幅度越小；不影响红包与转账卡片。</string>
     <string name="beautify_bubble_shape_normal">普通消息</string>
     <string name="beautify_bubble_shape_red_packet">红包</string>
     <string name="beautify_bubble_shape_transfer">转账</string>

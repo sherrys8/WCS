@@ -2,6 +2,9 @@ package dev.sherry.wcs.features.items.beautify
 
 import androidx.annotation.StringRes
 import dev.sherry.wcs.R
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.animation.StateListAnimator
 import android.content.Context
 import android.content.res.Resources
 import android.graphics.Bitmap
@@ -65,6 +68,7 @@ import dev.sherry.wcs.ui.content.DefaultColumn
 import dev.sherry.wcs.ui.content.IconButton
 import dev.sherry.wcs.ui.content.TextButton
 import dev.sherry.wcs.ui.content.WeColorField
+import dev.sherry.wcs.ui.content.m3.SwitchWidget
 import dev.sherry.wcs.ui.utils.findViewWhich
 import dev.sherry.wcs.ui.utils.findViewsWhich
 import dev.sherry.wcs.ui.utils.showComposeDialog
@@ -197,6 +201,18 @@ object CustomMessageBubbles : ClickableFeature(), WeChatMessageViewApi.ICreateVi
     private var bgThatDark by prefOption("custom_bubbles_bg_that_dark", "#00000000")
     private var bgThisLight by prefOption("custom_bubbles_bg_this_light", "#00000000")
     private var bgThisDark by prefOption("custom_bubbles_bg_this_dark", "#00000000")
+
+    private var pressScaleEnabled by prefOption("custom_bubbles_press_scale", false)
+
+    // Press feedback tuning: [PRESS_REF_HEIGHT_PX] is the bubble height that still gets the full
+    // effect, taller bubbles shrink proportionally less, and [PRESS_FACTOR_CAP] keeps every bubble
+    // with a visible minimum response (about 4.75%).
+    private const val PRESS_REF_HEIGHT_PX = 600f
+    private const val PRESS_MAX_SHRINK = 0.05f
+    private const val PRESS_FACTOR_CAP = 0.95f
+    private const val PRESS_DURATION_MS = 100L
+    private const val PRESS_ATTACHED_TAG = 0x7e4b17_02
+    private const val PRESS_HEIGHT_TAG = 0x7e4b17_03
 
     // A nine-patch source must keep at least one interior pixel once the marker border is stripped.
     private const val MIN_BUBBLE_SIZE_PX = 3
@@ -347,6 +363,8 @@ object CustomMessageBubbles : ClickableFeature(), WeChatMessageViewApi.ICreateVi
     }
 
     private fun applyBubble(bubbleView: View, isSelfSender: Boolean, fileName: String) {
+        attachPressScale(bubbleView)
+
         val color = backgroundColor(bubbleView.context, isSelfSender)
         val constantState = bubbleConstantState(fileName, bubbleView.resources)
 
@@ -358,6 +376,70 @@ object CustomMessageBubbles : ClickableFeature(), WeChatMessageViewApi.ICreateVi
         }
 
         applyImageBubble(bubbleView, color, constantState)
+    }
+
+    /**
+     * Press feedback for ordinary bubbles. WeChat leaves these views without a state animator, so a
+     * long press gives no visual answer at all. A [StateListAnimator] is driven by the framework on
+     * `state_pressed`, which keeps the bubble's own click and long-click handling untouched — unlike
+     * an `OnTouchListener`, which would have to decide when to swallow the event.
+     *
+     * Red packet and transfer cards are deliberately excluded: they never reach `applyBubble`, and
+     * scaling a whole card reads as a layout glitch rather than feedback.
+     */
+    private fun attachPressScale(bubbleView: View) {
+        if (!pressScaleEnabled || bubbleView.getTag(PRESS_ATTACHED_TAG) != null) return
+        // A bubble that already animates on press belongs to WeChat.
+        if (bubbleView.stateListAnimator != null) return
+        bubbleView.setTag(PRESS_ATTACHED_TAG, true)
+        bubbleView.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
+            override fun onLayoutChange(
+                view: View,
+                left: Int,
+                top: Int,
+                right: Int,
+                bottom: Int,
+                oldLeft: Int,
+                oldTop: Int,
+                oldRight: Int,
+                oldBottom: Int,
+            ) {
+                val height = bottom - top
+                // Replacing the animator while pressed cancels the running one and leaves the bubble
+                // stuck scaled until its pressed state changes again, so wait for the next layout.
+                if (height <= 0 || view.isPressed || height == view.getTag(PRESS_HEIGHT_TAG)) return
+                view.setTag(PRESS_HEIGHT_TAG, height)
+                view.stateListAnimator = pressScaleAnimator(view, height)
+            }
+        })
+        // The row may already be laid out by the time we bind; seed it so the first press works.
+        val initialHeight = bubbleView.height
+        if (initialHeight > 0) {
+            bubbleView.setTag(PRESS_HEIGHT_TAG, initialHeight)
+            bubbleView.stateListAnimator = pressScaleAnimator(bubbleView, initialHeight)
+        }
+    }
+
+    private fun pressScaleAnimator(view: View, height: Int): StateListAnimator {
+        val scale = 1f - PRESS_MAX_SHRINK * minOf(PRESS_REF_HEIGHT_PX / height, PRESS_FACTOR_CAP)
+        val pressed = AnimatorSet().apply {
+            playTogether(
+                ObjectAnimator.ofFloat(view, "scaleX", scale),
+                ObjectAnimator.ofFloat(view, "scaleY", scale),
+            )
+            duration = PRESS_DURATION_MS
+        }
+        val released = AnimatorSet().apply {
+            playTogether(
+                ObjectAnimator.ofFloat(view, "scaleX", 1f),
+                ObjectAnimator.ofFloat(view, "scaleY", 1f),
+            )
+            duration = PRESS_DURATION_MS
+        }
+        return StateListAnimator().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), pressed)
+            addState(intArrayOf(), released)
+        }
     }
 
     /**
@@ -812,6 +894,7 @@ object CustomMessageBubbles : ClickableFeature(), WeChatMessageViewApi.ICreateVi
             var selectedSide by remember { mutableStateOf(BubbleSide.OTHER) }
             var imageRevision by remember { mutableStateOf(0) }
             var pendingDeletion by remember { mutableStateOf(false) }
+            var pressScale by remember { mutableStateOf(pressScaleEnabled) }
             var otherForm by remember {
                 mutableStateOf(
                     BubbleForm(
@@ -909,6 +992,14 @@ object CustomMessageBubbles : ClickableFeature(), WeChatMessageViewApi.ICreateVi
                                 },
                                 onDelete = { pendingDeletion = true },
                             )
+
+                            SwitchWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(R.string.beautify_bubble_press_scale),
+                                description = stringResource(R.string.beautify_bubble_press_scale_description),
+                                checked = pressScale,
+                                onCheckedChange = { pressScale = it },
+                            )
                         }
                     },
                     dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.dialog_cancel)) } },
@@ -925,6 +1016,7 @@ object CustomMessageBubbles : ClickableFeature(), WeChatMessageViewApi.ICreateVi
                                 bgThatDark = otherForm.backgroundDark
                                 bgThisLight = selfForm.backgroundLight
                                 bgThisDark = selfForm.backgroundDark
+                                pressScaleEnabled = pressScale
                                 onDismiss()
                             },
                         ) {

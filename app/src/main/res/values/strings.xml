@@ -3130,6 +3130,8 @@ Time: {time}</string>
     <string name="beautify_bubble_delete_title">Delete bubble image</string>
     <string name="beautify_bubble_delete_confirm">Delete the imported %1$s bubble image?</string>
     <string name="beautify_bubble_title">Custom message bubbles</string>
+    <string name="beautify_bubble_press_scale">Press feedback</string>
+    <string name="beautify_bubble_press_scale_description">Scales normal bubbles slightly while pressed; taller bubbles move less. Red packet and transfer cards are not affected.</string>
     <string name="beautify_bubble_shape_normal">Normal</string>
     <string name="beautify_bubble_shape_red_packet">Red packet</string>
     <string name="beautify_bubble_shape_transfer">Transfer</string>
