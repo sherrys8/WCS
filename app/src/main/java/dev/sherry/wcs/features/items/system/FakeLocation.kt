@@ -100,9 +100,9 @@ object FakeLocation : ClickableFeature(), IResolveDex {
     private const val KEY_JUMP_DWELL = "fake_jump_dwell_s"
     private const val KEY_JUMP_ACCURACY = "fake_jump_accuracy"
 
-    private const val DEFAULT_JUMP_RADIUS = 2000
+    private const val DEFAULT_JUMP_RADIUS = 200_000
     private const val MIN_JUMP_RADIUS = 100
-    private const val MAX_JUMP_RADIUS = 20000
+    private const val MAX_JUMP_RADIUS = 5_000_000
     private const val DEFAULT_JUMP_DWELL = 60
     private const val MIN_JUMP_DWELL = 5
     private const val MAX_JUMP_DWELL = 600
@@ -254,7 +254,7 @@ object FakeLocation : ClickableFeature(), IResolveDex {
                                         value = radius,
                                         startInt = MIN_JUMP_RADIUS,
                                         endInt = MAX_JUMP_RADIUS,
-                                        stepSize = 100,
+                                        stepSize = 10_000,
                                         valueSuffix = " m",
                                         enabled = jump,
                                         onValueChange = {
