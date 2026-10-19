@@ -3979,7 +3979,9 @@
     <string name="system_fake_location_jump">启用随机瞬移</string>
     <string name="system_fake_location_jump_description">每次定位都在范围内随机取一个点；关闭后回到固定坐标，即普通的虚拟定位。</string>
     <string name="system_fake_location_jump_radius">瞬移半径</string>
+    <string name="system_fake_location_jump_radius_hint">100～5000000 之间，单位米</string>
     <string name="system_fake_location_jump_dwell">最短驻留</string>
+    <string name="system_fake_location_jump_dwell_hint">5～600 之间，单位秒</string>
     <string name="system_fake_location_jump_accuracy">随机定位精度</string>
     <string name="system_fake_location_jump_accuracy_description">与坐标同批抽取，报告 10～50 米的定位精度。</string>
     <string name="system_feature_flags_copy_class">复制类名</string>

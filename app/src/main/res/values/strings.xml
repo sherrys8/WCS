@@ -3941,7 +3941,9 @@ Time: {time}</string>
     <string name="system_fake_location_jump">Random jump</string>
     <string name="system_fake_location_jump_description">Every location read picks a random point inside the range. Turn this off to report the fixed center coordinate instead.</string>
     <string name="system_fake_location_jump_radius">Jump radius</string>
+    <string name="system_fake_location_jump_radius_hint">Between 100 and 5000000, in meters</string>
     <string name="system_fake_location_jump_dwell">Minimum dwell</string>
+    <string name="system_fake_location_jump_dwell_hint">Between 5 and 600, in seconds</string>
     <string name="system_fake_location_jump_accuracy">Random accuracy</string>
     <string name="system_fake_location_jump_accuracy_description">Report a random 10-50 m accuracy taken from the same sample.</string>
     <string name="system_feature_flags_copy_class">Copy class name</string>

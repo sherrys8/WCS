@@ -13,10 +13,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.view.children
 import com.composables.icons.materialsymbols.MaterialSymbols
@@ -42,9 +46,8 @@ import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.OsmLocationPicker
 import dev.sherry.wcs.ui.content.TextButton
-import dev.sherry.wcs.ui.content.m3.BaseItemContainer
+import dev.sherry.wcs.ui.content.m3.BaseSupportingWidget
 import dev.sherry.wcs.ui.content.m3.BaseWidget
-import dev.sherry.wcs.ui.content.m3.IntNumberPickerWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
 import dev.sherry.wcs.ui.utils.showComposeDialog
@@ -168,8 +171,10 @@ object FakeLocation : ClickableFeature(), IResolveDex {
     private fun showSettings(context: ComponentActivity) {
         showComposeDialog(context) {
             var jump by remember { mutableStateOf(jumpEnabled) }
-            var radius by remember { mutableStateOf(jumpRadius) }
-            var dwell by remember { mutableStateOf(jumpDwell) }
+            // Kept as text: a numeric field must be able to hold "2" while the user is still typing
+            // toward "200000"; only in-range parses reach the preference.
+            var radiusText by remember { mutableStateOf(jumpRadius.toString()) }
+            var dwellText by remember { mutableStateOf(jumpDwell.toString()) }
             var accuracy by remember { mutableStateOf(jumpAccuracy) }
             // Local copies so clearing the selection updates the row in place; a preference delegate
             // read straight from composition never recomposes on its own.
@@ -248,36 +253,52 @@ object FakeLocation : ClickableFeature(), IResolveDex {
                                 )
                             }
                             item {
-                                BaseItemContainer {
-                                    IntNumberPickerWidget(
-                                        title = stringResource(R.string.system_fake_location_jump_radius),
-                                        value = radius,
-                                        startInt = MIN_JUMP_RADIUS,
-                                        endInt = MAX_JUMP_RADIUS,
-                                        stepSize = 10_000,
-                                        valueSuffix = " m",
-                                        enabled = jump,
-                                        onValueChange = {
-                                            radius = it
-                                            jumpRadius = it
+                                val radiusHint = stringResource(R.string.system_fake_location_jump_radius_hint)
+                                BaseSupportingWidget(title = stringResource(R.string.system_fake_location_jump_radius)) {
+                                    val radiusValid = radiusText.trim().toIntOrNull()
+                                        ?.let { it in MIN_JUMP_RADIUS..MAX_JUMP_RADIUS } == true
+                                    OutlinedTextField(
+                                        value = radiusText,
+                                        onValueChange = { raw ->
+                                            radiusText = raw
+                                            raw.trim().toIntOrNull()
+                                                ?.takeIf { it in MIN_JUMP_RADIUS..MAX_JUMP_RADIUS }
+                                                ?.let { jumpRadius = it }
                                         },
+                                        placeholder = { Text(radiusHint) },
+                                        suffix = { Text(" m") },
+                                        enabled = jump,
+                                        isError = !radiusValid,
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp),
                                     )
                                 }
                             }
                             item {
-                                BaseItemContainer {
-                                    IntNumberPickerWidget(
-                                        title = stringResource(R.string.system_fake_location_jump_dwell),
-                                        value = dwell,
-                                        startInt = MIN_JUMP_DWELL,
-                                        endInt = MAX_JUMP_DWELL,
-                                        stepSize = 5,
-                                        valueSuffix = " s",
-                                        enabled = jump,
-                                        onValueChange = {
-                                            dwell = it
-                                            jumpDwell = it
+                                val dwellHint = stringResource(R.string.system_fake_location_jump_dwell_hint)
+                                BaseSupportingWidget(title = stringResource(R.string.system_fake_location_jump_dwell)) {
+                                    val dwellValid = dwellText.trim().toIntOrNull()
+                                        ?.let { it in MIN_JUMP_DWELL..MAX_JUMP_DWELL } == true
+                                    OutlinedTextField(
+                                        value = dwellText,
+                                        onValueChange = { raw ->
+                                            dwellText = raw
+                                            raw.trim().toIntOrNull()
+                                                ?.takeIf { it in MIN_JUMP_DWELL..MAX_JUMP_DWELL }
+                                                ?.let { jumpDwell = it }
                                         },
+                                        placeholder = { Text(dwellHint) },
+                                        suffix = { Text(" s") },
+                                        enabled = jump,
+                                        isError = !dwellValid,
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp),
                                     )
                                 }
                             }
