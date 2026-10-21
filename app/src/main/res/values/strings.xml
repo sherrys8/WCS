@@ -2351,7 +2351,6 @@
     <string name="mention_members_action_label">@everyone (long-press to configure)</string>
     <string name="mention_members_group_only">This action is only available in groups.</string>
     <string name="mention_members_sent_unseen">Sent (you cannot see this message yourself)</string>
-    <string name="mention_members_send_failed">Send failed</string>
     <string name="mention_members_input_empty">The input box is empty.</string>
     <string name="mention_members_empty_group">The group member list is empty.</string>
     <string name="mention_members_select_one">Select at least one contact.</string>

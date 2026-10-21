@@ -174,12 +174,16 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                                 if (stealthMentionAll) {
                                     // 原生发送输入框原文 (不加 @ 昵称前缀), atuserlist
                                     // 由入库钩子注入 msgsource
-                                    val atUserList = selectedContacts
+                                    val atUserIds = selectedContacts
                                         .map { it.wxId }
                                         .filter { it != "weixin" && it != "filehelper" }
                                         .take(MAX_AT_USERS)
-                                        .joinToString(",")
-                                    pendingStealthAt = currentConv to atUserList
+                                    pendingStealthAt = currentConv to atUserIds.joinToString(",")
+                                    WeLogger.i(
+                                        TAG,
+                                        "stealth armed: talker=$currentConv count=${atUserIds.size}" +
+                                            " first=${atUserIds.take(3)}",
+                                    )
                                     WeChatInputBarMenuApi.performSend(chatFooter)
                                     return@ContactsSelector
                                 }
@@ -230,16 +234,6 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                                         )
                                         chatFooter.lastText = ""
                                     }
-                                    onFailure { errType, errCode, errMsg ->
-                                        val detail = "errType=$errType errCode=$errCode msg=$errMsg"
-                                        WeLogger.e(TAG, "newsendmsg cgi 522 failed: $detail")
-                                        showToast(
-                                            context,
-                                            context.localizedChatInputString(
-                                                R.string.mention_members_send_failed,
-                                            ) + "\n" + detail,
-                                        )
-                                    }
                                 }
                             }
                         )
@@ -266,7 +260,14 @@ object MentionMembers : SwitchFeature(), IResolveDex {
             // 消费标记; talker 不匹配 (发送失败残留、用户先在别的会话发言) 时丢弃,
             // 避免把 atuserlist 误注入无关消息
             pendingStealthAt = null
-            if (msgInfo.talker != pending.first) return@hookBefore
+            if (msgInfo.talker != pending.first) {
+                WeLogger.w(
+                    TAG,
+                    "stealth dropped: pending talker=${pending.first} incoming=${msgInfo.talker}" +
+                        " content=${msgInfo.content.take(20)}",
+                )
+                return@hookBefore
+            }
 
             // z=false: 只改内存 msgsource, 随入库方法写入
             methodMergeMsgSourceNode.method.invoke(
@@ -274,6 +275,11 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                 args[0],
                 "<atuserlist><![CDATA[${pending.second}]]></atuserlist>",
                 false,
+            )
+            WeLogger.i(
+                TAG,
+                "stealth injected: talker=${msgInfo.talker} content=${msgInfo.content.take(20)}" +
+                    " count=${pending.second.split(',').count { it.isNotEmpty() }}",
             )
         }
 

@@ -2110,6 +2110,11 @@ object WeMessageApi : ApiFeature(), IResolveDex {
         return detectImageMime(if (size == header.size) header else header.copyOf(size.coerceAtLeast(0)))
     }
 
+    private fun ByteArray.containsSequence(sequence: ByteArray): Boolean =
+        sequence.isNotEmpty() && (0..size - sequence.size).any { start ->
+            sequence.indices.all { this[start + it] == sequence[it] }
+        }
+
     private fun reuseNotificationMedia(destination: Path): NotificationMediaFile? {
         val mimeType = detectImageMime(destination) ?: return null
         destination.setLastModifiedTime(FileTime.fromMillis(System.currentTimeMillis()))
@@ -2451,19 +2456,31 @@ object WeMessageApi : ApiFeature(), IResolveDex {
                 }
                 .invoke(emojiInfo) as ByteArray
             val isWxGf = MMWXGFJNI.isWxGF(encryptedBytes, encryptedBytes.size)
-            val stickerBytes = if (isWxGf) {
+            var stickerBytes = if (isWxGf) {
                 MMWXGFJNI.nativeWxamToGif(encryptedBytes)
             } else {
                 encryptedBytes
             }
             if (detectImageMime(stickerBytes) == null) {
                 val viaPicBuf = MMWXGFJNI.wxam2PicBuf(encryptedBytes, 0, MMWXGFJNI.WXAM_SCENE_MISC)
-                error(
-                    "failed to decode sticker image: encryptedSize=${encryptedBytes.size}" +
-                        " decodedSize=${stickerBytes.size} isWxGF=$isWxGf" +
-                        " decodedHead=${stickerBytes.take(8).joinToString(" ") { "%02X".format(it) }}" +
-                        " wxam2PicBuf=${viaPicBuf?.let { detectImageMime(it) ?: "unrecognized" } ?: "null"}"
-                )
+                val picBufMime = viaPicBuf?.let { detectImageMime(it) }
+                if (viaPicBuf != null && picBufMime != null) {
+                    // isWxGF 不认小写 "wxgf" 容器, 但通用解码器解得开 (真机实测)
+                    val animated = picBufMime == "image/png" && viaPicBuf.containsSequence("acTL".toByteArray())
+                    WeLogger.i(
+                        TAG,
+                        "sticker decoded via wxam2PicBuf: mime=$picBufMime" +
+                            " size=${viaPicBuf.size} animated=$animated",
+                    )
+                    stickerBytes = viaPicBuf
+                } else {
+                    error(
+                        "failed to decode sticker image: encryptedSize=${encryptedBytes.size}" +
+                            " decodedSize=${stickerBytes.size} isWxGF=$isWxGf" +
+                            " decodedHead=${stickerBytes.take(8).joinToString(" ") { "%02X".format(it) }}" +
+                            " wxam2PicBuf=${if (viaPicBuf == null) "null" else "unrecognized"}"
+                    )
+                }
             }
 
             temporary = createTempFile(destination.parent, ".${destination.name}.", ".tmp")

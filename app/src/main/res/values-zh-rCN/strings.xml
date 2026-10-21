@@ -2321,7 +2321,6 @@
     <string name="mention_members_action_label">@所有人（长按配置）</string>
     <string name="mention_members_group_only">只能在群组里使用！</string>
     <string name="mention_members_sent_unseen">已发送（自己无法看到该消息）</string>
-    <string name="mention_members_send_failed">发送失败</string>
     <string name="mention_members_input_empty">输入框内容为空！</string>
     <string name="mention_members_empty_group">群成员列表为空！</string>
     <string name="mention_members_select_one">请选择至少一个好友！</string>
