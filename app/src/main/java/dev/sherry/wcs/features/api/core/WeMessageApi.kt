@@ -2456,7 +2456,13 @@ object WeMessageApi : ApiFeature(), IResolveDex {
                 }
                 .invoke(emojiInfo) as ByteArray
             val isWxGf = MMWXGFJNI.isWxGF(encryptedBytes, encryptedBytes.size)
-            var stickerBytes = if (isWxGf) {
+            // 真机实测：还有一类小写 "wxcf"/"wxgf" 容器（decodedHead=77 78 67 66），isWxGF 不认它，
+            // 于是原字节被当图片检测 → 解码失败。微信自己的 nativeWxamToGif 照样能出 GIF，
+            // 所以按魔数放行；万一解不出仍退回下面的 wxam2PicBuf。
+            val isWxamByMagic = encryptedBytes.size >= 4 &&
+                (encryptedBytes.hasMagic(0, 0x77, 0x78, 0x63, 0x66) ||
+                    encryptedBytes.hasMagic(0, 0x77, 0x78, 0x67, 0x66))
+            var stickerBytes = if (isWxGf || isWxamByMagic) {
                 MMWXGFJNI.nativeWxamToGif(encryptedBytes)
             } else {
                 encryptedBytes
@@ -2465,7 +2471,7 @@ object WeMessageApi : ApiFeature(), IResolveDex {
                 val viaPicBuf = MMWXGFJNI.wxam2PicBuf(encryptedBytes, 0, MMWXGFJNI.WXAM_SCENE_MISC)
                 val picBufMime = viaPicBuf?.let { detectImageMime(it) }
                 if (viaPicBuf != null && picBufMime != null) {
-                    // isWxGF 不认小写 "wxgf" 容器, 但通用解码器解得开 (真机实测)
+                    // wxam2PicBuf 出的是通用位图：动图这里是带 acTL 的 APNG，不是 GIF
                     val animated = picBufMime == "image/png" && viaPicBuf.containsSequence("acTL".toByteArray())
                     WeLogger.i(
                         TAG,
@@ -2476,11 +2482,17 @@ object WeMessageApi : ApiFeature(), IResolveDex {
                 } else {
                     error(
                         "failed to decode sticker image: encryptedSize=${encryptedBytes.size}" +
-                            " decodedSize=${stickerBytes.size} isWxGF=$isWxGf" +
+                            " decodedSize=${stickerBytes.size} isWxGF=$isWxGf wxamMagic=$isWxamByMagic" +
                             " decodedHead=${stickerBytes.take(8).joinToString(" ") { "%02X".format(it) }}" +
                             " wxam2PicBuf=${if (viaPicBuf == null) "null" else "unrecognized"}"
                     )
                 }
+            } else if (isWxamByMagic && !isWxGf) {
+                WeLogger.i(
+                    TAG,
+                    "sticker decoded via nativeWxamToGif on lowercase container:" +
+                        " mime=${detectImageMime(stickerBytes)} size=${stickerBytes.size}",
+                )
             }
 
             temporary = createTempFile(destination.parent, ".${destination.name}.", ".tmp")

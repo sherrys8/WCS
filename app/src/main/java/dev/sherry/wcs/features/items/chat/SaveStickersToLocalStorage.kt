@@ -76,8 +76,14 @@ object SaveStickersToLocalStorage : SwitchFeature(),
     }
 
     private suspend fun saveSticker(msgInfo: MessageInfo): String? {
-        val md5 = msgInfo.imagePath ?: run {
-            WeLogger.e(TAG, "sticker imagePath is null")
+        // field_imgPath 对没在本地落过缓存的贴纸是 null（表情商店/收藏来的、别的设备同步来的），
+        // stickerMd5 会退回从 <emoji md5="…"> 取，和转发/复读/查看为图片走的是同一个入口。
+        val md5 = msgInfo.stickerMd5 ?: run {
+            WeLogger.e(
+                TAG,
+                "sticker md5 is null: talker=${msgInfo.talker} type=${msgInfo.typeCode}" +
+                    " content=${msgInfo.content.take(120)}",
+            )
             return null
         }
         return WeMessageApi.saveStickerByMd5(md5) ?: run {
