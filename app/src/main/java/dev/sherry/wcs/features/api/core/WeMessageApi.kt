@@ -2450,12 +2450,21 @@ object WeMessageApi : ApiFeature(), IResolveDex {
                     returnType = ByteArray::class
                 }
                 .invoke(emojiInfo) as ByteArray
-            val stickerBytes = if (MMWXGFJNI.isWxGF(encryptedBytes, encryptedBytes.size)) {
+            val isWxGf = MMWXGFJNI.isWxGF(encryptedBytes, encryptedBytes.size)
+            val stickerBytes = if (isWxGf) {
                 MMWXGFJNI.nativeWxamToGif(encryptedBytes)
             } else {
                 encryptedBytes
             }
-            check(detectImageMime(stickerBytes) != null) { "failed to decode sticker image" }
+            if (detectImageMime(stickerBytes) == null) {
+                val viaPicBuf = MMWXGFJNI.wxam2PicBuf(encryptedBytes, 0, MMWXGFJNI.WXAM_SCENE_MISC)
+                error(
+                    "failed to decode sticker image: encryptedSize=${encryptedBytes.size}" +
+                        " decodedSize=${stickerBytes.size} isWxGF=$isWxGf" +
+                        " decodedHead=${stickerBytes.take(8).joinToString(" ") { "%02X".format(it) }}" +
+                        " wxam2PicBuf=${viaPicBuf?.let { detectImageMime(it) ?: "unrecognized" } ?: "null"}"
+                )
+            }
 
             temporary = createTempFile(destination.parent, ".${destination.name}.", ".tmp")
             temporary.outputStream().use { output -> output.write(stickerBytes) }

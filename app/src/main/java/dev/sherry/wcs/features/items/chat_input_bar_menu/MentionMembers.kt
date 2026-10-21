@@ -33,6 +33,7 @@ import dev.sherry.wcs.ui.content.ContactsSelector
 import dev.sherry.wcs.ui.content.TextButton
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
 import dev.sherry.wcs.ui.utils.showComposeDialog
+import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.runOnUiThread
 import dev.sherry.wcs.utils.android.showToast
 import dev.sherry.wcs.utils.strings.isGroupChatWxId
@@ -66,6 +67,8 @@ object MentionMembers : SwitchFeature(), IResolveDex {
 
     /** 微信服务器对 atuserlist 人数的上限, 超出部分静默截断 */
     private const val MAX_AT_USERS = 200
+
+    private const val TAG = "MentionMembers"
 
     private var stealthMentionAll by WePrefs.prefOption("mention_members_stealth_all", false)
 
@@ -226,6 +229,16 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                                             now
                                         )
                                         chatFooter.lastText = ""
+                                    }
+                                    onFailure { errType, errCode, errMsg ->
+                                        val detail = "errType=$errType errCode=$errCode msg=$errMsg"
+                                        WeLogger.e(TAG, "newsendmsg cgi 522 failed: $detail")
+                                        showToast(
+                                            context,
+                                            context.localizedChatInputString(
+                                                R.string.mention_members_send_failed,
+                                            ) + "\n" + detail,
+                                        )
                                     }
                                 }
                             }
