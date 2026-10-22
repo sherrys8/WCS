@@ -88,8 +88,9 @@ class MessageInfo(val instance: Any) {
 
         // skip string field (2-byte length prefix + data)
         if (bb.remaining() >= 2) {
-            val n1 = bb.short.toInt()
-            if (n1 > 3072) error("Buffer String Length Error")
+            // 长度按无符号读：`bb.short` 是 signed，≥32768 会变成负数、绕过边界检查后崩在
+            // position()。原生 @所有人 消息的 msgsource 就长这样。
+            val n1 = bb.short.toInt() and 0xFFFF
             if (n1 != 0 && bb.remaining() >= n1) bb.position(bb.position() + n1)
         }
 
@@ -98,8 +99,7 @@ class MessageInfo(val instance: Any) {
 
         if (bb.remaining() < 2) return@lazy ""
 
-        val n2 = bb.short.toInt()
-        if (n2 > 3072) error("Buffer String Length Error")
+        val n2 = bb.short.toInt() and 0xFFFF
         if (n2 == 0 || bb.remaining() < n2) return@lazy ""
 
         val bytes = ByteArray(n2)
