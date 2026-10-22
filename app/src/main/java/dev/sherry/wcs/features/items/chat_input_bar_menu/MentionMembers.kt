@@ -42,14 +42,19 @@ import dev.sherry.wcs.utils.strings.isGroupChatWxId
  * 三条通路共用同一个裸 CGI `/cgi-bin/micromsg-bin/newsendmsg` (522)，
  * atuserlist 一律写在请求自带的 msgsource 里（`NewSendMsgItemProto` 第 6 字段），
  * 因此提醒随出网请求确定送出；差别只在正文：
- * - 默认：正文 = `@昵称 ` 拼接 + 原文（微信原生那种可见@）
+ * - 默认：正文 = `@昵称 ` 拼接 + 原文（微信原生那种可见@）。真机能送达，
+ *   但对面只显示文本、不推「有人@你」。
  * - 隐蔽：正文 = 输入框原文，不拼 @昵称 —— 气泡里看不到@痕迹。
  *   曾在入库方法 (methodMsgInfoHandleApiInsertMessage) 前用 MsgSourceHelper
  *   合并节点注入 atuserlist，真机证明改过的内存 MsgInfo 会让宿主发送直接失败
- *   （微信显示红色感叹号），故废弃。
- * - 卡片：正文 = 一段 appmsg XML（type=19，标题取原文），消息类型换成 49。
- *   真机两次（自建壳与用户提供的 type=19 模板）都是服务器接受、两端不渲染，
- *   同一段 XML 走宿主 AppMsgLogic 却能正常显示，故怀疑是 522 组装差异，未结案。
+ *   （微信显示红色感叹号），故废弃。改走 522 后服务器接受，真机对面同样收不到。
+ * - 卡片：正文 = 链接卡片 appmsg XML（`<type>57</type>`，标题取原文），wire type 仍发 1。
+ *   上一版是 `<type>19</type>` 模板 + wire type=49，真机三次（自建壳与用户提供的模板）都是
+ *   服务器接受、两端不渲染，同一段 XML 走宿主 AppMsgLogic 却能正常显示，怀疑是 522 组装差异。
+ *
+ * msgsource 的字段集照真机抓到的原生 @all 补齐（见 BlockAtAllNotifications 的采集日志）：
+ * 原生没有 <atall> 节点，但带 silence/membercount/notifystyleflag 与一个我们无法伪造的
+ * 服务端 signature。
  *
  * 服务器对 atuserlist 的人数上限见 [MAX_AT_USERS]。
  */
@@ -175,6 +180,18 @@ object MentionMembers : SwitchFeature() {
                                     mentionedContacts.joinToString(",") { it.wxId }
                                 }
 
+                                // 真机抓到的原生 @all msgsource 带的三个字段，我们原先一个都没有；
+                                // notifystyleflag 是「有人@你」最可疑的开关（原先猜的 <atall> 节点不存在）。
+                                val msgSource = "<msgsource>" +
+                                    "<atuserlist><![CDATA[$atWxIds]]></atuserlist>" +
+                                    "<pua>1</pua>" +
+                                    "<alnode><cf>5</cf><inlenlist>73</inlenlist></alnode>" +
+                                    "<eggIncluded>1</eggIncluded>" +
+                                    "<silence>0</silence>" +
+                                    "<membercount>${allMembers.size + 1}</membercount>" +
+                                    "<notifystyleflag>1</notifystyleflag>" +
+                                    "</msgsource>"
+
                                 val item = NewSendMsgItemProto(
                                     toUser = UserNameProto(currentConv),
                                     content = when {
@@ -183,8 +200,9 @@ object MentionMembers : SwitchFeature() {
                                         stealthMentionAll -> content
                                         else -> mentionedContacts.joinToString("") { "@${it.nickname} " } + content
                                     },
-                                    type = if (cardMentionAll) 49 else 1,
-                                    msgSource = """<msgsource><atuserlist><![CDATA[$atWxIds]]></atuserlist><pua>1</pua><alnode><cf>5</cf><inlenlist>73</inlenlist></alnode><eggIncluded>1</eggIncluded></msgsource>"""
+                                    // 卡片那条的形态由正文 appmsg 自己的 <type> 决定，wire type 一起发 1
+                                    type = 1,
+                                    msgSource = msgSource
                                 )
                                 val reqProto = NewSendMsgReqProto(
                                     count = 1,
@@ -243,10 +261,13 @@ object MentionMembers : SwitchFeature() {
         )
     }
 
-    /** 卡片@所有人: 输入框文本进 <title>，其余字段沿用模板原样；atuserlist 仍随出网请求带出。 */
+    /**
+     * 卡片@所有人: 输入框文本进 `<title>`，正文是链接卡片(appmsg `<type>57</type>`)形态。
+     * 不带 `<?xml ...?>` 声明——微信自己读消息时会把它剥掉（`MessageInfo.kt:317`）。
+     */
     private fun buildCardContent(text: String): String {
         val title = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        return """<msg><appmsg><title>$title</title><des>这里可以写补充说明。</des><action>view</action><type>19</type><statextstr>GhQKEnd4MjgxYTcwYTNkMzkwYmRmMg==</statextstr><recorditem><![CDATA[<recordinfo></recordinfo>]]></recorditem><finderLiveProductShare><isPriceBeginShow>false</isPriceBeginShow></finderLiveProductShare><gameshare><appbrandext><priority>-1</priority></appbrandext></gameshare></appmsg><fromusername>${WeApi.selfWxId}</fromusername><appinfo><version>1</version><appname>好友已设置小可爱可见</appname></appinfo><extcommoninfo><media_expire_at>1793772892</media_expire_at></extcommoninfo></msg>"""
+        return """<msg><appmsg><title>$title</title><action>view</action><type>57</type><finderLiveProductShare><isPriceBeginShow>false</isPriceBeginShow></finderLiveProductShare><gameshare><appbrandext><priority>-1</priority></appbrandext></gameshare><appattach /></appmsg><fromusername>${WeApi.selfWxId}</fromusername><scene>0</scene><appinfo><version>1</version><appname /></appinfo><commenturl /></msg>"""
     }
 
     override fun onEnable() {

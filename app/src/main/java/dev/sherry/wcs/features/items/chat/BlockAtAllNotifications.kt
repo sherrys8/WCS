@@ -189,7 +189,11 @@ object BlockAtAllNotificationsRuntime : ApiFeature(), IResolveDex {
         WeMessageApi.methodMsgInfoStorageInsertMessage.hookAfter {
             val message = MessageInfo(args[0]!!)
             if (message.isSelfSender || !message.isInGroupChat || !message.isNotifyAll) return@hookAfter
-            WeLogger.i(TAG, "incoming @all msgsource: ${message.msgSource}")
+            WeLogger.i(
+                TAG,
+                "incoming @all type=${message.typeCode} content=${message.content.take(300)}" +
+                    " msgsource=${message.msgSource}",
+            )
             recordPending(message.talker, message.content)
         }
 
