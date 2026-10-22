@@ -50,14 +50,15 @@ import dev.sherry.wcs.utils.strings.isGroupChatWxId
  * - 卡片：正文 = 链接卡片 appmsg XML（`<type>57</type>`，标题取原文），wire type 发 1。
  *   `<type>19</type>` + wire 49 也试过；两种形态真机都是服务器接受、对面什么都没有，
  *   同一段 XML 走宿主 AppMsgLogic 却能正常渲染，但宿主通路 (WeAppMsgApi) 没有 msgSource 参数。
- * - 隐蔽：改走原生发送 (`WeChatInputBarMenuApi.performSend`)，正文就是输入框原文，
- *   atuserlist 在入库前用 MsgSourceHelper 的合并方法注入内存 MsgInfo；写法由
- *   [stealthMentionMode] 选，三种都没在真机跑通过：
- *   alnode 键 + z=false（上一版，宿主发送直接失败、红色感叹号）、
- *   alnode 键 + z=true、sec_msg_node 键 + z=false（`SendSecMsg` 用同一个入库 hook，
- *   已验证节点能随出网带到对端）。
- *   裸 522 的隐蔽（正文不拼 @昵称）真机连 send 带 notify@all 与单 wxid 两种都送不到对面，
- *   判据是正文里有没有 @ 文本，所以放弃那条。
+ * - 隐蔽：走原生发送 (`WeChatInputBarMenuApi.performSend`)，正文就是输入框原文，
+ *   atuserlist 在入库前用 MsgSourceHelper 的合并方法注入内存 MsgInfo。真机结论
+ *   （`git+3d7dc67e`）：**alnode 键那个合并方法是毒药**，`z=false` 与 `z=true` 两次
+ *   都让宿主发送直接失败（红色感叹号）；改用 `SendSecMsg` 的 **sec_msg_node 键**写入器
+ *   则发送正常、对面收到纯文本，只是还没有 @ 提醒。所以只剩这个写入器，
+ *   [stealthMentionMode] 用它试 `z=false`（随入库方法写）与 `z=true`（自己立刻落库），
+ *   并在注入后读回 msgsource 打进日志，判节点到底进没进这条消息。
+ *   裸 522 的隐蔽（正文不拼 @昵称）真机连 notify@all 与单 wxid 两种都送不到对面，
+ *   判据是正文里有没有 @ 文本，那条已放弃。
  *
  * msgsource 的字段集照真机抓到的原生 @all 补齐（见 BlockAtAllNotifications 的采集日志）：
  * 原生没有 <atall> 节点，也没有 <alnode>，但带 silence/membercount/notifystyleflag
@@ -77,10 +78,9 @@ object MentionMembers : SwitchFeature(), IResolveDex {
 
     private const val TAG = "MentionMembers"
 
-    /** 隐蔽@的注入写法：三种都还没在真机验过，摆出来逐个试 */
-    private const val STEALTH_MODE_ALNODE_ASYNC = "alnode"
-    private const val STEALTH_MODE_ALNODE_DIRTY = "alnode_dirty"
-    private const val STEALTH_MODE_SEC_NODE_WRITER = "secnode"
+    /** 隐蔽@的注入写法：alnode 键那个合并方法真机两种 z 都会让宿主发送失败，已删 */
+    private const val STEALTH_MODE_SEC_NODE_ASYNC = "secnode"
+    private const val STEALTH_MODE_SEC_NODE_DIRTY = "secnode_dirty"
 
     private var stealthMentionAll by WePrefs.prefOption("mention_members_stealth_all", false)
 
@@ -88,7 +88,7 @@ object MentionMembers : SwitchFeature(), IResolveDex {
 
     private var stealthMentionMode by WePrefs.prefOption(
         "mention_members_stealth_mode",
-        STEALTH_MODE_ALNODE_ASYNC,
+        STEALTH_MODE_SEC_NODE_ASYNC,
     )
 
     // 点击菜单确认后置位 (talker 到 atuserlist CSV); 消息入库发生在 performSend 之后的
@@ -96,16 +96,8 @@ object MentionMembers : SwitchFeature(), IResolveDex {
     @Volatile
     private var pendingStealthAt: Pair<String, String>? = null
 
-    // MsgSourceHelper 的 alnode 合并方法: static (msgInfo, String nodeXml, boolean) -> void
-    private val methodMergeAlnodeNode by dexMethod {
-        matcher {
-            usingEqStrings("(?s)<alnode[^>]*>.*?</alnode>")
-            paramCount(3)
-            returnType("void")
-        }
-    }
-
-    // sec_msg_node 合并方法, 同签名 —— SendSecMsg 用它注入过节点并真机生效
+    // sec_msg_node 合并方法: static (msgInfo, String nodeXml, boolean) -> void
+    // —— SendSecMsg 用它注入过节点并真机生效，是这条通路的合法写入器
     private val methodMergeSecNode by dexMethod {
         matcher {
             usingEqStrings("(?s)<sec_msg_node[^>]*>.*?</sec_msg_node>")
@@ -118,7 +110,17 @@ object MentionMembers : SwitchFeature(), IResolveDex {
         showComposeDialog(context) {
             var stealthState by remember { mutableStateOf(stealthMentionAll) }
             var cardState by remember { mutableStateOf(cardMentionAll) }
-            var stealthModeState by remember { mutableStateOf(stealthMentionMode) }
+            // 旧设备上可能还存着已删掉的 alnode 档；下拉按 == 找选中项，找不到会抛，
+            // 所以先把持久值归一到剩下两种写法
+            var stealthModeState by remember {
+                mutableStateOf(
+                    if (stealthMentionMode == STEALTH_MODE_SEC_NODE_DIRTY) {
+                        STEALTH_MODE_SEC_NODE_DIRTY
+                    } else {
+                        STEALTH_MODE_SEC_NODE_ASYNC
+                    },
+                )
+            }
             AlertDialogContent(
                 title = { Text(stringResource(R.string.mention_members_settings_title)) },
                 text = {
@@ -140,16 +142,12 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                             value = stealthModeState,
                             options = listOf(
                                 DropdownOption(
-                                    STEALTH_MODE_ALNODE_ASYNC,
-                                    stringResource(R.string.mention_members_stealth_mode_alnode),
-                                ),
-                                DropdownOption(
-                                    STEALTH_MODE_ALNODE_DIRTY,
-                                    stringResource(R.string.mention_members_stealth_mode_alnode_dirty),
-                                ),
-                                DropdownOption(
-                                    STEALTH_MODE_SEC_NODE_WRITER,
+                                    STEALTH_MODE_SEC_NODE_ASYNC,
                                     stringResource(R.string.mention_members_stealth_mode_secnode),
+                                ),
+                                DropdownOption(
+                                    STEALTH_MODE_SEC_NODE_DIRTY,
+                                    stringResource(R.string.mention_members_stealth_mode_secnode_dirty),
                                 ),
                             ),
                             onValueChange = {
@@ -364,21 +362,19 @@ object MentionMembers : SwitchFeature(), IResolveDex {
             pendingStealthAt = null
             if (msgInfo.talker != pending.first) return@hookBefore
 
-            val mergeMethod = when (stealthMentionMode) {
-                STEALTH_MODE_SEC_NODE_WRITER -> methodMergeSecNode.method
-                else -> methodMergeAlnodeNode.method
-            }
-            mergeMethod.invoke(
+            methodMergeSecNode.method.invoke(
                 null,
                 args[0],
                 "<atuserlist><![CDATA[${pending.second}]]></atuserlist>",
-                // 只有 ALNODE_DIRTY 这一档试 z=true: 让合并方法立刻落库，而不是随入库方法写
-                stealthMentionMode == STEALTH_MODE_ALNODE_DIRTY,
+                // z=true: 让合并方法自己把 msgsource 落库，而不是只改内存等入库方法写
+                stealthMentionMode == STEALTH_MODE_SEC_NODE_DIRTY,
             )
+            // 读回内存 MsgInfo 此刻的 msgsource：节点不在里面 = 这个写入器不认我们喂的节点名
             WeLogger.i(
                 TAG,
                 "stealth injected: mode=$stealthMentionMode talker=${msgInfo.talker}" +
-                    " count=${pending.second.split(',').count { it.isNotEmpty() }}",
+                    " count=${pending.second.split(',').count { it.isNotEmpty() }}" +
+                    " msgsource=${msgInfo.msgSource}",
             )
         }
 

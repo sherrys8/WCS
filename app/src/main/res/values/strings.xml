@@ -2347,11 +2347,10 @@
     <!-- Chat-input-bar-menu and API-core resources. -->
     <string name="mention_members_settings_title">@everyone settings</string>
     <string name="mention_members_stealth_label">Stealth @everyone</string>
-    <string name="mention_members_stealth_description">When enabled, the input text is sent through the native send path without any @name prefix, and the mention is injected into the stored message as it is inserted into the database, so recipients see no @ text in the bubble. Groups over 200 members mention only the first 200. This has not worked on a real device yet — use the writer option below to try each implementation one at a time. When disabled, the message starts with @name text and goes through the raw CGI.</string>
+    <string name="mention_members_stealth_description">When enabled, the input text goes out through the native send path with no @name prefix, and the mention is injected into the stored message as it is written into the database. On a real device this now sends fine and the peer receives plain text, but no mention alert yet. The two writer options below differ by a single boolean - send one message with each. Groups over 200 members mention only the first 200. When disabled, the message starts with @name text and uses the raw CGI.</string>
     <string name="mention_members_stealth_mode_label">atuserlist writer</string>
-    <string name="mention_members_stealth_mode_alnode">alnode merge, write with insert</string>
-    <string name="mention_members_stealth_mode_alnode_dirty">alnode merge, mark dirty now</string>
-    <string name="mention_members_stealth_mode_secnode">sec_msg_node merge (proven by secure messages)</string>
+    <string name="mention_members_stealth_mode_secnode">sec_msg_node merge, write with insert</string>
+    <string name="mention_members_stealth_mode_secnode_dirty">sec_msg_node merge, write to db now</string>
     <string name="mention_members_card_label">Card-style @everyone</string>
     <string name="mention_members_card_description">When enabled, @everyone is sent as a share card: no @name prefix is added, the input text becomes the card title, and atuserlist still travels with the outgoing request. Stealth @everyone takes precedence when both are on. Both card shapes (type=19 with wire type 49, type=57 with wire type 1) were accepted by the server yet never arrived at the other side, so this route looks dead.</string>
     <string name="mention_members_action_label">@everyone (long-press to configure)</string>
