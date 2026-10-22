@@ -82,7 +82,7 @@ object SaveStickersToLocalStorage : SwitchFeature(),
             WeLogger.e(
                 TAG,
                 "sticker md5 is null: talker=${msgInfo.talker} type=${msgInfo.typeCode}" +
-                    " content=${msgInfo.content.take(120)}",
+                    " imgPath=${msgInfo.imagePath} content=${msgInfo.content.take(1200)}",
             )
             return null
         }
