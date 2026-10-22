@@ -70,6 +70,8 @@ class MessageInfo(val instance: Any) {
         imagePath?.takeIf { it.isNotBlank() }
             ?: XmlUtils.extractXmlAttr(content, "md5").takeIf { it.isNotBlank() }
             ?: XmlUtils.extractXmlTag(content, "md5").takeIf { it.isNotBlank() }
+            // 动画表情 (appmsg <type>8</type>) 把 md5 放在 <emoticonmd5>, 不是 md5 属性也不是 <md5>
+            ?: XmlUtils.extractXmlTag(content, "emoticonmd5").takeIf { it.isNotBlank() }
     }
     /** 微信在没有该列 (或 ContentValues 中无 `lvbuffer` 键) 时会留 null, 因此必须可空 */
     val lvBuffer by lazy { getFieldByName<ByteArray?>(instance, "field_lvbuffer") }
