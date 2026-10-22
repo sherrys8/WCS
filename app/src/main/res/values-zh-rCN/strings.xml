@@ -2317,12 +2317,7 @@
     <!-- 聊天输入栏菜单与 API 核心简体中文资源。 -->
     <string name="mention_members_settings_title">@所有人设置</string>
     <string name="mention_members_stealth_label">隐蔽@所有人</string>
-    <string name="mention_members_stealth_description">开启后按原生方式发送输入框原文（不拼 @昵称 前缀），@ 关系在消息入库时注入到它的 msgsource 的 atuserlist 里；真机上这条路能正常发出、对面收到纯文本，但还没出现 @ 提醒；群成员超过 200 人时只@前 200 人。下面「注入写法」两档只差一个 boolean，各发一条比对结果。关闭时在消息头部附带 @昵称 文本，走裸 CGI 发送</string>
-    <string name="mention_members_stealth_mode_label">注入写法</string>
-    <string name="mention_members_stealth_mode_secnode">sec_msg_node 合并 · 随入库写</string>
-    <string name="mention_members_stealth_mode_secnode_dirty">sec_msg_node 合并 · 立刻落库</string>
-    <string name="mention_members_card_label">卡片@所有人</string>
-    <string name="mention_members_card_description">开启后 @所有人 以分享卡片发送：正文不再拼 @昵称，输入框文本放进卡片标题，atuserlist 仍随出网请求一起带出。与「隐蔽@所有人」同时开启时以隐蔽为准。两种卡片形态（type=19 配 wire 49、type=57 配 wire 1）真机都是服务器接受但对面收不到，这条路基本判死</string>
+    <string name="mention_members_stealth_description">开启时确认成员选择后以原生方式发送输入框文本（不附带@昵称前缀），接收方会收到“有人@我”提醒但消息内不显示@文本；群成员超过 200 人时仅提醒前 200 人。关闭时在消息头部附带@昵称文本</string>
     <string name="mention_members_action_label">@所有人（长按配置）</string>
     <string name="mention_members_group_only">只能在群组里使用！</string>
     <string name="mention_members_sent_unseen">已发送（自己无法看到该消息）</string>
