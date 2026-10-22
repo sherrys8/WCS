@@ -12,12 +12,9 @@ import androidx.compose.ui.res.stringResource
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Alternate_email
 import dev.sherry.wcs.R
-import dev.sherry.wcs.dexkit.abc.IResolveDex
-import dev.sherry.wcs.dexkit.dsl.dexMethod
 import dev.sherry.wcs.features.api.core.WeApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.core.WeMessageApi
-import dev.sherry.wcs.features.api.core.models.MessageInfo
 import dev.sherry.wcs.features.api.net.WePacketHelper
 import dev.sherry.wcs.features.api.net.models.protobuf.NewSendMsgItemProto
 import dev.sherry.wcs.features.api.net.models.protobuf.NewSendMsgReqProto
@@ -40,26 +37,23 @@ import dev.sherry.wcs.utils.android.showToast
 import dev.sherry.wcs.utils.strings.isGroupChatWxId
 
 /**
- * @所有人 (含隐蔽@模式)。
+ * @所有人（含隐蔽@与卡片两种正文形态）。
  *
- * 隐蔽@模式: 确认成员选择后走原生发送路径 (保留引用等全部原生能力),
- * 输入框文本原样发出、不附加 @昵称 前缀; 消息入库前把
- * `<atuserlist><![CDATA[wxid1,wxid2,...]]></atuserlist>` 注入 msgsource。
- * 微信服务器只看 atuserlist 里的真实 wxid CSV 推送"有人@我"提醒,
- * 不要求 content 中存在 @ 文本, 因此接收方气泡内看不到任何 @ 痕迹。
- * (来自"终极隐藏艾特"插件验证的行为; 该插件对出网 protobuf 的混淆类名/
- * 字段偏移反射在 WcS 中由入库钩子替代, 见 SendSecMsg 的同一锚点。)
+ * 三条通路共用同一个裸 CGI `/cgi-bin/micromsg-bin/newsendmsg` (522)，
+ * atuserlist 一律写在请求自带的 msgsource 里（`NewSendMsgItemProto` 第 6 字段），
+ * 因此提醒随出网请求确定送出；差别只在正文：
+ * - 默认：正文 = `@昵称 ` 拼接 + 原文（微信原生那种可见@）
+ * - 隐蔽：正文 = 输入框原文，不拼 @昵称 —— 气泡里看不到@痕迹。
+ *   曾在入库方法 (methodMsgInfoHandleApiInsertMessage) 前用 MsgSourceHelper
+ *   合并节点注入 atuserlist，真机证明改过的内存 MsgInfo 会让宿主发送直接失败
+ *   （微信显示红色感叹号），故废弃。
+ * - 卡片：正文 = 一段 appmsg XML（type=19，标题取原文），消息类型换成 49。
+ *   真机两次（自建壳与用户提供的 type=19 模板）都是服务器接受、两端不渲染，
+ *   同一段 XML 走宿主 AppMsgLogic 却能正常显示，故怀疑是 522 组装差异，未结案。
  *
- * 跨版本锚点 (8.0.65–8.0.77 混淆名各不相同, 不使用类名/方法名):
- * - 消息入库方法: MsgInfoStorage 中 "Error insert message msg:%s talker:%s"
- *   日志唯一, 签名 (msgInfo, boolean) -> long;
- * - msgsource 合并方法: MsgSourceHelper 中唯一的
- *   "(?s)<alnode[^>]*>.*?</alnode>" 正则字面量, 签名均为
- *   static (msgInfo, String, boolean) -> void; 复用它注入 atuserlist 节点,
- *   其内部调用 msgInfo 的 msgsource setter 并置脏, 随入库写入 lvbuffer,
- *   doScene 组装出网请求时 MsgSource 同样携带该节点。
+ * 服务器对 atuserlist 的人数上限见 [MAX_AT_USERS]。
  */
-object MentionMembers : SwitchFeature(), IResolveDex {
+object MentionMembers : SwitchFeature() {
 
     override val technicalId = "@所有人"
     override val nameRes = R.string.feature_mention_members_name
@@ -74,20 +68,6 @@ object MentionMembers : SwitchFeature(), IResolveDex {
     private var stealthMentionAll by WePrefs.prefOption("mention_members_stealth_all", false)
 
     private var cardMentionAll by WePrefs.prefOption("mention_members_card_all", false)
-
-    // 点击菜单确认后置位 (talker 到 atuserlist CSV); 消息入库发生在 performSend
-    // 之后的异步流程里, 由入库钩子消费。发送失败残留的标记由 talker 不匹配兜底丢弃。
-    @Volatile
-    private var pendingStealthAt: Pair<String, String>? = null
-
-    // MsgSourceHelper 节点合并方法: static (msgInfo, String nodeXml, boolean) -> void
-    private val methodMergeMsgSourceNode by dexMethod {
-        matcher {
-            usingEqStrings("(?s)<alnode[^>]*>.*?</alnode>")
-            paramCount(3)
-            returnType("void")
-        }
-    }
 
     private fun showSettingsDialog(context: Context) {
         showComposeDialog(context) {
@@ -186,35 +166,23 @@ object MentionMembers : SwitchFeature(), IResolveDex {
 
                                 val selectedContacts = allMembers.filter { it.wxId in selectedWxIds }
 
-                                if (stealthMentionAll && !cardMentionAll) {
-                                    // 原生发送输入框原文 (不加 @ 昵称前缀), atuserlist
-                                    // 由入库钩子注入 msgsource
-                                    val atUserIds = selectedContacts
-                                        .map { it.wxId }
-                                        .filter { it != "weixin" && it != "filehelper" }
-                                        .take(MAX_AT_USERS)
-                                    pendingStealthAt = currentConv to atUserIds.joinToString(",")
-                                    WeLogger.i(
-                                        TAG,
-                                        "stealth armed: talker=$currentConv count=${atUserIds.size}" +
-                                            " first=${atUserIds.take(3)}",
-                                    )
-                                    WeChatInputBarMenuApi.performSend(chatFooter)
-                                    return@ContactsSelector
-                                }
-
                                 val content = chatFooter.lastText
-                                val atNicknames = selectedContacts.joinToString("") { "@${it.nickname} " }
                                 val isAllSelected = selectedContacts.size == allMembers.size
+                                val mentionedContacts = selectedContacts.take(MAX_AT_USERS)
                                 val atWxIds = if (isAllSelected) {
                                     "notify@all"
                                 } else {
-                                    selectedContacts.joinToString(",") { it.wxId }
+                                    mentionedContacts.joinToString(",") { it.wxId }
                                 }
 
                                 val item = NewSendMsgItemProto(
                                     toUser = UserNameProto(currentConv),
-                                    content = if (cardMentionAll) buildCardContent(content) else atNicknames + content,
+                                    content = when {
+                                        cardMentionAll -> buildCardContent(content)
+                                        // 隐蔽: 正文只发原文，不拼 @昵称，@ 全靠请求里的 atuserlist
+                                        stealthMentionAll -> content
+                                        else -> mentionedContacts.joinToString("") { "@${it.nickname} " } + content
+                                    },
                                     type = if (cardMentionAll) 49 else 1,
                                     msgSource = """<msgsource><atuserlist><![CDATA[$atWxIds]]></atuserlist><pua>1</pua><alnode><cf>5</cf><inlenlist>73</inlenlist></alnode><eggIncluded>1</eggIncluded></msgsource>"""
                                 )
@@ -225,8 +193,8 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                                 val reqBytes = WeProto.encodeWithDefaults(reqProto)
                                 WeLogger.i(
                                     TAG,
-                                    "cgi 522 send: card=$cardMentionAll allSelected=$isAllSelected" +
-                                        " targets=${selectedContacts.size}",
+                                    "cgi 522 send: card=$cardMentionAll stealth=$stealthMentionAll" +
+                                        " allSelected=$isAllSelected targets=${mentionedContacts.size}",
                                 )
 
                                 WePacketHelper.sendCgi(
@@ -282,40 +250,6 @@ object MentionMembers : SwitchFeature(), IResolveDex {
     }
 
     override fun onEnable() {
-        WeMessageApi.methodMsgInfoHandleApiInsertMessage.hookBefore {
-            val msgInfo = MessageInfo(args[0]!!)
-
-            // 只处理自己发送的文本消息 (isSend=1, type=1)
-            if (msgInfo.isSend != 1 || msgInfo.typeCode != 1) return@hookBefore
-
-            val pending = pendingStealthAt ?: return@hookBefore
-
-            // 消费标记; talker 不匹配 (发送失败残留、用户先在别的会话发言) 时丢弃,
-            // 避免把 atuserlist 误注入无关消息
-            pendingStealthAt = null
-            if (msgInfo.talker != pending.first) {
-                WeLogger.w(
-                    TAG,
-                    "stealth dropped: pending talker=${pending.first} incoming=${msgInfo.talker}" +
-                        " content=${msgInfo.content.take(20)}",
-                )
-                return@hookBefore
-            }
-
-            // z=false: 只改内存 msgsource, 随入库方法写入
-            methodMergeMsgSourceNode.method.invoke(
-                null,
-                args[0],
-                "<atuserlist><![CDATA[${pending.second}]]></atuserlist>",
-                false,
-            )
-            WeLogger.i(
-                TAG,
-                "stealth injected: talker=${msgInfo.talker} content=${msgInfo.content.take(20)}" +
-                    " count=${pending.second.split(',').count { it.isNotEmpty() }}",
-            )
-        }
-
         WeChatInputBarMenuApi.addProvider(provider)
     }
 

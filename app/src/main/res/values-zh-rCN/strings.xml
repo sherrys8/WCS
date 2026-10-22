@@ -2317,7 +2317,7 @@
     <!-- 聊天输入栏菜单与 API 核心简体中文资源。 -->
     <string name="mention_members_settings_title">@所有人设置</string>
     <string name="mention_members_stealth_label">隐蔽@所有人</string>
-    <string name="mention_members_stealth_description">开启时确认成员选择后以原生方式发送输入框文本（不附带@昵称前缀），接收方会收到“有人@我”提醒但消息内不显示@文本；群成员超过 200 人时仅提醒前 200 人。关闭时在消息头部附带@昵称文本</string>
+    <string name="mention_members_stealth_description">开启后 @所有人 的正文只发输入框原文（不拼 @昵称 前缀），@ 关系靠出网请求里的 atuserlist 传递，接收方气泡内看不到 @ 文本；群成员超过 200 人时只@前 200 人。关闭时在消息头部附带 @昵称 文本。与「卡片@所有人」同时开启时以卡片为准</string>
     <string name="mention_members_card_label">卡片@所有人</string>
     <string name="mention_members_card_description">开启后 @所有人 以分享卡片发送：正文不再拼 @昵称，输入框文本放进卡片标题，atuserlist 仍随出网请求一起带出。与「隐蔽@所有人」互斥，两者同时开启时以本项为准。卡片渲染效果与服务器接受度尚未真机验证</string>
     <string name="mention_members_action_label">@所有人（长按配置）</string>
