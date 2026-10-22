@@ -1,6 +1,7 @@
 package dev.sherry.wcs.features.items.chat_input_bar_menu
 
 import android.content.Context
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,6 +73,8 @@ object MentionMembers : SwitchFeature(), IResolveDex {
 
     private var stealthMentionAll by WePrefs.prefOption("mention_members_stealth_all", false)
 
+    private var cardMentionAll by WePrefs.prefOption("mention_members_card_all", false)
+
     // 点击菜单确认后置位 (talker 到 atuserlist CSV); 消息入库发生在 performSend
     // 之后的异步流程里, 由入库钩子消费。发送失败残留的标记由 talker 不匹配兜底丢弃。
     @Volatile
@@ -89,18 +92,30 @@ object MentionMembers : SwitchFeature(), IResolveDex {
     private fun showSettingsDialog(context: Context) {
         showComposeDialog(context) {
             var stealthState by remember { mutableStateOf(stealthMentionAll) }
+            var cardState by remember { mutableStateOf(cardMentionAll) }
             AlertDialogContent(
                 title = { Text(stringResource(R.string.mention_members_settings_title)) },
                 text = {
-                    SwitchWidget(
-                        title = stringResource(R.string.mention_members_stealth_label),
-                        description = stringResource(R.string.mention_members_stealth_description),
-                        checked = stealthState,
-                        onCheckedChange = {
-                            stealthState = it
-                            stealthMentionAll = it
-                        },
-                    )
+                    Column {
+                        SwitchWidget(
+                            title = stringResource(R.string.mention_members_stealth_label),
+                            description = stringResource(R.string.mention_members_stealth_description),
+                            checked = stealthState,
+                            onCheckedChange = {
+                                stealthState = it
+                                stealthMentionAll = it
+                            },
+                        )
+                        SwitchWidget(
+                            title = stringResource(R.string.mention_members_card_label),
+                            description = stringResource(R.string.mention_members_card_description),
+                            checked = cardState,
+                            onCheckedChange = {
+                                cardState = it
+                                cardMentionAll = it
+                            },
+                        )
+                    }
                 },
                 dismissButton = {
                     TextButton(onDismiss) { Text(stringResource(R.string.dialog_close)) }
@@ -171,7 +186,7 @@ object MentionMembers : SwitchFeature(), IResolveDex {
 
                                 val selectedContacts = allMembers.filter { it.wxId in selectedWxIds }
 
-                                if (stealthMentionAll) {
+                                if (stealthMentionAll && !cardMentionAll) {
                                     // 原生发送输入框原文 (不加 @ 昵称前缀), atuserlist
                                     // 由入库钩子注入 msgsource
                                     val atUserIds = selectedContacts
@@ -199,8 +214,8 @@ object MentionMembers : SwitchFeature(), IResolveDex {
 
                                 val item = NewSendMsgItemProto(
                                     toUser = UserNameProto(currentConv),
-                                    content = atNicknames + content,
-                                    type = 1,
+                                    content = if (cardMentionAll) buildCardContent(content) else atNicknames + content,
+                                    type = if (cardMentionAll) 49 else 1,
                                     msgSource = """<msgsource><atuserlist><![CDATA[$atWxIds]]></atuserlist><pua>1</pua><alnode><cf>5</cf><inlenlist>73</inlenlist></alnode><eggIncluded>1</eggIncluded></msgsource>"""
                                 )
                                 val reqProto = NewSendMsgReqProto(
@@ -208,6 +223,11 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                                     items = listOf(item)
                                 )
                                 val reqBytes = WeProto.encodeWithDefaults(reqProto)
+                                WeLogger.i(
+                                    TAG,
+                                    "cgi 522 send: card=$cardMentionAll allSelected=$isAllSelected" +
+                                        " targets=${selectedContacts.size}",
+                                )
 
                                 WePacketHelper.sendCgi(
                                     "/cgi-bin/micromsg-bin/newsendmsg",
@@ -234,6 +254,13 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                                         )
                                         chatFooter.lastText = ""
                                     }
+                                    onFailure { errType, errCode, errMsg ->
+                                        WeLogger.w(
+                                            TAG,
+                                            "cgi 522 failed: card=$cardMentionAll errType=$errType" +
+                                                " errCode=$errCode msg=$errMsg",
+                                        )
+                                    }
                                 }
                             }
                         )
@@ -246,6 +273,17 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                 }
             )
         )
+    }
+
+    /** 卡片@所有人: 文本放进 appmsg 标题, 正文不含 @ 昵称, atuserlist 仍随出网请求带出。 */
+    private fun buildCardContent(text: String): String {
+        val safeTitle = text.replace("]]>", "]]]]><![CDATA[>")
+        return "<msg><appmsg appid=\"\" sdkver=\"0\">" +
+            "<title><![CDATA[$safeTitle]]></title>" +
+            "<des></des><action>view</action><type>1</type><showtype>0</showtype>" +
+            "<content></content><url></url><lowurl></lowurl><contentattr>0</contentattr>" +
+            "</appmsg><fromusername>${WeApi.selfWxId}</fromusername><scene>0</scene>" +
+            "<appinfo><version>0</version><appname></appname></appinfo><commenturl></commenturl></msg>"
     }
 
     override fun onEnable() {
