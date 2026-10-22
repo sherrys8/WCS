@@ -275,15 +275,10 @@ object MentionMembers : SwitchFeature(), IResolveDex {
         )
     }
 
-    /** 卡片@所有人: 文本放进 appmsg 标题, 正文不含 @ 昵称, atuserlist 仍随出网请求带出。 */
+    /** 卡片@所有人: 输入框文本进 <title>，其余字段沿用模板原样；atuserlist 仍随出网请求带出。 */
     private fun buildCardContent(text: String): String {
-        val safeTitle = text.replace("]]>", "]]]]><![CDATA[>")
-        return "<msg><appmsg appid=\"\" sdkver=\"0\">" +
-            "<title><![CDATA[$safeTitle]]></title>" +
-            "<des></des><action>view</action><type>1</type><showtype>0</showtype>" +
-            "<content></content><url></url><lowurl></lowurl><contentattr>0</contentattr>" +
-            "</appmsg><fromusername>${WeApi.selfWxId}</fromusername><scene>0</scene>" +
-            "<appinfo><version>0</version><appname></appname></appinfo><commenturl></commenturl></msg>"
+        val title = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return """<msg><appmsg><title>$title</title><des>这里可以写补充说明。</des><action>view</action><type>19</type><statextstr>GhQKEnd4MjgxYTcwYTNkMzkwYmRmMg==</statextstr><recorditem><![CDATA[<recordinfo></recordinfo>]]></recorditem><finderLiveProductShare><isPriceBeginShow>false</isPriceBeginShow></finderLiveProductShare><gameshare><appbrandext><priority>-1</priority></appbrandext></gameshare></appmsg><fromusername>${WeApi.selfWxId}</fromusername><appinfo><version>1</version><appname>好友已设置小可爱可见</appname></appinfo><extcommoninfo><media_expire_at>1793772892</media_expire_at></extcommoninfo></msg>"""
     }
 
     override fun onEnable() {
