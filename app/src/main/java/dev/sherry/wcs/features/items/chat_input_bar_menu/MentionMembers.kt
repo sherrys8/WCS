@@ -96,6 +96,10 @@ object MentionMembers : SwitchFeature(), IResolveDex {
     @Volatile
     private var pendingStealthAt: Pair<String, String>? = null
 
+    // 入库 hook 用完标记后置位，让 hookAfter 只对同一条消息读回一次
+    @Volatile
+    private var pendingStealthVerify = false
+
     // sec_msg_node 合并方法: static (msgInfo, String nodeXml, boolean) -> void
     // —— SendSecMsg 用它注入过节点并真机生效，是这条通路的合法写入器
     private val methodMergeSecNode by dexMethod {
@@ -369,12 +373,30 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                 // z=true: 让合并方法自己把 msgsource 落库，而不是只改内存等入库方法写
                 stealthMentionMode == STEALTH_MODE_SEC_NODE_DIRTY,
             )
-            // 读回内存 MsgInfo 此刻的 msgsource：节点不在里面 = 这个写入器不认我们喂的节点名
+            // 入库前读一次：z=false 只改内存，lvbuffer 有可能要到插入那一刻才被组装出来，
+            // 所以这里空不代表失败，还要看 hookAfter 的 stealth stored
+            val raw = msgInfo.lvBuffer
+            val hasAtList = raw?.toString(Charsets.ISO_8859_1)?.contains("atuserlist") == true
             WeLogger.i(
                 TAG,
                 "stealth injected: mode=$stealthMentionMode talker=${msgInfo.talker}" +
                     " count=${pending.second.split(',').count { it.isNotEmpty() }}" +
+                    " lvbuffer=${raw?.size ?: -1}B atuserlist=$hasAtList" +
                     " msgsource=${msgInfo.msgSource}",
+            )
+            pendingStealthVerify = true
+        }
+
+        WeMessageApi.methodMsgInfoHandleApiInsertMessage.hookAfter {
+            if (!pendingStealthVerify) return@hookAfter
+            pendingStealthVerify = false
+            val stored = MessageInfo(args[0]!!)
+            val raw = stored.lvBuffer
+            val hasAtList = raw?.toString(Charsets.ISO_8859_1)?.contains("atuserlist") == true
+            WeLogger.i(
+                TAG,
+                "stealth stored: talker=${stored.talker} lvbuffer=${raw?.size ?: -1}B" +
+                    " atuserlist=$hasAtList msgsource=${stored.msgSource}",
             )
         }
 
@@ -383,6 +405,7 @@ object MentionMembers : SwitchFeature(), IResolveDex {
 
     override fun onDisable() {
         pendingStealthAt = null
+        pendingStealthVerify = false
         WeChatInputBarMenuApi.removeProvider(provider)
     }
 }
