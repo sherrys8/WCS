@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Alternate_email
+import dev.ujhhgtg.reflekt.reflekt
 import dev.sherry.wcs.R
 import dev.sherry.wcs.dexkit.abc.IResolveDex
 import dev.sherry.wcs.dexkit.dsl.dexMethod
@@ -51,12 +52,16 @@ import dev.sherry.wcs.utils.strings.isGroupChatWxId
  *   `<type>19</type>` + wire 49 也试过；两种形态真机都是服务器接受、对面什么都没有，
  *   同一段 XML 走宿主 AppMsgLogic 却能正常渲染，但宿主通路 (WeAppMsgApi) 没有 msgSource 参数。
  * - 隐蔽：走原生发送 (`WeChatInputBarMenuApi.performSend`)，正文就是输入框原文，
- *   atuserlist 在入库前用 MsgSourceHelper 的合并方法注入内存 MsgInfo。真机结论
- *   （`git+3d7dc67e`）：**alnode 键那个合并方法是毒药**，`z=false` 与 `z=true` 两次
- *   都让宿主发送直接失败（红色感叹号）；改用 `SendSecMsg` 的 **sec_msg_node 键**写入器
- *   则发送正常、对面收到纯文本，只是还没有 @ 提醒。所以只剩这个写入器，
- *   [stealthMentionMode] 用它试 `z=false`（随入库方法写）与 `z=true`（自己立刻落库），
- *   并在注入后读回 msgsource 打进日志，判节点到底进没进这条消息。
+ *   atuserlist 在入库前用 MsgSourceHelper 的合并方法注入内存 MsgInfo。真机结论：
+ *   alnode 键那个合并方法两次（`z=false`/`z=true`，`git+3d7dc67e`）都让宿主发送直接失败；
+ *   换成 `SendSecMsg` 的 sec_msg_node 键写入器（[stealthMentionMode] 的两档）发送正常、
+ *   对面收到纯文本，但仍没有 @。`git+6a4b4efa` 的双读定死了原因：**入库前 `field_lvbuffer`
+ *   整个是 null**（msgsource 是微信在插入过程中才组装的），入库后 166 字节里只有一个**空的**
+ *   `<sec_msg_node></sec_msg_node>`、没有 atuserlist —— 这类合并方法只管自己那一个节点名，
+ *   喂进去的 `<atuserlist>` 被丢弃，而 alnode 那两次大概是写了个畸形的空 alnode 才崩掉发送。
+ *   所以现在挂着字段侦察：注入前后各打一行 MsgInfo 字段清单，找发送时真正承载 msgsource 的
+ *   源头字段；`hookAfter` 用配额 2 连读两条（我们这条 + 随后随手发的普通文本），
+ *   用来判那个空节点是写入器写的还是原生就带着。
  *   裸 522 的隐蔽（正文不拼 @昵称）真机连 notify@all 与单 wxid 两种都送不到对面，
  *   判据是正文里有没有 @ 文本，那条已放弃。
  *
@@ -96,9 +101,10 @@ object MentionMembers : SwitchFeature(), IResolveDex {
     @Volatile
     private var pendingStealthAt: Pair<String, String>? = null
 
-    // 入库 hook 用完标记后置位，让 hookAfter 只对同一条消息读回一次
+    // 侦察用配额：点一次隐蔽@给 2 条，第一条是我们注入的那条，第二条是随后随手发的
+    // 普通文本，用来看 <sec_msg_node> 到底是写入器加的还是原生就有的
     @Volatile
-    private var pendingStealthVerify = false
+    private var stealthDumpBudget = 0
 
     // sec_msg_node 合并方法: static (msgInfo, String nodeXml, boolean) -> void
     // —— SendSecMsg 用它注入过节点并真机生效，是这条通路的合法写入器
@@ -108,6 +114,25 @@ object MentionMembers : SwitchFeature(), IResolveDex {
             paramCount(3)
             returnType("void")
         }
+    }
+
+    /**
+     * 发送途中 MsgInfo 里哪个字段真正装着 msgsource。
+     * `field_lvbuffer` 在入库前是 null、插入完才有 166 字节，说明微信是在入库过程中
+     * 才把它组装出来的；要写 atuserlist 就得先找到这个源头字段。
+     */
+    private fun dumpMsgSourceCandidates(instance: Any, label: String) {
+        val fields = instance.reflekt().fields()
+        val carriers = fields.mapNotNull { field ->
+            val value = field.get()?.toString() ?: return@mapNotNull null
+            if (!value.contains("msgsource")) return@mapNotNull null
+            "${field.name}=${value.take(300)}"
+        }
+        WeLogger.i(
+            TAG,
+            "stealth scan $label: carriers=${carriers.ifEmpty { listOf("<none>") }.joinToString(" | ")}" +
+                " fields=" + fields.joinToString(", ") { "${it.name}:${it.type.simpleName}" },
+        )
     }
 
     private fun showSettingsDialog(context: Context) {
@@ -366,6 +391,7 @@ object MentionMembers : SwitchFeature(), IResolveDex {
             pendingStealthAt = null
             if (msgInfo.talker != pending.first) return@hookBefore
 
+            dumpMsgSourceCandidates(args[0]!!, "before")
             methodMergeSecNode.method.invoke(
                 null,
                 args[0],
@@ -373,8 +399,7 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                 // z=true: 让合并方法自己把 msgsource 落库，而不是只改内存等入库方法写
                 stealthMentionMode == STEALTH_MODE_SEC_NODE_DIRTY,
             )
-            // 入库前读一次：z=false 只改内存，lvbuffer 有可能要到插入那一刻才被组装出来，
-            // 所以这里空不代表失败，还要看 hookAfter 的 stealth stored
+            dumpMsgSourceCandidates(args[0]!!, "after")
             val raw = msgInfo.lvBuffer
             val hasAtList = raw?.toString(Charsets.ISO_8859_1)?.contains("atuserlist") == true
             WeLogger.i(
@@ -384,13 +409,14 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                     " lvbuffer=${raw?.size ?: -1}B atuserlist=$hasAtList" +
                     " msgsource=${msgInfo.msgSource}",
             )
-            pendingStealthVerify = true
+            stealthDumpBudget = 2
         }
 
         WeMessageApi.methodMsgInfoHandleApiInsertMessage.hookAfter {
-            if (!pendingStealthVerify) return@hookAfter
-            pendingStealthVerify = false
+            if (stealthDumpBudget == 0) return@hookAfter
             val stored = MessageInfo(args[0]!!)
+            if (stored.isSend != 1 || stored.typeCode != 1) return@hookAfter
+            stealthDumpBudget -= 1
             val raw = stored.lvBuffer
             val hasAtList = raw?.toString(Charsets.ISO_8859_1)?.contains("atuserlist") == true
             WeLogger.i(
@@ -405,7 +431,7 @@ object MentionMembers : SwitchFeature(), IResolveDex {
 
     override fun onDisable() {
         pendingStealthAt = null
-        pendingStealthVerify = false
+        stealthDumpBudget = 0
         WeChatInputBarMenuApi.removeProvider(provider)
     }
 }
