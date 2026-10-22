@@ -2110,11 +2110,6 @@ object WeMessageApi : ApiFeature(), IResolveDex {
         return detectImageMime(if (size == header.size) header else header.copyOf(size.coerceAtLeast(0)))
     }
 
-    private fun ByteArray.containsSequence(sequence: ByteArray): Boolean =
-        sequence.isNotEmpty() && (0..size - sequence.size).any { start ->
-            sequence.indices.all { this[start + it] == sequence[it] }
-        }
-
     private fun reuseNotificationMedia(destination: Path): NotificationMediaFile? {
         val mimeType = detectImageMime(destination) ?: return null
         destination.setLastModifiedTime(FileTime.fromMillis(System.currentTimeMillis()))
@@ -2456,33 +2451,34 @@ object WeMessageApi : ApiFeature(), IResolveDex {
                 }
                 .invoke(emojiInfo) as ByteArray
             val isWxGf = MMWXGFJNI.isWxGF(encryptedBytes, encryptedBytes.size)
-            // 真机实测：还有一类小写 "wxcf"/"wxgf" 容器（decodedHead=77 78 67 66），isWxGF 不认它，
-            // 于是原字节被当图片检测 → 解码失败。微信自己的 nativeWxamToGif 照样能出 GIF，
-            // 所以按魔数放行；万一解不出仍退回下面的 wxam2PicBuf。
+            // 真机实测：小写 "wxcf"/"wxgf" 容器（decodedHead=77 78 67 66）isWxGF 不认，
+            // 但 nativeWxamToGif 照样解得出 GIF 且保住动画，所以按魔数放行。
             val isWxamByMagic = encryptedBytes.size >= 4 &&
                 (encryptedBytes.hasMagic(0, 0x77, 0x78, 0x63, 0x66) ||
                     encryptedBytes.hasMagic(0, 0x77, 0x78, 0x67, 0x66))
-            var stickerBytes = if (isWxGf || isWxamByMagic) {
-                MMWXGFJNI.nativeWxamToGif(encryptedBytes)
-            } else {
-                encryptedBytes
-            }
+            // nativeWxamToGif 可返回 null，也可为非图片字节；两者都算这一档没解出来，
+            // 留原字节给下面的 wxam2PicBuf（直接喂给非空形参会当场 NPE 并跳过兜底）。
+            val viaGif = if (isWxGf || isWxamByMagic) MMWXGFJNI.nativeWxamToGif(encryptedBytes) else null
+            var stickerBytes = viaGif?.takeIf { detectImageMime(it) != null } ?: encryptedBytes
             if (detectImageMime(stickerBytes) == null) {
                 val viaPicBuf = MMWXGFJNI.wxam2PicBuf(encryptedBytes, 0, MMWXGFJNI.WXAM_SCENE_MISC)
                 val picBufMime = viaPicBuf?.let { detectImageMime(it) }
                 if (viaPicBuf != null && picBufMime != null) {
-                    // wxam2PicBuf 出的是通用位图：动图这里是带 acTL 的 APNG，不是 GIF
-                    val animated = picBufMime == "image/png" && viaPicBuf.containsSequence("acTL".toByteArray())
                     WeLogger.i(
                         TAG,
-                        "sticker decoded via wxam2PicBuf: mime=$picBufMime" +
-                            " size=${viaPicBuf.size} animated=$animated",
+                        "sticker decoded via wxam2PicBuf: mime=$picBufMime size=${viaPicBuf.size}",
                     )
                     stickerBytes = viaPicBuf
                 } else {
+                    val gifVerdict = if (isWxGf || isWxamByMagic) {
+                        if (viaGif == null) "null" else "unrecognized"
+                    } else {
+                        "skipped"
+                    }
                     error(
                         "failed to decode sticker image: encryptedSize=${encryptedBytes.size}" +
                             " decodedSize=${stickerBytes.size} isWxGF=$isWxGf wxamMagic=$isWxamByMagic" +
+                            " nativeWxamToGif=$gifVerdict" +
                             " decodedHead=${stickerBytes.take(8).joinToString(" ") { "%02X".format(it) }}" +
                             " wxam2PicBuf=${if (viaPicBuf == null) "null" else "unrecognized"}"
                     )
