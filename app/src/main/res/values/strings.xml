@@ -2351,6 +2351,7 @@
     <string name="mention_members_stealth_writer_label">atuserlist writer</string>
     <string name="mention_members_stealth_writer_text_at">text bubble + @name prefix in body</string>
     <string name="mention_members_stealth_writer_card">card, with @ text appended after the XML</string>
+    <string name="mention_members_stealth_writer_card_record">chat-record card (@ text in the des field)</string>
     <string name="mention_members_action_label">@everyone (long-press to configure)</string>
     <string name="mention_members_group_only">This action is only available in groups.</string>
     <string name="mention_members_sent_unseen">Sent (you cannot see this message yourself)</string>

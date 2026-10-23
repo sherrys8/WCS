@@ -2321,6 +2321,7 @@
     <string name="mention_members_stealth_writer_label">注入写法</string>
     <string name="mention_members_stealth_writer_text_at">文本气泡 + 正文补 @昵称</string>
     <string name="mention_members_stealth_writer_card">卡片（@文本贴在 XML 之后）</string>
+    <string name="mention_members_stealth_writer_card_record">聊天记录卡片（@文本放进 des）</string>
     <string name="mention_members_action_label">@所有人（长按配置）</string>
     <string name="mention_members_group_only">只能在群组里使用！</string>
     <string name="mention_members_sent_unseen">已发送（自己无法看到该消息）</string>
