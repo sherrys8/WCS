@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Alternate_email
+import dev.ujhhgtg.reflekt.reflekt
 import dev.sherry.wcs.R
 import dev.sherry.wcs.dexkit.abc.IResolveDex
 import dev.sherry.wcs.dexkit.dsl.dexMethod
@@ -37,6 +38,7 @@ import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.runOnUiThread
 import dev.sherry.wcs.utils.android.showToast
 import dev.sherry.wcs.utils.strings.isGroupChatWxId
+import org.luckypray.dexkit.DexKitBridge
 
 /**
  * @所有人 (含隐蔽@模式)。
@@ -44,19 +46,28 @@ import dev.sherry.wcs.utils.strings.isGroupChatWxId
  * 隐蔽@模式: 确认成员选择后走原生发送路径 (保留引用等全部原生能力),
  * 输入框文本原样发出、不附加 @昵称 前缀; 消息入库前把
  * `<atuserlist><![CDATA[wxid1,wxid2,...]]></atuserlist>` 注入 msgsource。
- * 微信服务器只看 atuserlist 里的真实 wxid CSV 推送"有人@我"提醒,
- * 不要求 content 中存在 @ 文本, 因此接收方气泡内看不到任何 @ 痕迹。
- * (来自"终极隐藏艾特"插件验证的行为; 该插件对出网 protobuf 的混淆类名/
- * 字段偏移反射在 WcS 中由入库钩子替代, 见 SendSecMsg 的同一锚点。)
+ *
+ * 真机量到的事实（2026-10-22，别再往这些方向猜）：
+ * - 裸 CGI 522 发不出「正文不带 @ 文本」的@：可见@（正文拼 `@昵称 `）能送达，隐蔽正文
+ *   与卡片正文都只被服务器接受、对面什么都没有；补齐原生 `silence`/`membercount`/
+ *   `notifystyleflag` 三个字段不改变任何一条结果。
+ * - 入库注入用的 MsgSourceHelper 合并方法是**单节点专用**的：把 `<atuserlist>` 喂给
+ *   sec_msg_node 键的方法，入库后 166 字节的 msgsource 里只多出一个**空的**
+ *   `<sec_msg_node></sec_msg_node>`（对照：随后一条普通文本是 138 字节、不带这个节点），
+ *   我们那份 atuserlist 整个被丢掉；alnode 键那个方法两种 z 都直接让宿主发送失败
+ *   （红色感叹号）。
+ * - 发送途中 `field_lvbuffer` 是 null，msgsource 是微信在插入过程中才组装出来的。
+ *
+ * 所以这一版只带两个侦察，不改发送行为：
+ * - [resolveDex] 把宿主里所有提到 `atuserlist` 的方法打进日志，找微信自己@人时用的写入器；
+ * - [dumpMsgSourceCandidates] 在注入前后把 MsgInfo **整条父类链**上所有 String 字段连值
+ *   打出来（上一版只扫了叶子类自身的 12 个混淆字段，而 `field_*` 全在父类，等于没扫到）。
  *
  * 跨版本锚点 (8.0.65–8.0.77 混淆名各不相同, 不使用类名/方法名):
- * - 消息入库方法: MsgInfoStorage 中 "Error insert message msg:%s talker:%s"
- *   日志唯一, 签名 (msgInfo, boolean) -> long;
- * - msgsource 合并方法: MsgSourceHelper 中唯一的
- *   "(?s)<alnode[^>]*>.*?</alnode>" 正则字面量, 签名均为
- *   static (msgInfo, String, boolean) -> void; 复用它注入 atuserlist 节点,
- *   其内部调用 msgInfo 的 msgsource setter 并置脏, 随入库写入 lvbuffer,
- *   doScene 组装出网请求时 MsgSource 同样携带该节点。
+ * - 消息入库方法: WeMessageApi.methodMsgInfoHandleApiInsertMessage;
+ * - msgsource 合并方法: MsgSourceHelper 里 "(?s)<sec_msg_node[^>]*>.*?</sec_msg_node>"
+ *   正则字面量, static (msgInfo, String nodeXml, boolean) -> void —— 与 SendSecMsg 同一个，
+ *   它是这条注入通路上唯一被真机证明能写出节点的写入器。
  */
 object MentionMembers : SwitchFeature(), IResolveDex {
 
@@ -77,13 +88,59 @@ object MentionMembers : SwitchFeature(), IResolveDex {
     @Volatile
     private var pendingStealthAt: Pair<String, String>? = null
 
-    // MsgSourceHelper 节点合并方法: static (msgInfo, String nodeXml, boolean) -> void
+    // MsgSourceHelper 的 sec_msg_node 合并方法: static (msgInfo, String nodeXml, boolean) -> void
+    // —— SendSecMsg 用的同一个，是这条通路上唯一被真机证明不会打断发送的写入器；
+    //    换成 alnode 键那个方法，两种 z 都会让宿主发送直接失败（红色感叹号）。
     private val methodMergeMsgSourceNode by dexMethod {
         matcher {
-            usingEqStrings("(?s)<alnode[^>]*>.*?</alnode>")
+            usingEqStrings("(?s)<sec_msg_node[^>]*>.*?</sec_msg_node>")
             paramCount(3)
             returnType("void")
         }
+    }
+
+    /**
+     * 侦察: 不取用也不缓存，只把宿主里所有提到 `atuserlist` 的方法打进日志。
+     * 找到微信自己@人时写 atuserlist 的那个方法，隐蔽@才有合法写入器。
+     */
+    override fun resolveDex(dexKit: DexKitBridge) {
+        val candidates = dexKit.findMethod {
+            matcher {
+                usingStrings("atuserlist")
+            }
+        }
+        // 我们要的写入器长这样: static (msgInfo, String nodeXml, boolean) -> void
+        val writerShape = "Ljava/lang/String;Z)V"
+        val shaped = candidates.filter { candidate -> candidate.methodSign.endsWith(writerShape) }
+        val listed = if (shaped.isEmpty()) candidates else shaped
+        WeLogger.logChunkedD(
+            TAG,
+            "atuserlist recon: total=${candidates.size} writerShaped=${shaped.size}" +
+                listed.take(60).joinToString(prefix = " | ") {
+                    "${it.className}::${it.methodName}${it.methodSign}"
+                },
+        )
+    }
+
+    /**
+     * 侦察: 打印整条父类链上的 String 字段。`MessageInfo` 读 `field_*` 走的是
+     * `getField(name, superclass = true)`，只扫叶子类等于什么都没扫。
+     */
+    private fun dumpMsgSourceCandidates(instance: Any, label: String) {
+        val strings = instance.reflekt().fields {
+            superclass()
+            type = String::class
+        }.mapNotNull { field ->
+            val value = field.get() as? String ?: return@mapNotNull null
+            "${field.declaringClass.simpleName}.${field.name}=${value.take(120)}"
+        }
+        val carriers = strings.filter { it.contains("msgsource") }.ifEmpty { listOf("<none>") }
+            .joinToString(" | ")
+        WeLogger.logChunkedD(
+            TAG,
+            "stealth scan $label: class=${instance.javaClass.name} carriers=$carriers" +
+                " strings=${strings.joinToString(" | ")}",
+        )
     }
 
     private fun showSettingsDialog(context: Context) {
@@ -269,6 +326,7 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                 return@hookBefore
             }
 
+            dumpMsgSourceCandidates(args[0]!!, "before")
             // z=false: 只改内存 msgsource, 随入库方法写入
             methodMergeMsgSourceNode.method.invoke(
                 null,
@@ -276,10 +334,15 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                 "<atuserlist><![CDATA[${pending.second}]]></atuserlist>",
                 false,
             )
+            dumpMsgSourceCandidates(args[0]!!, "after")
+            val buffer = msgInfo.lvBuffer
+            val hasAtList = buffer?.toString(Charsets.ISO_8859_1)?.contains("atuserlist") == true
             WeLogger.i(
                 TAG,
                 "stealth injected: talker=${msgInfo.talker} content=${msgInfo.content.take(20)}" +
-                    " count=${pending.second.split(',').count { it.isNotEmpty() }}",
+                    " count=${pending.second.split(',').count { it.isNotEmpty() }}" +
+                    " lvbuffer=${buffer?.size ?: -1}B atuserlist=$hasAtList" +
+                    " msgsource=${msgInfo.msgSource}",
             )
         }
 
