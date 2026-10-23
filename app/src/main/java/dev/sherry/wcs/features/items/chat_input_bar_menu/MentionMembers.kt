@@ -13,7 +13,6 @@ import com.composables.icons.materialsymbols.outlined.Alternate_email
 import dev.ujhhgtg.reflekt.reflekt
 import dev.sherry.wcs.R
 import dev.sherry.wcs.dexkit.abc.IResolveDex
-import dev.sherry.wcs.dexkit.dsl.dexMethod
 import dev.sherry.wcs.features.api.core.WeApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.core.WeMessageApi
@@ -44,30 +43,26 @@ import org.luckypray.dexkit.DexKitBridge
  * @所有人 (含隐蔽@模式)。
  *
  * 隐蔽@模式: 确认成员选择后走原生发送路径 (保留引用等全部原生能力),
- * 输入框文本原样发出、不附加 @昵称 前缀; 消息入库前把
- * `<atuserlist><![CDATA[wxid1,wxid2,...]]></atuserlist>` 注入 msgsource。
+ * 输入框文本原样发出、不附加 @昵称 前缀; 消息入库前往 msgsource 插一个
+ * `<atuserlist><![CDATA[wxid1,wxid2,...]]></atuserlist>` 节点，让对面被@而气泡里没有 @ 文本。
  *
- * 真机量到的事实（2026-10-22，别再往这些方向猜）：
- * - 裸 CGI 522 发不出「正文不带 @ 文本」的@：可见@（正文拼 `@昵称 `）能送达，隐蔽正文
- *   与卡片正文都只被服务器接受、对面什么都没有；补齐原生 `silence`/`membercount`/
+ * 注入点在 2026-10-23 定下来了: 发送途中 `field_lvbuffer` 还是 null，真正承载 msgsource 的是
+ * 父类上一个 String 字段（真机 `com.tencent.mm.storage.e9` → 父类 `c8.G`，值形如
+ * `<msgsource><pua>1</pua><eggSeed>…</eggSeed></msgsource>`），入库那 166 字节的 lvbuffer
+ * 就是它序列化出来的。MsgSourceHelper 的合并方法写的也正是它，但那种方法是**单节点专用**的：
+ * 把 `<atuserlist>` 喂给 sec_msg_node 键的方法，只会多写出一个**空的**
+ * `<sec_msg_node></sec_msg_node>`（对照: 随后一条普通文本是 138 字节、不带这个节点），
+ * 我们那份 atuserlist 整个被丢掉。所以这里按值找到那个字段直接写。
+ *
+ * 已排掉、别再试的方向:
+ * - 裸 CGI 522 发不出「正文不带 @ 文本」的@：可见@（正文拼 `@昵称 `）能送达，隐蔽正文与
+ *   卡片正文都只被服务器接受、对面什么都没有；补齐原生 `silence`/`membercount`/
  *   `notifystyleflag` 三个字段不改变任何一条结果。
- * - 入库注入用的 MsgSourceHelper 合并方法是**单节点专用**的：把 `<atuserlist>` 喂给
- *   sec_msg_node 键的方法，入库后 166 字节的 msgsource 里只多出一个**空的**
- *   `<sec_msg_node></sec_msg_node>`（对照：随后一条普通文本是 138 字节、不带这个节点），
- *   我们那份 atuserlist 整个被丢掉；alnode 键那个方法两种 z 都直接让宿主发送失败
- *   （红色感叹号）。
- * - 发送途中 `field_lvbuffer` 是 null，msgsource 是微信在插入过程中才组装出来的。
- *
- * 所以这一版只带两个侦察，不改发送行为：
- * - [resolveDex] 把宿主里所有提到 `atuserlist` 的方法打进日志，找微信自己@人时用的写入器；
- * - [dumpMsgSourceCandidates] 在注入前后把 MsgInfo **整条父类链**上所有 String 字段连值
- *   打出来（上一版只扫了叶子类自身的 12 个混淆字段，而 `field_*` 全在父类，等于没扫到）。
+ * - alnode 键的合并方法: `z=false` 与 `z=true` 两次都直接让宿主发送失败（红色感叹号）。
  *
  * 跨版本锚点 (8.0.65–8.0.77 混淆名各不相同, 不使用类名/方法名):
  * - 消息入库方法: WeMessageApi.methodMsgInfoHandleApiInsertMessage;
- * - msgsource 合并方法: MsgSourceHelper 里 "(?s)<sec_msg_node[^>]*>.*?</sec_msg_node>"
- *   正则字面量, static (msgInfo, String nodeXml, boolean) -> void —— 与 SendSecMsg 同一个，
- *   它是这条注入通路上唯一被真机证明能写出节点的写入器。
+ * - msgsource 载体字段: 不写死名字，在整条父类链上按值（含 `<msgsource>` 的 String 字段）认。
  */
 object MentionMembers : SwitchFeature(), IResolveDex {
 
@@ -88,20 +83,10 @@ object MentionMembers : SwitchFeature(), IResolveDex {
     @Volatile
     private var pendingStealthAt: Pair<String, String>? = null
 
-    // MsgSourceHelper 的 sec_msg_node 合并方法: static (msgInfo, String nodeXml, boolean) -> void
-    // —— SendSecMsg 用的同一个，是这条通路上唯一被真机证明不会打断发送的写入器；
-    //    换成 alnode 键那个方法，两种 z 都会让宿主发送直接失败（红色感叹号）。
-    private val methodMergeMsgSourceNode by dexMethod {
-        matcher {
-            usingEqStrings("(?s)<sec_msg_node[^>]*>.*?</sec_msg_node>")
-            paramCount(3)
-            returnType("void")
-        }
-    }
-
     /**
      * 侦察: 不取用也不缓存，只把宿主里所有提到 `atuserlist` 的方法打进日志。
-     * 找到微信自己@人时写 atuserlist 的那个方法，隐蔽@才有合法写入器。
+     * 其中 `com.tencent.mm.storage.<MsgInfo>::s2(String)Z` 是唯一提到 atuserlist 的
+     * 单参方法，若按值写字段这条不通，它就是下一个要试的宿主自带 setter。
      */
     override fun resolveDex(dexKit: DexKitBridge) {
         val candidates = dexKit.findMethod {
@@ -327,23 +312,32 @@ object MentionMembers : SwitchFeature(), IResolveDex {
             }
 
             dumpMsgSourceCandidates(args[0]!!, "before")
-            // z=false: 只改内存 msgsource, 随入库方法写入
-            methodMergeMsgSourceNode.method.invoke(
-                null,
-                args[0],
-                "<atuserlist><![CDATA[${pending.second}]]></atuserlist>",
-                false,
-            )
+            val node = "<atuserlist><![CDATA[${pending.second}]]></atuserlist>"
+            // 字段名各版本都不同，按值认：整条父类链上唯一装着 <msgsource> 的 String 字段
+            // 就是发送时的源头（真机 e9 → 父类 c8.G，MsgSourceHelper 写的也正是它，
+            // 入库那 166B lvbuffer 就是它序列化出来的）
+            val carrier = args[0]!!.reflekt().fields {
+                superclass()
+                type = String::class
+            }.firstOrNull { field -> (field.get() as? String)?.contains("<msgsource>") == true }
+            if (carrier == null) {
+                WeLogger.w(
+                    TAG,
+                    "stealth skipped: no msgsource String field on ${args[0]!!.javaClass.name}",
+                )
+            } else {
+                val current = carrier.get() as String
+                if (!current.contains("<atuserlist>")) {
+                    carrier.set("<msgsource>$node" + current.removePrefix("<msgsource>"))
+                }
+                WeLogger.i(
+                    TAG,
+                    "stealth injected: talker=${msgInfo.talker} content=${msgInfo.content.take(20)}" +
+                        " count=${pending.second.split(',').count { it.isNotEmpty() }}" +
+                        " msgsource=${carrier.get()}",
+                )
+            }
             dumpMsgSourceCandidates(args[0]!!, "after")
-            val buffer = msgInfo.lvBuffer
-            val hasAtList = buffer?.toString(Charsets.ISO_8859_1)?.contains("atuserlist") == true
-            WeLogger.i(
-                TAG,
-                "stealth injected: talker=${msgInfo.talker} content=${msgInfo.content.take(20)}" +
-                    " count=${pending.second.split(',').count { it.isNotEmpty() }}" +
-                    " lvbuffer=${buffer?.size ?: -1}B atuserlist=$hasAtList" +
-                    " msgsource=${msgInfo.msgSource}",
-            )
         }
 
         WeChatInputBarMenuApi.addProvider(provider)
