@@ -1,6 +1,7 @@
 package dev.sherry.wcs.features.items.chat_input_bar_menu
 
 import android.content.Context
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -13,6 +14,7 @@ import com.composables.icons.materialsymbols.outlined.Alternate_email
 import dev.ujhhgtg.reflekt.reflekt
 import dev.sherry.wcs.R
 import dev.sherry.wcs.dexkit.abc.IResolveDex
+import dev.sherry.wcs.dexkit.dsl.dexMethod
 import dev.sherry.wcs.features.api.core.WeApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.core.WeMessageApi
@@ -31,6 +33,8 @@ import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.ContactsSelector
 import dev.sherry.wcs.ui.content.TextButton
+import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
+import dev.sherry.wcs.ui.content.m3.DropdownOption
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.WeLogger
@@ -52,7 +56,16 @@ import org.luckypray.dexkit.DexKitBridge
  * 就是它序列化出来的。MsgSourceHelper 的合并方法写的也正是它，但那种方法是**单节点专用**的：
  * 把 `<atuserlist>` 喂给 sec_msg_node 键的方法，只会多写出一个**空的**
  * `<sec_msg_node></sec_msg_node>`（对照: 随后一条普通文本是 138 字节、不带这个节点），
- * 我们那份 atuserlist 整个被丢掉。所以这里按值找到那个字段直接写。
+ * 我们那份 atuserlist 整个被丢掉。所以改成按值找到那个字段直接写。
+ * `git+1ed287f2` 实测：字段确实写进去了（`c8.G` 带上 atuserlist、hook 零异常），
+ * 但发送仍然红色感叹号 —— 失败点从「写不进去」移到「微信不接受这份 msgsource」。
+ * 剩下两个可能各自成一档：
+ * - [STEALTH_WRITER_SETTER] 改走 MsgInfo 自己的 setter（recon 里唯一提到 atuserlist 的
+ *   `(String) -> boolean` 方法），排掉「绕开 setter 少了脏标记」；
+ * - [STEALTH_WRITER_NATIVE_NODES] 仍写字段，但按真机原生 @all 补齐 `eggIncluded`/`silence`/
+ *   `membercount`/`notifystyleflag`，排掉「缺配套兄弟节点」。
+ * 两档都不通，就是「atuserlist 必须与正文里的 @ 文本对应」这条一致性检查成立，隐蔽@判死
+ * （裸 522 那轮已经给出同向证据：正文没有 @ 文本时对面连消息都收不到）。
  *
  * 已排掉、别再试的方向:
  * - 裸 CGI 522 发不出「正文不带 @ 文本」的@：可见@（正文拼 `@昵称 `）能送达，隐蔽正文与
@@ -62,7 +75,8 @@ import org.luckypray.dexkit.DexKitBridge
  *
  * 跨版本锚点 (8.0.65–8.0.77 混淆名各不相同, 不使用类名/方法名):
  * - 消息入库方法: WeMessageApi.methodMsgInfoHandleApiInsertMessage;
- * - msgsource 载体字段: 不写死名字，在整条父类链上按值（含 `<msgsource>` 的 String 字段）认。
+ * - msgsource 载体字段: 不写死名字，在整条父类链上按值（含 `<msgsource>` 的 String 字段）认;
+ * - msgsource setter: 也不写死名字，按签名认（单参 String、返回 boolean、提到 atuserlist）。
  */
 object MentionMembers : SwitchFeature(), IResolveDex {
 
@@ -78,10 +92,30 @@ object MentionMembers : SwitchFeature(), IResolveDex {
 
     private var stealthMentionAll by WePrefs.prefOption("mention_members_stealth_all", false)
 
-    // 点击菜单确认后置位 (talker 到 atuserlist CSV); 消息入库发生在 performSend
-    // 之后的异步流程里, 由入库钩子消费。发送失败残留的标记由 talker 不匹配兜底丢弃。
+    /** 隐蔽@的两种写法: A=走宿主自己的 setter, B=按值写字段并把原生兄弟节点补齐 */
+    private const val STEALTH_WRITER_SETTER = "setter"
+    private const val STEALTH_WRITER_NATIVE_NODES = "native"
+
+    private var stealthWriterMode by WePrefs.prefOption(
+        "mention_members_stealth_writer",
+        STEALTH_WRITER_SETTER,
+    )
+
+    // 点击菜单确认后置位 (talker、atuserlist CSV、含自己的成员数); 消息入库发生在
+    // performSend 之后的异步流程里, 由入库钩子消费。发送失败残留的标记由 talker 不匹配兜底丢弃。
     @Volatile
-    private var pendingStealthAt: Pair<String, String>? = null
+    private var pendingStealthAt: Triple<String, String, Int>? = null
+
+    // MsgInfo 的 msgsource setter: (String) -> boolean
+    // —— 方法名各版本混淆不同，按签名认：recon 里唯一提到 atuserlist 的单参 boolean 方法
+    private val methodSetMsgSource by dexMethod {
+        matcher {
+            paramCount(1)
+            paramTypes(String::class.java)
+            returnType("boolean")
+            usingStrings("atuserlist")
+        }
+    }
 
     /**
      * 侦察: 不取用也不缓存，只把宿主里所有提到 `atuserlist` 的方法打进日志。
@@ -131,18 +165,42 @@ object MentionMembers : SwitchFeature(), IResolveDex {
     private fun showSettingsDialog(context: Context) {
         showComposeDialog(context) {
             var stealthState by remember { mutableStateOf(stealthMentionAll) }
+            var writerState by remember { mutableStateOf(stealthWriterMode) }
             AlertDialogContent(
                 title = { Text(stringResource(R.string.mention_members_settings_title)) },
                 text = {
-                    SwitchWidget(
-                        title = stringResource(R.string.mention_members_stealth_label),
-                        description = stringResource(R.string.mention_members_stealth_description),
-                        checked = stealthState,
-                        onCheckedChange = {
-                            stealthState = it
-                            stealthMentionAll = it
-                        },
-                    )
+                    Column {
+                        SwitchWidget(
+                            title = stringResource(R.string.mention_members_stealth_label),
+                            description = stringResource(R.string.mention_members_stealth_description),
+                            checked = stealthState,
+                            onCheckedChange = {
+                                stealthState = it
+                                stealthMentionAll = it
+                            },
+                        )
+                        DropDownMenuWidget(
+                            iconPlaceholder = false,
+                            title = stringResource(R.string.mention_members_stealth_writer_label),
+                            // 传 description 会顶掉当前选中项的显示，这一行要的就是看见选了哪种
+                            description = null,
+                            value = writerState,
+                            options = listOf(
+                                DropdownOption(
+                                    STEALTH_WRITER_SETTER,
+                                    stringResource(R.string.mention_members_stealth_writer_setter),
+                                ),
+                                DropdownOption(
+                                    STEALTH_WRITER_NATIVE_NODES,
+                                    stringResource(R.string.mention_members_stealth_writer_native),
+                                ),
+                            ),
+                            onValueChange = {
+                                writerState = it
+                                stealthWriterMode = it
+                            },
+                        )
+                    }
                 },
                 dismissButton = {
                     TextButton(onDismiss) { Text(stringResource(R.string.dialog_close)) }
@@ -220,11 +278,15 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                                         .map { it.wxId }
                                         .filter { it != "weixin" && it != "filehelper" }
                                         .take(MAX_AT_USERS)
-                                    pendingStealthAt = currentConv to atUserIds.joinToString(",")
+                                    pendingStealthAt = Triple(
+                                        currentConv,
+                                        atUserIds.joinToString(","),
+                                        allMembers.size + 1,
+                                    )
                                     WeLogger.i(
                                         TAG,
-                                        "stealth armed: talker=$currentConv count=${atUserIds.size}" +
-                                            " first=${atUserIds.take(3)}",
+                                        "stealth armed: mode=$stealthWriterMode talker=$currentConv" +
+                                            " count=${atUserIds.size} first=${atUserIds.take(3)}",
                                     )
                                     WeChatInputBarMenuApi.performSend(chatFooter)
                                     return@ContactsSelector
@@ -312,31 +374,43 @@ object MentionMembers : SwitchFeature(), IResolveDex {
             }
 
             dumpMsgSourceCandidates(args[0]!!, "before")
-            val node = "<atuserlist><![CDATA[${pending.second}]]></atuserlist>"
+            val atNode = "<atuserlist><![CDATA[${pending.second}]]></atuserlist>"
+            // B: 按真机抓到的原生 @all 把兄弟节点补齐（signature 是服务端下发的，伪造不了）
+            val extraNodes = if (stealthWriterMode == STEALTH_WRITER_NATIVE_NODES) {
+                "<eggIncluded>1</eggIncluded><silence>0</silence>" +
+                    "<membercount>${pending.third}</membercount><notifystyleflag>1</notifystyleflag>"
+            } else {
+                ""
+            }
             // 字段名各版本都不同，按值认：整条父类链上唯一装着 <msgsource> 的 String 字段
-            // 就是发送时的源头（真机 e9 → 父类 c8.G，MsgSourceHelper 写的也正是它，
-            // 入库那 166B lvbuffer 就是它序列化出来的）
+            // 就是发送时的源头（真机 e9 → 父类 c8.G，入库那 166B lvbuffer 由它序列化出来）
             val carrier = args[0]!!.reflekt().fields {
                 superclass()
                 type = String::class
             }.firstOrNull { field -> (field.get() as? String)?.contains("<msgsource>") == true }
-            if (carrier == null) {
+            val current = carrier?.get() as String? ?: "<msgsource></msgsource>"
+            val payload = if (current.contains("<atuserlist>")) {
+                current
+            } else {
+                "<msgsource>$atNode$extraNodes" + current.removePrefix("<msgsource>")
+            }
+            if (stealthWriterMode == STEALTH_WRITER_SETTER) {
+                // A: 走微信自己的 setter —— 它认不认 atuserlist、会不会顺手改掉 G，
+                //    都由紧跟的 scan after 作证
+                methodSetMsgSource.method.invoke(args[0], payload)
+            } else if (carrier != null) {
+                carrier.set(payload)
+            } else {
                 WeLogger.w(
                     TAG,
                     "stealth skipped: no msgsource String field on ${args[0]!!.javaClass.name}",
                 )
-            } else {
-                val current = carrier.get() as String
-                if (!current.contains("<atuserlist>")) {
-                    carrier.set("<msgsource>$node" + current.removePrefix("<msgsource>"))
-                }
-                WeLogger.i(
-                    TAG,
-                    "stealth injected: talker=${msgInfo.talker} content=${msgInfo.content.take(20)}" +
-                        " count=${pending.second.split(',').count { it.isNotEmpty() }}" +
-                        " msgsource=${carrier.get()}",
-                )
             }
+            WeLogger.i(
+                TAG,
+                "stealth injected: mode=$stealthWriterMode talker=${msgInfo.talker}" +
+                    " count=${pending.second.split(',').count { it.isNotEmpty() }} written=$payload",
+            )
             dumpMsgSourceCandidates(args[0]!!, "after")
         }
 
