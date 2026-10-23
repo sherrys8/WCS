@@ -2347,7 +2347,7 @@
     <!-- Chat-input-bar-menu and API-core resources. -->
     <string name="mention_members_settings_title">@everyone settings</string>
     <string name="mention_members_stealth_label">Stealth @everyone</string>
-    <string name="mention_members_stealth_description">When enabled, confirming member selection sends the input text through the native path, injects the atuserlist node as the message is stored, and adds the @name text to the body. On a real device this does trigger the peer's mention alert - the cost is that the @names stay visible, because WeChat requires atuserlist to match the @ text in the body. Pick the card writer below to keep the mention while hiding that text. Groups over 200 members notify only the first 200. When disabled, the message starts with @name text.</string>
+    <string name="mention_members_stealth_description">When enabled, confirming member selection sends the input text through the native path, injects the atuserlist node as the message is stored, and adds the @name text to the body. On a real device this does trigger the mention alert on the other side, but the cost is that the @names stay visible, because WeChat requires atuserlist to match the @ text in the body. Pick the card writer below to keep the mention while hiding that text. Groups over 200 members notify only the first 200. When disabled, the message starts with @name text.</string>
     <string name="mention_members_stealth_writer_label">atuserlist writer</string>
     <string name="mention_members_stealth_writer_text_at">text bubble + @name prefix in body</string>
     <string name="mention_members_stealth_writer_card">card, with @ text appended after the XML</string>
