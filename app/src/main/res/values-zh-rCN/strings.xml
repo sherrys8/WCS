@@ -2319,8 +2319,8 @@
     <string name="mention_members_stealth_label">隐蔽@所有人</string>
     <string name="mention_members_stealth_description">开启时确认成员选择后以原生方式发送输入框文本（不附带@昵称前缀），并在消息入库前往它的 msgsource 注入 atuserlist。这条通路至今没在真机跑通过：对面要么收不到提醒，要么发送直接失败，所以在下面「注入写法」里各选一种、各发一条比对。群成员超过 200 人时仅提醒前 200 人。关闭时在消息头部附带@昵称文本</string>
     <string name="mention_members_stealth_writer_label">注入写法</string>
-    <string name="mention_members_stealth_writer_setter">宿主 setter（String 进 boolean 出）</string>
-    <string name="mention_members_stealth_writer_native">写字段 + 补齐原生节点</string>
+    <string name="mention_members_stealth_writer_text_at">文本气泡 + 正文补 @昵称</string>
+    <string name="mention_members_stealth_writer_card">卡片，@文本藏在 XML 里</string>
     <string name="mention_members_action_label">@所有人（长按配置）</string>
     <string name="mention_members_group_only">只能在群组里使用！</string>
     <string name="mention_members_sent_unseen">已发送（自己无法看到该消息）</string>

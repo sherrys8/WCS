@@ -2349,8 +2349,8 @@
     <string name="mention_members_stealth_label">Stealth @everyone</string>
     <string name="mention_members_stealth_description">When enabled, confirming member selection sends the input text natively (no @name prefix) and the atuserlist node is injected into the message as it is stored. This has never worked on a device yet - the peer either gets no mention alert or the send fails outright - so pick one of the two writers below and send one message with each. Groups over 200 members notify only the first 200. When disabled, the message starts with @name text.</string>
     <string name="mention_members_stealth_writer_label">atuserlist writer</string>
-    <string name="mention_members_stealth_writer_setter">host setter (String to boolean)</string>
-    <string name="mention_members_stealth_writer_native">write field + native sibling nodes</string>
+    <string name="mention_members_stealth_writer_text_at">text bubble + @name prefix in body</string>
+    <string name="mention_members_stealth_writer_card">card, with @ text hidden inside the XML</string>
     <string name="mention_members_action_label">@everyone (long-press to configure)</string>
     <string name="mention_members_group_only">This action is only available in groups.</string>
     <string name="mention_members_sent_unseen">Sent (you cannot see this message yourself)</string>
