@@ -2317,10 +2317,10 @@
     <!-- 聊天输入栏菜单与 API 核心简体中文资源。 -->
     <string name="mention_members_settings_title">@所有人设置</string>
     <string name="mention_members_stealth_label">隐蔽@所有人</string>
-    <string name="mention_members_stealth_description">开启时确认成员选择后以原生方式发送输入框文本（不附带@昵称前缀），并在消息入库前往它的 msgsource 注入 atuserlist。这条通路至今没在真机跑通过：对面要么收不到提醒，要么发送直接失败，所以在下面「注入写法」里各选一种、各发一条比对。群成员超过 200 人时仅提醒前 200 人。关闭时在消息头部附带@昵称文本</string>
+    <string name="mention_members_stealth_description">开启时确认成员选择后以原生方式发送输入框文本，消息入库前往它的 msgsource 注入 atuserlist，并往正文补上 @昵称 —— 真机已能触发对面「有人@你」，代价是正文里必然带着 @昵称（微信要求 atuserlist 与正文的 @ 文本对应）。想少看见 @ 痕迹就选下面的卡片档。群成员超过 200 人时仅提醒前 200 人。关闭时在消息头部附带@昵称文本，走裸 CGI 发送</string>
     <string name="mention_members_stealth_writer_label">注入写法</string>
     <string name="mention_members_stealth_writer_text_at">文本气泡 + 正文补 @昵称</string>
-    <string name="mention_members_stealth_writer_card">卡片，@文本藏在 XML 里</string>
+    <string name="mention_members_stealth_writer_card">卡片（@文本贴在 XML 之后）</string>
     <string name="mention_members_action_label">@所有人（长按配置）</string>
     <string name="mention_members_group_only">只能在群组里使用！</string>
     <string name="mention_members_sent_unseen">已发送（自己无法看到该消息）</string>

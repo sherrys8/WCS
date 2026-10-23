@@ -45,9 +45,10 @@ import org.luckypray.dexkit.DexKitBridge
 /**
  * @所有人 (含隐蔽@模式)。
  *
- * 隐蔽@模式: 确认成员选择后走原生发送路径 (保留引用等全部原生能力),
- * 输入框文本原样发出、不附加 @昵称 前缀; 消息入库前往 msgsource 插一个
- * `<atuserlist><![CDATA[wxid1,wxid2,...]]></atuserlist>` 节点，让对面被@而气泡里没有 @ 文本。
+ * 隐蔽@模式: 确认成员选择后走原生发送路径 (保留引用等全部原生能力)，消息入库前往它的
+ * msgsource 注入 `<atuserlist><![CDATA[wxid1,wxid2,...]]></atuserlist>`，并往正文补
+ * `@昵称 `。真机（`git+d68aa208`）已验证这条路能触发对面「有人@你」。
+ * 微信要求 atuserlist 与正文里的 @ 文本对应，所以「@ 完全不可见」只能靠卡片档去绕。
  *
  * 注入点在 2026-10-23 定下来了: 发送途中 `field_lvbuffer` 还是 null，真正承载 msgsource 的是
  * 父类上一个 String 字段（真机 `com.tencent.mm.storage.e9` → 父类 `c8.G`，值形如
@@ -56,28 +57,27 @@ import org.luckypray.dexkit.DexKitBridge
  * 把 `<atuserlist>` 喂给 sec_msg_node 键的方法，只会多写出一个**空的**
  * `<sec_msg_node></sec_msg_node>`（对照: 随后一条普通文本是 138 字节、不带这个节点），
  * 我们那份 atuserlist 整个被丢掉。所以改成按值找到那个字段直接写。
- * `git+1ed287f2` 实测：字段确实写进去了（`c8.G` 带上 atuserlist、hook 零异常），
- * 但发送仍然红色感叹号 —— 失败点从「写不进去」移到「微信不接受这份 msgsource」。
- * 两个嫌疑各自成一档试：
- * - [STEALTH_MODE_TEXT_AT] 照写 atuserlist，另外把 `@昵称 ` 文本补进 `field_content` 开头
- *   —— 若拦下我们的是「atuserlist 要与正文 @ 文本对应」，这一档就该放行且对面被@；
- *   仍然感叹号，嫌疑就只剩原生那句服务端下发的 `signature`（造不出来）。
- * - [STEALTH_MODE_CARD] 正文换成链接卡片，`@昵称 ` 文本藏在卡片 XML 的 `<attext>` 里
- *   （卡片只渲染 title/des，看不见这段文本，但整段 XML 就是消息正文）；卡片必须走宿主自己的
- *   `WeMessageApi.sendXmlAppMsg`，裸 522 送不出 appmsg。
+ * 两档的差别只在 @ 文本放哪儿：
+ * - [STEALTH_MODE_TEXT_AT] 补在 `field_content` 开头，对面看得见 @昵称（默认档，已验）。
+ * - [STEALTH_MODE_CARD] 正文走宿主 `WeMessageApi.shareWebpage` 发链接卡片，`@昵称 ` 贴在
+ *   `field_content` 里 `</msg>` **之后** —— appmsg 解析到根标签闭合就停，卡片照常渲染而
+ *   整条正文里仍有 @ 文本。
  *
  * 已排掉、别再试的方向:
  * - 裸 CGI 522 发不出「正文不带 @ 文本」的@：可见@（正文拼 `@昵称 `）能送达，隐蔽正文与
  *   卡片正文都只被服务器接受、对面什么都没有；补齐原生 `silence`/`membercount`/
  *   `notifystyleflag` 三个字段不改变任何一条结果。
+ * - 只往 msgsource 写 atuserlist、正文不动：红色感叹号（`git+1ed287f2`）。
  * - alnode 键的合并方法: `z=false` 与 `z=true` 两次都直接让宿主发送失败（红色感叹号）。
  * - `e9::s2(String)Z` 不是 msgsource 的 setter：喂它整份新 msgsource 后 `c8.G` 一字未变
- *   （`git+85cfad08` 的 `setter` 档），所以那条"能发出去但没@"只是没注入成功，不算证据。
+ *   （`git+85cfad08` 的 `setter` 档），所以那次"能发出去但没@"只是没注入成功，不算证据。
+ * - 自己手搓 appmsg XML 走 `WeMessageApi.sendXmlAppMsg`：appid 为空 + url=null 时宿主
+ *   `sendAppMsg` 直接把 `<title>` 当纯文本发出去（真机四次都这样），要卡片就用 `shareWebpage`。
  *
  * 跨版本锚点 (8.0.65–8.0.77 混淆名各不相同, 不使用类名/方法名):
  * - 消息入库方法: WeMessageApi.methodMsgInfoHandleApiInsertMessage;
  * - msgsource 载体字段: 不写死名字，在整条父类链上按值（含 `<msgsource>` 的 String 字段）认;
- * - msgsource setter: 也不写死名字，按签名认（单参 String、返回 boolean、提到 atuserlist）。
+ * - 正文字段: 用列名 `field_content`（DB 列名，不随混淆变）。
  */
 object MentionMembers : SwitchFeature(), IResolveDex {
 
@@ -157,25 +157,6 @@ object MentionMembers : SwitchFeature(), IResolveDex {
             "stealth scan $label: class=${instance.javaClass.name} carriers=$carriers" +
                 " strings=${strings.joinToString(" | ")}",
         )
-    }
-
-    /**
-     * 卡片档的正文：链接卡片 appmsg（`<type>57</type>`），输入框文本进 `<title>`，
-     * `@昵称 ` 文本塞进 `<attext>` —— 微信渲染卡片只认 title/des 那几个字段，
-     * 这个标签看不见，但整段 XML 是消息正文，一致性检查若查正文就能过。
-     */
-    private fun buildStealthCardXml(text: String, atText: String): String {
-        fun escapeXml(value: String) = value
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-
-        return "<msg><appmsg>" +
-            "<title>${escapeXml(text)}</title>" +
-            "<attext>${escapeXml(atText)}</attext>" +
-            "<action>view</action><type>57</type><appattach />" +
-            "</appmsg><fromusername>${WeApi.selfWxId}</fromusername><scene>0</scene>" +
-            "<appinfo><version>1</version><appname /></appinfo><commenturl /></msg>"
     }
 
     private fun showSettingsDialog(context: Context) {
@@ -311,12 +292,20 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                                             " count=${atUserIds.size} first=${atUserIds.take(3)}",
                                     )
                                     if (stealthWriterMode == STEALTH_MODE_CARD) {
-                                        // 卡片必须走宿主自己的 appmsg 通路（裸 522 送不出 appmsg）；
-                                        // @ 文本藏在卡片 XML 里，atuserlist 仍由同一个入库钩子写
-                                        WeMessageApi.sendXmlAppMsg(
+                                        // 卡片必须走宿主自己的网页分享通路：它组装的 appmsg 才真能渲染成卡片。
+                                        // 我们手搓的 <type>57</type> 空壳会被 sendAppMsg 退化成纯文本
+                                        // （真机：appid 空 + url=null → 只把 title 当文本发出去）
+                                        val sent = WeMessageApi.shareWebpage(
                                             currentConv,
-                                            buildStealthCardXml(chatFooter.lastText, atText),
+                                            chatFooter.lastText,
+                                            "",
+                                            WeDatabaseApi.getAvatarUrl(WeApi.selfWxId),
+                                            null,
                                         )
+                                        WeLogger.i(TAG, "stealth card send=$sent")
+                                        if (sent) {
+                                            chatFooter.lastText = ""
+                                        }
                                     } else {
                                         WeChatInputBarMenuApi.performSend(chatFooter)
                                     }
@@ -422,22 +411,28 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                 if (!current.contains("<atuserlist>")) {
                     carrier.set("<msgsource>$atNode" + current.removePrefix("<msgsource>"))
                 }
-                // text_at 档再补正文：若拦我们的是「atuserlist 要与正文 @ 文本对应」，
-                // 这一步才可能放行（卡片档不需要，@ 文本已经在卡片 XML 里）
-                if (stealthWriterMode == STEALTH_MODE_TEXT_AT) {
-                    val contentField = args[0]!!.reflekt().fields {
-                        superclass()
-                        name = "field_content"
-                    }.firstOrNull()
-                    val rawContent = contentField?.get() as? String
-                    if (contentField != null && rawContent != null && !rawContent.startsWith(pending.third)) {
-                        contentField.set(pending.third + rawContent)
-                    }
+                // 一致性检查看的是正文里有没有 @ 文本（真机定论），所以两档都得往
+                // field_content 里补：text_at 补在开头（对面会显示 @昵称），
+                // card 贴在 </msg> 之后 —— appmsg 解析到根标签闭合就停，卡片照常渲染，
+                // 而整条字符串里确实有 @ 文本
+                val contentField = args[0]!!.reflekt().fields {
+                    superclass()
+                    name = "field_content"
+                }.firstOrNull()
+                val rawContent = contentField?.get() as? String
+                if (contentField != null && rawContent != null && !rawContent.contains(pending.third)) {
+                    contentField.set(
+                        if (stealthWriterMode == STEALTH_MODE_CARD) {
+                            rawContent + pending.third
+                        } else {
+                            pending.third + rawContent
+                        },
+                    )
                 }
                 WeLogger.i(
                     TAG,
-                    "stealth injected: mode=$stealthWriterMode talker=${msgInfo.talker}" +
-                        " contentAfter=${msgInfo.content.take(20)} count=" +
+                    "stealth injected: mode=$stealthWriterMode type=${msgInfo.typeCode}" +
+                        " talker=${msgInfo.talker} contentAfter=${msgInfo.content.take(20)} count=" +
                         pending.second.split(',').count { it.isNotEmpty() } +
                         " written=${carrier.get()}",
                 )
