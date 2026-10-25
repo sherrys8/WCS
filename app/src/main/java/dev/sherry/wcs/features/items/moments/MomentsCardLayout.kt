@@ -113,9 +113,21 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
         var card: Drawable? = null
         var cardKey: String? = null
         var divider: View? = null
-        val nestedBaselines = HashMap<View, Drawable?>()
-        var nestedKey: String? = null
+        val nested = HashMap<View, NestedPaint>()
     }
+
+    /**
+     * 评论区一块底色的记账。
+     *
+     * [applied] 是判定「这块还是不是我们涂的」的依据，不能改成只按 [styleKey] 短路：列表重新绑定会把
+     * 宿主的 Drawable 设回去，那一刻配置没变、节点也早登记过，短路一生效这块底色就再也补不回来了。
+     * [baseline] 跟着一起刷新，因为行 View 复用后宿主设回来的那张图未必还是第一次登记的那张。
+     */
+    private class NestedPaint(
+        var baseline: Drawable?,
+        var applied: Drawable?,
+        var styleKey: String?,
+    )
 
     /** 一趟取色的结果；[key] 会参与行的缓存键，所以换色种/换配色风格都会让旧卡片背景重建。 */
     private class Palette(
@@ -370,10 +382,10 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
         state.divider?.let { divider ->
             if (divider.visibility != View.VISIBLE) divider.visibility = View.VISIBLE
         }
-        state.nestedBaselines.forEach { (view, baseline) ->
-            if (view.background !== baseline) view.background = baseline
+        state.nested.forEach { (view, entry) ->
+            if (view.background !== entry.baseline) view.background = entry.baseline
         }
-        state.nestedBaselines.clear()
+        state.nested.clear()
         rowStates.remove(row)
     }
 
@@ -449,6 +461,8 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
         } ?: return
 
         val key = "${palette.nested}|$nestedStrokeEnabled"
+        val radius = NESTED_RADIUS_DP.dpToPx(group.context).toFloat()
+        val stroke = 1.dpToPx(group.context).coerceAtLeast(1)
 
         val targets = ArrayList<View>(4)
         collectBackgroundNodes(interaction, 0, targets)
@@ -457,23 +471,20 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
         }
         if (targets.isEmpty()) targets.add(interaction)
 
-        // 行 View 会被复用，重绑后互动区里的节点实例可能换掉，所以除了配置变了，
-        // 出现没登记过的目标节点也要重涂一次。
-        if (state.nestedKey == key && targets.all { state.nestedBaselines.containsKey(it) }) return
-        state.nestedKey = key
-
         for (target in targets) {
-            if (!state.nestedBaselines.containsKey(target)) {
-                state.nestedBaselines[target] = target.background
-            }
-            target.background = GradientDrawable().apply {
+            val entry = state.nested.getOrPut(target) { NestedPaint(target.background, null, null) }
+            if (target.background === entry.applied && entry.styleKey == key) continue
+            if (target.background !== entry.applied) entry.baseline = target.background
+            entry.applied = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = NESTED_RADIUS_DP.dpToPx(group.context).toFloat()
+                cornerRadius = radius
                 setColor(palette.nested)
                 if (nestedStrokeEnabled) {
-                    setStroke(1.dpToPx(group.context).coerceAtLeast(1), palette.outline)
+                    setStroke(stroke, palette.outline)
                 }
             }
+            entry.styleKey = key
+            target.background = entry.applied
         }
     }
 
