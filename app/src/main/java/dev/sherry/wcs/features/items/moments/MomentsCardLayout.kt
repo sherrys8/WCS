@@ -12,6 +12,10 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import com.tencent.mm.plugin.sns.ui.SnsUserUI
@@ -166,6 +170,12 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
 
     override fun onClick(context: ComponentActivity) {
         showComposeDialog(context) {
+            // 开关的显示必须由 Compose State 驱动（同「首页三卡」）：直接把 MMKV 委托喂给
+            // checked 不是 State，写完偏好也不会重组，滑块看着就是按不动。
+            var stroke by remember { mutableStateOf(strokeEnabled) }
+            var nestedStroke by remember { mutableStateOf(nestedStrokeEnabled) }
+            var grouped by remember { mutableStateOf(groupEnabled) }
+
             AlertDialogContent(
                 title = { Text(stringResource(R.string.moments_card_title)) },
                 text = {
@@ -175,8 +185,9 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
                                 iconPlaceholder = false,
                                 title = stringResource(R.string.moments_card_stroke),
                                 description = stringResource(R.string.moments_card_stroke_description),
-                                checked = strokeEnabled,
+                                checked = stroke,
                                 onCheckedChange = {
+                                    stroke = it
                                     strokeEnabled = it
                                     applyRemembered()
                                 },
@@ -187,8 +198,9 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
                                 iconPlaceholder = false,
                                 title = stringResource(R.string.moments_card_stroke_nested),
                                 description = stringResource(R.string.moments_card_stroke_nested_description),
-                                checked = nestedStrokeEnabled,
+                                checked = nestedStroke,
                                 onCheckedChange = {
+                                    nestedStroke = it
                                     nestedStrokeEnabled = it
                                     applyRemembered()
                                 },
@@ -199,8 +211,9 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
                                 iconPlaceholder = false,
                                 title = stringResource(R.string.moments_card_group),
                                 description = stringResource(R.string.moments_card_group_description),
-                                checked = groupEnabled,
+                                checked = grouped,
                                 onCheckedChange = {
+                                    grouped = it
                                     groupEnabled = it
                                     applyRemembered()
                                 },
