@@ -3222,6 +3222,10 @@
     <string name="moments_card_title">朋友圈卡片布局</string>
     <string name="moments_card_stroke">卡片描边</string>
     <string name="moments_card_stroke_description">给每张卡片描一圈 1dp 边框</string>
+    <string name="moments_card_stroke_nested">评论区描边</string>
+    <string name="moments_card_stroke_nested_description">给点赞/评论那一块也描一圈 1dp 边框</string>
+    <string name="moments_card_group">同作者成组</string>
+    <string name="moments_card_group_description">相邻的同一位好友的动态融成一整块卡片，组内不再留间距和圆角</string>
     <string name="moments_display_details_saved">已保存，重新进入朋友圈后生效</string>
     <string name="moments_fake_likes_menu">伪点赞</string>
     <string name="moments_fake_likes_method_title">伪点赞方式</string>

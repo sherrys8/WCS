@@ -3176,6 +3176,10 @@ Time: {time}</string>
     <string name="moments_card_title">Moments card layout</string>
     <string name="moments_card_stroke">Card border</string>
     <string name="moments_card_stroke_description">Draw a 1dp border around every card</string>
+    <string name="moments_card_stroke_nested">Comment area border</string>
+    <string name="moments_card_stroke_nested_description">Draw a 1dp border around the likes and comments block too</string>
+    <string name="moments_card_group">Group same author</string>
+    <string name="moments_card_group_description">Merge adjacent posts from the same friend into one card, dropping the gap and the inner corners</string>
     <string name="moments_display_details_saved">Saved. Reopen Moments to apply.</string>
     <string name="moments_fake_likes_menu">Fake likes</string>
     <string name="moments_fake_likes_method_title">Fake-like method</string>
