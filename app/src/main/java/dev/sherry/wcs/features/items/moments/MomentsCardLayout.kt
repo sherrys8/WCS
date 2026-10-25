@@ -134,21 +134,24 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
 
     override fun onEnable() {
         listOf(ImproveSnsTimelineUI::class.java, SnsUserUI::class.java).forEach { clazz ->
-            val reflection = clazz.reflekt()
-            // 两处都必须可空取：reflekt 的 firstMethod 只查本类声明，而 onResume 不一定被这两个类
-            // 自己重写；用非空版会在 onEnable 里抛异常，把后面那个类的钩子一起带走 —— 上一版就是
-            // 这样让描边开关永远不实时。也不在这里加 superclass()：那会命中父类的通用 onResume，
-            // 等于把钩子挂到微信所有页面上。
-            reflection.firstMethodOrNull {
+            clazz.reflekt().firstMethodOrNull {
                 name = "onCreate"
                 parameters(Bundle::class)
             }?.hookAfter {
                 scheduleAttach(thisObject as Activity)
             }
-            reflection.firstMethodOrNull {
-                name = "onResume"
-                parameterCount = 0
-            }?.hookAfter { applyRemembered() }
+        }
+
+        // onResume 照「首页三卡」那套写：钩 android.app.Activity 基类，再按类名过滤。朋友圈这两个
+        // 时间线类自己没有声明 onResume，从它们自己身上找永远找不到 —— 上一版就是这么让描边开关
+        // 从头到尾没装上钩子。
+        Activity::class.java.reflekt().firstMethodOrNull { name = "onResume" }?.hookAfter {
+            val activity = thisObject as Activity
+            val name = activity.javaClass.name
+            if (name != ImproveSnsTimelineUI::class.java.name && name != SnsUserUI::class.java.name) {
+                return@hookAfter
+            }
+            applyRemembered()
         }
     }
 
