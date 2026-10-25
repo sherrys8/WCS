@@ -80,12 +80,8 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
     private const val BOTTOM_EXTRA_DP = 7
     private const val MAX_DIVIDER_HEIGHT_PX = 3
 
-    /**
-     * 往上找评论区背景块的最大跳数。真机 dump 里这块是 `ConstraintLayout → LinearLayout(n94)
-     * → ImproveInteractionLayout`，所以背景要么在互动区自己身上、要么在它爹身上；再多跳就会
-     * 爬到整列正文（ConstraintLayout / n95）上，把整列刷成一块颜色。
-     */
-    private const val INTERACTION_SEARCH_HOPS = 1
+    /** 从互动区控件往下找底色节点的最大层数；再深就是正文与图片了。 */
+    private const val NESTED_SEARCH_DEPTH = 2
 
     /** 评论区圆角，取自已批准的稿子（微信自己那块就是很小的圆角）。 */
     private const val NESTED_RADIUS_DP = 4
@@ -113,9 +109,8 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
         var card: Drawable? = null
         var cardKey: String? = null
         var divider: View? = null
-        var interactionView: View? = null
-        var interactionBaseline: Drawable? = null
-        var interactionKey: String? = null
+        val nestedBaselines = HashMap<View, Drawable?>()
+        var nestedKey: String? = null
     }
 
     /** 一趟取色的结果；[key] 会参与行的缓存键，所以换色种/换配色风格都会让旧卡片背景重建。 */
@@ -241,23 +236,31 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
     }
 
     /**
-     * 拨完开关或换完色种后重涂可见条目。除了当场涂，还会排一次布局并在随后几帧里补涂：
-     * 从模块设置页返回时列表可能重新绑定，把刚设好的背景又换掉。
+     * 拨完开关或换完色种后立刻生效。做法照「美化对话列表」那套（`WeConversationListViewApi.refresh`
+     * → `notifyAdapterChanged`）：先当场重涂，再让适配器整体重绑一次 —— 重绑会把行背景换回宿主
+     * 自己的，而重绑必然伴随布局，全局布局回调随后按新配置再涂一遍，所以最终显示的一定是当前开关
+     * 的状态，不需要自己排延时。
      */
     private fun applyRemembered() {
         val containers = lists.toList()
         if (containers.isEmpty()) return
-        containers.forEach { repaint(it) }
-        intArrayOf(120, 400).forEach { delay ->
-            containers.forEach { container ->
-                container.postDelayed({ repaint(container) }, delay.toLong())
-            }
+        containers.forEach { container ->
+            paintAll(container, currentPalette(container.context))
+            notifyAdapterChanged(container)
         }
     }
 
-    private fun repaint(container: ViewGroup) {
-        paintAll(container, currentPalette(container.context))
-        container.requestLayout()
+    private fun notifyAdapterChanged(container: ViewGroup) {
+        val adapter = container.reflekt().firstMethodOrNull {
+            name = "getAdapter"
+            parameterCount = 0
+            superclass()
+        }?.invoke() ?: return
+        adapter.reflekt().firstMethodOrNull {
+            name = "notifyDataSetChanged"
+            parameterCount = 0
+            superclass()
+        }?.invoke()
     }
 
     /** 一趟只重涂当前可见的条目；成组要比较相邻两条的作者，所以先把行收集成有序列表。 */
@@ -351,9 +354,10 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
         state.divider?.let { divider ->
             if (divider.visibility != View.VISIBLE) divider.visibility = View.VISIBLE
         }
-        state.interactionView?.let { view ->
-            if (view.background !== state.interactionBaseline) view.background = state.interactionBaseline
+        state.nestedBaselines.forEach { (view, baseline) ->
+            if (view.background !== baseline) view.background = baseline
         }
+        state.nestedBaselines.clear()
         rowStates.remove(row)
     }
 
@@ -416,43 +420,54 @@ object MomentsCardLayout : ClickableFeature(), IResolveDex {
 
     /**
      * 评论区（点赞/评论那一块）的底色是宿主自己的浅灰，卡片换成莫奈色后它会显得格格不入。
-     * 做法是从互动区控件往上找到第一个带背景的祖先，换成我们自己的圆角矩形：底色
-     * `surfaceContainerHigh`（比卡片再深一档），描边由单独的开关控制。原始 Drawable 记在
-     * RowState 里，关掉功能时还原。
+     *
+     * 微信把这块底色画在哪一层并不固定（实测过的位置有互动区自己身上、它的子 View、以及父节点
+     * `n94`），所以从互动区控件往下找两层、再补上父节点，把所有带背景的节点一起换成我们自己的
+     * 圆角矩形；一个都没找到就直接换在互动区上。原始 Drawable 按节点记在 RowState 里，关掉功能
+     * 逐个还原。
      */
     private fun paintInteraction(group: ViewGroup, state: RowState, palette: Palette) {
         if (WeMomentsApi.classImproveInteractionLayout.isPlaceholder) return
-        var node: View? = group.findViewWhich {
+        val interaction = group.findViewWhich {
             WeMomentsApi.classImproveInteractionLayout.clazz.isInstance(it)
-        }
-        var target: View? = null
-        var hops = 0
-        while (node != null && node !== group && hops <= INTERACTION_SEARCH_HOPS) {
-            if (node.background != null) {
-                target = node
-                break
-            }
-            node = node.parent as? View
-            hops++
-        }
-        if (target == null) return
+        } ?: return
 
-        if (state.interactionView !== target) {
-            state.interactionView = target
-            state.interactionBaseline = target.background
-            state.interactionKey = null
-        }
         val key = "${palette.nested}|$nestedStrokeEnabled"
-        if (state.interactionKey == key) return
-        state.interactionKey = key
-        target.background = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = NESTED_RADIUS_DP.dpToPx(group.context).toFloat()
-            setColor(palette.nested)
-            if (nestedStrokeEnabled) {
-                setStroke(1.dpToPx(group.context).coerceAtLeast(1), palette.outline)
+
+        val targets = ArrayList<View>(4)
+        collectBackgroundNodes(interaction, 0, targets)
+        (interaction.parent as? View)?.let { parent ->
+            if (parent !== group && parent.background != null && !targets.contains(parent)) targets.add(parent)
+        }
+        if (targets.isEmpty()) targets.add(interaction)
+
+        // 行 View 会被复用，重绑后互动区里的节点实例可能换掉，所以除了配置变了，
+        // 出现没登记过的目标节点也要重涂一次。
+        if (state.nestedKey == key && targets.all { state.nestedBaselines.containsKey(it) }) return
+        state.nestedKey = key
+
+        for (target in targets) {
+            if (!state.nestedBaselines.containsKey(target)) {
+                state.nestedBaselines[target] = target.background
+            }
+            target.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = NESTED_RADIUS_DP.dpToPx(group.context).toFloat()
+                setColor(palette.nested)
+                if (nestedStrokeEnabled) {
+                    setStroke(1.dpToPx(group.context).coerceAtLeast(1), palette.outline)
+                }
             }
         }
+    }
+
+    private fun collectBackgroundNodes(node: View, depth: Int, out: ArrayList<View>) {
+        if (node.background != null) {
+            out.add(node)
+            return
+        }
+        if (depth >= NESTED_SEARCH_DEPTH || node !is ViewGroup) return
+        for (i in 0 until node.childCount) collectBackgroundNodes(node.getChildAt(i), depth + 1, out)
     }
 
     /**
