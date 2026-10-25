@@ -875,6 +875,8 @@
     <string name="feature_disable_videos_auto_play_description">Disable automatic playback of videos in Moments</string>
     <string name="feature_display_details_name">Bottom details</string>
     <string name="feature_display_details_description">Display detailed information at the bottom of the Moments list items</string>
+    <string name="feature_moments_card_layout_name">Moments card layout</string>
+    <string name="feature_moments_card_layout_description">Draw each Moments post as its own rounded card (20dp corners, 10dp side inset, 8dp gap) and hide the row divider</string>
     <string name="feature_enhance_query_name">Enhanced Moments history</string>
     <string name="feature_enhance_query_description">Display historical recall and cached Moments content</string>
     <string name="feature_fake_moments_likes_name">Fake Moments likes</string>
@@ -3171,6 +3173,9 @@ Time: {time}</string>
     <string name="moments_display_details_text_format">Text format</string>
     <string name="moments_display_details_time_format">Time format</string>
     <string name="moments_display_details_hide_visibility_icon">Hide visibility icon</string>
+    <string name="moments_card_title">Moments card layout</string>
+    <string name="moments_card_stroke">Card border</string>
+    <string name="moments_card_stroke_description">Draw a 1dp border around every card</string>
     <string name="moments_display_details_saved">Saved. Reopen Moments to apply.</string>
     <string name="moments_fake_likes_menu">Fake likes</string>
     <string name="moments_fake_likes_method_title">Fake-like method</string>

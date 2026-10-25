@@ -80,6 +80,7 @@
 * [朋友圈查询增强](features/moments/enhance-query.md)
 * [拦截朋友圈广告](features/moments/remove-moments-ads.md)
 * [单击不关闭视频播放器](features/moments/no-close-video-player-on-click.md)
+* [朋友圈卡片布局](features/moments/moments-card-layout.md)
 
 ## 红包与支付
 

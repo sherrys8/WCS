@@ -841,6 +841,8 @@
     <string name="feature_disable_videos_auto_play_description">禁止朋友圈中的视频自动播放</string>
     <string name="feature_display_details_name">底部详细信息</string>
     <string name="feature_display_details_description">在朋友圈列表项底部显示详情信息</string>
+    <string name="feature_moments_card_layout_name">朋友圈卡片布局</string>
+    <string name="feature_moments_card_layout_description">把每一条朋友圈画成独立圆角卡片（圆角 20dp、左右内缩 10dp、卡片间距 8dp），并隐藏行间分隔线</string>
     <string name="feature_enhance_query_name">朋友圈查询增强</string>
     <string name="feature_enhance_query_description">显示历史撤回以及缓存过的朋友圈内容</string>
     <string name="feature_fake_moments_likes_name">伪集赞</string>
@@ -3217,6 +3219,9 @@
     <string name="moments_display_details_text_format">文本格式</string>
     <string name="moments_display_details_time_format">时间格式</string>
     <string name="moments_display_details_hide_visibility_icon">隐藏可见范围图标</string>
+    <string name="moments_card_title">朋友圈卡片布局</string>
+    <string name="moments_card_stroke">卡片描边</string>
+    <string name="moments_card_stroke_description">给每张卡片描一圈 1dp 边框</string>
     <string name="moments_display_details_saved">已保存，重新进入朋友圈后生效</string>
     <string name="moments_fake_likes_menu">伪点赞</string>
     <string name="moments_fake_likes_method_title">伪点赞方式</string>
