@@ -876,7 +876,7 @@
     <string name="feature_display_details_name">Bottom details</string>
     <string name="feature_display_details_description">Display detailed information at the bottom of the Moments list items</string>
     <string name="feature_moments_card_layout_name">Moments card layout</string>
-    <string name="feature_moments_card_layout_description">Draw each Moments post as its own rounded card (20dp corners, 10dp side inset, 8dp gap) and hide the row divider</string>
+    <string name="feature_moments_card_layout_description">Draw each Moments post as its own rounded card and hide the row divider</string>
     <string name="feature_enhance_query_name">Enhanced Moments history</string>
     <string name="feature_enhance_query_description">Display historical recall and cached Moments content</string>
     <string name="feature_fake_moments_likes_name">Fake Moments likes</string>
