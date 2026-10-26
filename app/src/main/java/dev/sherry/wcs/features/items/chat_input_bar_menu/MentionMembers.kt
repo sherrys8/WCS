@@ -1,7 +1,6 @@
 package dev.sherry.wcs.features.items.chat_input_bar_menu
 
 import android.content.Context
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -11,9 +10,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Alternate_email
-import dev.ujhhgtg.reflekt.reflekt
 import dev.sherry.wcs.R
 import dev.sherry.wcs.dexkit.abc.IResolveDex
+import dev.sherry.wcs.dexkit.dsl.dexMethod
 import dev.sherry.wcs.features.api.core.WeApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.core.WeMessageApi
@@ -32,57 +31,32 @@ import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.ContactsSelector
 import dev.sherry.wcs.ui.content.TextButton
-import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
-import dev.sherry.wcs.ui.content.m3.DropdownOption
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.runOnUiThread
 import dev.sherry.wcs.utils.android.showToast
 import dev.sherry.wcs.utils.strings.isGroupChatWxId
-import org.luckypray.dexkit.DexKitBridge
 
 /**
  * @所有人 (含隐蔽@模式)。
  *
- * 隐蔽@模式: 确认成员选择后走原生发送路径 (保留引用等全部原生能力)，消息入库前往它的
- * msgsource 注入 `<atuserlist><![CDATA[wxid1,wxid2,...]]></atuserlist>`，并往正文补
- * `@昵称 `。真机（`git+d68aa208`）已验证这条路能触发对面「有人@你」。
- * 微信要求 atuserlist 与正文里的 @ 文本对应，所以「@ 完全不可见」只能靠卡片档去绕。
- *
- * 注入点在 2026-10-23 定下来了: 发送途中 `field_lvbuffer` 还是 null，真正承载 msgsource 的是
- * 父类上一个 String 字段（真机 `com.tencent.mm.storage.e9` → 父类 `c8.G`，值形如
- * `<msgsource><pua>1</pua><eggSeed>…</eggSeed></msgsource>`），入库那 166 字节的 lvbuffer
- * 就是它序列化出来的。MsgSourceHelper 的合并方法写的也正是它，但那种方法是**单节点专用**的：
- * 把 `<atuserlist>` 喂给 sec_msg_node 键的方法，只会多写出一个**空的**
- * `<sec_msg_node></sec_msg_node>`（对照: 随后一条普通文本是 138 字节、不带这个节点），
- * 我们那份 atuserlist 整个被丢掉。所以改成按值找到那个字段直接写。
- * 三档的差别只在 @ 文本放哪儿：
- * - [STEALTH_MODE_TEXT_AT] 补在 `field_content` 开头，对面看得见 @昵称（默认档，已验）。
- * - [STEALTH_MODE_CARD] 正文走宿主 `WeMessageApi.shareWebpage` 发链接卡片，`@昵称 ` 贴在
- *   `field_content` 里 `</msg>` **之后**。真机证伪：入库正文是宿主按 appmsg 对象**重新序列化**
- *   出来的（多出 `<androidsource>`/`<finderLiveProductShare>` 等我们没给的节点），尾巴直接被吞。
- * - [STEALTH_MODE_CARD_RECORD] 发一条聊天记录卡片（`<type>19</type>`），输入文本进 `<title>`、
- *   `@昵称 ` 进 `<des>` —— 这条模板的字段全是宿主解析器认识的，才可能穿过那次重建；赌 `<des>`
- *   在记录卡片气泡里不渲染。
- *
- * 已排掉、别再试的方向:
- * - 裸 CGI 522 发不出「正文不带 @ 文本」的@：可见@（正文拼 `@昵称 `）能送达，隐蔽正文与
- *   卡片正文都只被服务器接受、对面什么都没有；补齐原生 `silence`/`membercount`/
- *   `notifystyleflag` 三个字段不改变任何一条结果。
- * - 只往 msgsource 写 atuserlist、正文不动：红色感叹号（`git+1ed287f2`）。
- * - alnode 键的合并方法: `z=false` 与 `z=true` 两次都直接让宿主发送失败（红色感叹号）。
- * - `e9::s2(String)Z` 不是 msgsource 的 setter：喂它整份新 msgsource 后 `c8.G` 一字未变
- *   （`git+85cfad08` 的 `setter` 档），所以那次"能发出去但没@"只是没注入成功，不算证据。
- * - 自己手搓 appmsg XML 走 `WeMessageApi.sendXmlAppMsg`：`<type>57</type>` 空壳在 appid 为空
- *   + url=null 时被宿主 `sendAppMsg` 当成纯文本发出去（真机四次都这样），要链接卡片就用
- *   `shareWebpage`。聊天记录卡片档仍走这条路，但喂的是解析器认识的完整 `<type>19</type>`
- *   模板，是唯一还在赌的形态。
+ * 隐蔽@模式: 确认成员选择后走原生发送路径 (保留引用等全部原生能力),
+ * 输入框文本原样发出、不附加 @昵称 前缀; 消息入库前把
+ * `<atuserlist><![CDATA[wxid1,wxid2,...]]></atuserlist>` 注入 msgsource。
+ * 微信服务器只看 atuserlist 里的真实 wxid CSV 推送"有人@我"提醒,
+ * 不要求 content 中存在 @ 文本, 因此接收方气泡内看不到任何 @ 痕迹。
+ * (来自"终极隐藏艾特"插件验证的行为; 该插件对出网 protobuf 的混淆类名/
+ * 字段偏移反射在 WcS 中由入库钩子替代, 见 SendSecMsg 的同一锚点。)
  *
  * 跨版本锚点 (8.0.65–8.0.77 混淆名各不相同, 不使用类名/方法名):
- * - 消息入库方法: WeMessageApi.methodMsgInfoHandleApiInsertMessage;
- * - msgsource 载体字段: 不写死名字，在整条父类链上按值（含 `<msgsource>` 的 String 字段）认;
- * - 正文字段: 用列名 `field_content`（DB 列名，不随混淆变）。
+ * - 消息入库方法: MsgInfoStorage 中 "Error insert message msg:%s talker:%s"
+ *   日志唯一, 签名 (msgInfo, boolean) -> long;
+ * - msgsource 合并方法: MsgSourceHelper 中唯一的
+ *   "(?s)<alnode[^>]*>.*?</alnode>" 正则字面量, 签名均为
+ *   static (msgInfo, String, boolean) -> void; 复用它注入 atuserlist 节点,
+ *   其内部调用 msgInfo 的 msgsource setter 并置脏, 随入库写入 lvbuffer,
+ *   doScene 组装出网请求时 MsgSource 同样携带该节点。
  */
 object MentionMembers : SwitchFeature(), IResolveDex {
 
@@ -96,126 +70,37 @@ object MentionMembers : SwitchFeature(), IResolveDex {
 
     private const val TAG = "MentionMembers"
 
-    /**
-     * 隐蔽@的三档写法，差别只在 @ 文本放哪儿：
-     * - `text_at` 写字段并在正文前补 `@昵称 `。真机已验：能发出、对面被@，但对面看得见 @昵称。
-     * - `card` 走宿主 `shareWebpage` 发链接卡片，`@昵称 ` 贴在正文 `</msg>` 之后。真机：卡片
-     *   发得出去，但尾巴被宿主重序列化吞掉，对面既看不见 @ 也没收到提醒。
-     * - `card_record` 发 `<type>19</type>` 聊天记录卡片，输入文本进 `<title>`、`@昵称 ` 进
-     *   `<des>` —— 赌宿主解析器认这条模板，而记录卡片气泡不渲染 des。
-     */
-    private const val STEALTH_MODE_TEXT_AT = "text_at"
-    private const val STEALTH_MODE_CARD = "card"
-    private const val STEALTH_MODE_CARD_RECORD = "card_record"
-
-    private val STEALTH_MODES = setOf(STEALTH_MODE_TEXT_AT, STEALTH_MODE_CARD, STEALTH_MODE_CARD_RECORD)
-
     private var stealthMentionAll by WePrefs.prefOption("mention_members_stealth_all", false)
 
-    private var stealthWriterMode by WePrefs.prefOption(
-        "mention_members_stealth_writer",
-        STEALTH_MODE_TEXT_AT,
-    )
-
-    // 点击菜单确认后置位 (talker、atuserlist CSV、正文该补的 @昵称 文本); 消息入库发生在
-    // 发送之后的异步流程里, 由入库钩子消费。发送失败残留的标记由 talker 不匹配兜底丢弃。
+    // 点击菜单确认后置位 (talker 到 atuserlist CSV); 消息入库发生在 performSend
+    // 之后的异步流程里, 由入库钩子消费。发送失败残留的标记由 talker 不匹配兜底丢弃。
     @Volatile
-    private var pendingStealthAt: Triple<String, String, String>? = null
+    private var pendingStealthAt: Pair<String, String>? = null
 
-    /**
-     * 侦察: 不取用也不缓存，只把宿主里所有提到 `atuserlist` 的方法打进日志。
-     * 其中 `com.tencent.mm.storage.<MsgInfo>::s2(String)Z` 是唯一提到 atuserlist 的
-     * 单参方法，若按值写字段这条不通，它就是下一个要试的宿主自带 setter。
-     */
-    override fun resolveDex(dexKit: DexKitBridge) {
-        val candidates = dexKit.findMethod {
-            matcher {
-                usingStrings("atuserlist")
-            }
+    // MsgSourceHelper 节点合并方法: static (msgInfo, String nodeXml, boolean) -> void
+    private val methodMergeMsgSourceNode by dexMethod {
+        matcher {
+            usingEqStrings("(?s)<alnode[^>]*>.*?</alnode>")
+            paramCount(3)
+            returnType("void")
         }
-        // 我们要的写入器长这样: static (msgInfo, String nodeXml, boolean) -> void
-        val writerShape = "Ljava/lang/String;Z)V"
-        val shaped = candidates.filter { candidate -> candidate.methodSign.endsWith(writerShape) }
-        val listed = if (shaped.isEmpty()) candidates else shaped
-        WeLogger.logChunkedD(
-            TAG,
-            "atuserlist recon: total=${candidates.size} writerShaped=${shaped.size}" +
-                listed.take(60).joinToString(prefix = " | ") {
-                    "${it.className}::${it.methodName}${it.methodSign}"
-                },
-        )
-    }
-
-    /**
-     * 侦察: 打印整条父类链上的 String 字段。`MessageInfo` 读 `field_*` 走的是
-     * `getField(name, superclass = true)`，只扫叶子类等于什么都没扫。
-     */
-    private fun dumpMsgSourceCandidates(instance: Any, label: String) {
-        val strings = instance.reflekt().fields {
-            superclass()
-            type = String::class
-        }.mapNotNull { field ->
-            val value = field.get() as? String ?: return@mapNotNull null
-            "${field.declaringClass.simpleName}.${field.name}=${value.take(120)}"
-        }
-        val carriers = strings.filter { it.contains("msgsource") }.ifEmpty { listOf("<none>") }
-            .joinToString(" | ")
-        WeLogger.logChunkedD(
-            TAG,
-            "stealth scan $label: class=${instance.javaClass.name} carriers=$carriers" +
-                " strings=${strings.joinToString(" | ")}",
-        )
     }
 
     private fun showSettingsDialog(context: Context) {
         showComposeDialog(context) {
             var stealthState by remember { mutableStateOf(stealthMentionAll) }
-            // 旧设备上可能存着已删掉的 setter/native 档；下拉按 == 找选中项，找不到会抛，
-            // 所以先把持久值归一到现存的几种模式
-            var writerState by remember {
-                mutableStateOf(
-                    if (stealthWriterMode in STEALTH_MODES) stealthWriterMode else STEALTH_MODE_TEXT_AT,
-                )
-            }
             AlertDialogContent(
                 title = { Text(stringResource(R.string.mention_members_settings_title)) },
                 text = {
-                    Column {
-                        SwitchWidget(
-                            title = stringResource(R.string.mention_members_stealth_label),
-                            description = stringResource(R.string.mention_members_stealth_description),
-                            checked = stealthState,
-                            onCheckedChange = {
-                                stealthState = it
-                                stealthMentionAll = it
-                            },
-                        )
-                        DropDownMenuWidget(
-                            iconPlaceholder = false,
-                            title = stringResource(R.string.mention_members_stealth_writer_label),
-                            // 传 description 会顶掉当前选中项的显示，这一行要的就是看见选了哪种
-                            description = null,
-                            value = writerState,
-                            options = listOf(
-                                DropdownOption(
-                                    STEALTH_MODE_TEXT_AT,
-                                    stringResource(R.string.mention_members_stealth_writer_text_at),
-                                ),
-                                DropdownOption(
-                                    STEALTH_MODE_CARD,
-                                    stringResource(R.string.mention_members_stealth_writer_card),
-                                ),
-                                DropdownOption(
-                                    STEALTH_MODE_CARD_RECORD,
-                                    stringResource(R.string.mention_members_stealth_writer_card_record),
-                                ),
-                            ),
-                            onValueChange = {
-                                writerState = it
-                                stealthWriterMode = it
-                            },
-                        )
-                    }
+                    SwitchWidget(
+                        title = stringResource(R.string.mention_members_stealth_label),
+                        description = stringResource(R.string.mention_members_stealth_description),
+                        checked = stealthState,
+                        onCheckedChange = {
+                            stealthState = it
+                            stealthMentionAll = it
+                        },
+                    )
                 },
                 dismissButton = {
                     TextButton(onDismiss) { Text(stringResource(R.string.dialog_close)) }
@@ -223,26 +108,6 @@ object MentionMembers : SwitchFeature(), IResolveDex {
             )
         }
     }
-
-    /**
-     * 聊天记录卡片（`<type>19</type>`）正文：输入文本进 `<title>`，`@昵称 ` 进 `<des>`。
-     * 其余字段照抄一条真实记录卡片的骨架 —— 宿主会按 appmsg 对象重新序列化正文，
-     * 只有它认识的字段才能活到入库/出网，所以不能像纯文本那样往字符串尾巴上追加。
-     */
-    private fun buildStealthRecordCardXml(text: String, atText: String): String =
-        "<msg><appmsg><title>${escapeXml(text)}</title><des>${escapeXml(atText)}</des>" +
-            "<action>view</action><type>19</type>" +
-            "<statextstr>GhQKEnd4MjgxYTcwYTNkMzkwYmRmMg==</statextstr>" +
-            "<recorditem><![CDATA[<recordinfo></recordinfo>]]></recorditem>" +
-            "<finderLiveProductShare><isPriceBeginShow>false</isPriceBeginShow></finderLiveProductShare>" +
-            "<gameshare><appbrandext><priority>-1</priority></appbrandext></gameshare>" +
-            "</appmsg><appinfo><version>1</version><appname>好友已设置小可爱可见</appname></appinfo>" +
-            "<extcommoninfo><media_expire_at>1793772892</media_expire_at></extcommoninfo></msg>"
-
-    private fun escapeXml(value: String) = value
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
 
     private val provider = WeChatInputBarMenuApi.IActionItemsProvider {
         listOf(
@@ -307,56 +172,19 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                                 val selectedContacts = allMembers.filter { it.wxId in selectedWxIds }
 
                                 if (stealthMentionAll) {
-                                    // 文本档由入库钩子往正文补 @昵称；卡片档的 @ 文本藏在卡片字段里，
-                                    // atuserlist 同样由入库钩子注入
+                                    // 原生发送输入框原文 (不加 @ 昵称前缀), atuserlist
+                                    // 由入库钩子注入 msgsource
                                     val atUserIds = selectedContacts
                                         .map { it.wxId }
                                         .filter { it != "weixin" && it != "filehelper" }
                                         .take(MAX_AT_USERS)
-                                    val atText = selectedContacts.joinToString("") { "@${it.nickname} " }
-                                    pendingStealthAt = Triple(
-                                        currentConv,
-                                        atUserIds.joinToString(","),
-                                        atText,
-                                    )
+                                    pendingStealthAt = currentConv to atUserIds.joinToString(",")
                                     WeLogger.i(
                                         TAG,
-                                        "stealth armed: mode=$stealthWriterMode talker=$currentConv" +
-                                            " count=${atUserIds.size} first=${atUserIds.take(3)}",
+                                        "stealth armed: talker=$currentConv count=${atUserIds.size}" +
+                                            " first=${atUserIds.take(3)}",
                                     )
-                                    when (stealthWriterMode) {
-                                        STEALTH_MODE_CARD -> {
-                                            // 卡片必须走宿主自己的网页分享通路：它组装的 appmsg 才真能渲染成卡片。
-                                            // 我们手搓的 <type>57</type> 空壳会被 sendAppMsg 退化成纯文本
-                                            // （真机：appid 空 + url=null → 只把 title 当文本发出去）
-                                            val sent = WeMessageApi.shareWebpage(
-                                                currentConv,
-                                                chatFooter.lastText,
-                                                "",
-                                                WeDatabaseApi.getAvatarUrl(WeApi.selfWxId),
-                                                null,
-                                            )
-                                            WeLogger.i(TAG, "stealth card send=$sent")
-                                            if (sent) {
-                                                chatFooter.lastText = ""
-                                            }
-                                        }
-
-                                        STEALTH_MODE_CARD_RECORD -> {
-                                            val xml = buildStealthRecordCardXml(chatFooter.lastText, atText)
-                                            val sent = WeMessageApi.sendXmlAppMsg(currentConv, xml)
-                                            WeLogger.i(
-                                                TAG,
-                                                "stealth record card send=$sent" +
-                                                    " head=${xml.take(80)} tail=${xml.takeLast(60)}",
-                                            )
-                                            if (sent) {
-                                                chatFooter.lastText = ""
-                                            }
-                                        }
-
-                                        else -> WeChatInputBarMenuApi.performSend(chatFooter)
-                                    }
+                                    WeChatInputBarMenuApi.performSend(chatFooter)
                                     return@ContactsSelector
                                 }
 
@@ -424,8 +252,8 @@ object MentionMembers : SwitchFeature(), IResolveDex {
         WeMessageApi.methodMsgInfoHandleApiInsertMessage.hookBefore {
             val msgInfo = MessageInfo(args[0]!!)
 
-            // 只处理自己发送的消息：text_at 档是 type=1 文本，card 档宿主发的是 type=49 卡片
-            if (msgInfo.isSend != 1 || (msgInfo.typeCode != 1 && msgInfo.typeCode != 49)) return@hookBefore
+            // 只处理自己发送的文本消息 (isSend=1, type=1)
+            if (msgInfo.isSend != 1 || msgInfo.typeCode != 1) return@hookBefore
 
             val pending = pendingStealthAt ?: return@hookBefore
 
@@ -441,52 +269,18 @@ object MentionMembers : SwitchFeature(), IResolveDex {
                 return@hookBefore
             }
 
-            dumpMsgSourceCandidates(args[0]!!, "before")
-            val atNode = "<atuserlist><![CDATA[${pending.second}]]></atuserlist>"
-            // 字段名各版本都不同，按值认：整条父类链上唯一装着 <msgsource> 的 String 字段
-            // 就是发送时的源头（真机 e9 → 父类 c8.G，入库那 166B lvbuffer 由它序列化出来）
-            val carrier = args[0]!!.reflekt().fields {
-                superclass()
-                type = String::class
-            }.firstOrNull { field -> (field.get() as? String)?.contains("<msgsource>") == true }
-            if (carrier == null) {
-                WeLogger.w(
-                    TAG,
-                    "stealth skipped: no msgsource String field on ${args[0]!!.javaClass.name}",
-                )
-            } else {
-                val current = carrier.get() as String
-                if (!current.contains("<atuserlist>")) {
-                    carrier.set("<msgsource>$atNode" + current.removePrefix("<msgsource>"))
-                }
-                // 一致性检查看的是正文里有没有 @ 文本（真机定论），所以文本档与链接卡片档都得往
-                // field_content 里补；记录卡片档的 @ 文本已经写在 <des> 里、由宿主自己序列化，
-                // 再往字符串尾巴追加只会被那次重建吞掉（真机 123.txt 已证）
-                if (stealthWriterMode != STEALTH_MODE_CARD_RECORD) {
-                    val contentField = args[0]!!.reflekt().fields {
-                        superclass()
-                        name = "field_content"
-                    }.firstOrNull()
-                    val rawContent = contentField?.get() as? String
-                    if (contentField != null && rawContent != null && !rawContent.contains(pending.third)) {
-                        contentField.set(
-                            if (stealthWriterMode == STEALTH_MODE_CARD) {
-                                rawContent + pending.third
-                            } else {
-                                pending.third + rawContent
-                            },
-                        )
-                    }
-                }
-                WeLogger.i(
-                    TAG,
-                    "stealth injected: mode=$stealthWriterMode type=${msgInfo.typeCode}" +
-                        " talker=${msgInfo.talker} contentAfter=${msgInfo.content.take(20)} count=" +
-                        pending.second.split(',').count { it.isNotEmpty() } +
-                        " written=${carrier.get()}",
-                )
-            }
-            dumpMsgSourceCandidates(args[0]!!, "after")
+            // z=false: 只改内存 msgsource, 随入库方法写入
+            methodMergeMsgSourceNode.method.invoke(
+                null,
+                args[0],
+                "<atuserlist><![CDATA[${pending.second}]]></atuserlist>",
+                false,
+            )
+            WeLogger.i(
+                TAG,
+                "stealth injected: talker=${msgInfo.talker} content=${msgInfo.content.take(20)}" +
+                    " count=${pending.second.split(',').count { it.isNotEmpty() }}",
+            )
         }
 
         WeChatInputBarMenuApi.addProvider(provider)
