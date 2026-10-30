@@ -135,18 +135,34 @@ private fun HideContacts.installMomentsInlineEntryHook() {
     }
 
     methodSnsInfoToSnsStruct.hookBefore {
-        if (!surfaceOn(HideSurface.MOMENTS_INLINE)) return@hookBefore
-        // isEntryHidden() below already re-checks isHiddenNow() per-entry (so #show / triple-tap
-        // keep working); this is purely a fast path to skip all reflection when nothing is hidden.
-        if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookBefore
+        if (isTemporarilyShown) return@hookBefore
+        val inlineOn = surfaceOn(HideSurface.MOMENTS_INLINE) && hiddenContacts.isNotEmpty()
+        val iconOn = surfaceOn(HideSurface.GROUP_ICON)
+        if (!inlineOn && !iconOn) return@hookBefore
 
         val original = args.getOrNull(1) as? SnsObject ?: return@hookBefore
 
         val likeList = original.LikeUserList as? List<*>
         val commentList = original.CommentUserList as? List<*>
-        val hasHiddenLike = likeList?.any { it != null && isEntryHidden(it) } == true
-        val hasHiddenComment = commentList?.any { it != null && isEntryHidden(it) } == true
-        if (!hasHiddenLike && !hasHiddenComment) return@hookBefore
+        val hasHiddenLike = inlineOn && likeList?.any { it != null && isEntryHidden(it) } == true
+        val hasHiddenComment = inlineOn && commentList?.any { it != null && isEntryHidden(it) } == true
+
+        // 分组可见标记。SnsObject 的分组字段每版重命名，所以按「名字里含 group」探测，不钉名字。
+        val groupFields = if (iconOn) {
+            original.reflekt().fields { name { it.contains("group", ignoreCase = true) } }
+                .map { it.self.makeAccessible() }
+        } else {
+            emptyList()
+        }
+        val hasGroupMark = groupFields.any { field ->
+            when (val value = runCatching { field.get(original) }.getOrNull()) {
+                null -> false
+                is String -> value.isNotEmpty()
+                is Number -> value.toInt() != 0
+                else -> false
+            }
+        }
+        if (!hasHiddenLike && !hasHiddenComment && !hasGroupMark) return@hookBefore
 
         // MUST operate on a clone, never on `original` directly: SnsInfoStorageLogic.e (s5.e in
         // the decompile) caches the parsed SnsObject keyed by a content hash and hands back that
@@ -168,7 +184,24 @@ private fun HideContacts.installMomentsInlineEntryHook() {
             clone.CommentUserListCount = filtered.size
             clone.CommentCount = filtered.size
         }
-
+        if (hasHiddenLike || hasHiddenComment) {
+            WeLogger.d(
+                TAG,
+                "hid hidden-contact entries under a moments post (likes ${likeList?.size ?: 0}->${clone.LikeUserList?.size ?: 0}, " +
+                    "comments ${commentList?.size ?: 0}->${clone.CommentUserList?.size ?: 0})",
+            )
+        }
+        if (hasGroupMark) {
+            // 只抹本机渲染出来的这一份克隆：服务端的可见范围完全不动，刷新/别人看还是原样。
+            groupFields.forEach { field ->
+                when (field.type) {
+                    BString -> field.set(clone, "")
+                    Int::class.javaPrimitiveType, Int::class.java -> field.setInt(clone, 0)
+                    else -> {}
+                }
+            }
+        }
+        if (hasGroupMark) WeLogger.d(TAG, "stripped a moments post's group-visibility marker")
         args[1] = clone
     }
 }

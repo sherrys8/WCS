@@ -57,6 +57,7 @@ private val CONTACT_SURFACES = listOf(
 private val MOMENT_SURFACES = listOf(
     HideSurface.MOMENTS,
     HideSurface.MOMENTS_INLINE,
+    HideSurface.GROUP_ICON,
     HideSurface.DISCOVER,
     HideSurface.FINDER_LIKE,
 )

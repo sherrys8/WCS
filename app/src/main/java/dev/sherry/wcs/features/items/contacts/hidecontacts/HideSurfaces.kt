@@ -116,6 +116,12 @@ enum class HideSurface(
         R.string.contacts_hide_surface_moments_inline_desc,
         false,
     ),
+    GROUP_ICON(
+        "hide_surface_group_icon",
+        R.string.contacts_hide_surface_group_icon,
+        R.string.contacts_hide_surface_group_icon_desc,
+        false,
+    ),
     DISCOVER(
         "hide_surface_discover",
         R.string.contacts_hide_surface_discover,

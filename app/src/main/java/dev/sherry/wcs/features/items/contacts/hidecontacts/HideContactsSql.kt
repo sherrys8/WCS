@@ -65,6 +65,15 @@ private val WRAPPER_RULES = listOf(
     SqlRule("contact-list", HideSurface.CONTACTS, ::looksLikeContactSelectorQuery) {
         "rcontact.username NOT IN (${it.toSqlList()})"
     },
+    // 主页搜索里那一条读联系人的语句。真机 8.0.76 抓到的原文是
+    // `SELECT rowid, * FROM rcontact WHERE rcontact.username LIKE '<词>'` —— 它既没有
+    // `pyinitial`/`quanpin` 也没有 ` order by `，上面的 contact-list 规则按形状认不出它，
+    // 于是「主页搜索隐藏」开着、联系人照样能被搜出来（日志里那两行
+    // `search on, no rule matched` 就是这么来的）。放在 contact-list **之后**：
+    // 选择器/通讯录那条查询仍然归「通讯录隐藏」管，只有落空的这种搜索形状才归「主页搜索隐藏」。
+    SqlRule("contact-search", HideSurface.SEARCH, ::looksLikeContactSearchQuery) {
+        "rcontact.username NOT IN (${it.toSqlList()})"
+    },
     // 通讯录 -> 新的朋友. Friend requests live in their own table (FMessageConversationStorage),
     // keyed by `talker`, so none of the rcontact rules above reach them. One rule covers the list,
     // the 4-avatar header strip, the total count AND the red-dot count, because all four run through
@@ -259,6 +268,21 @@ private fun looksLikeContactLabelQuery(lower: String): Boolean =
  * an ORDER BY at all — so requiring one separates them cleanly. The explicit bails are
  * belt-and-braces in case a future list query shape shows up without a sort.
  */
+/**
+ * 主页搜索读联系人的形状（真机 8.0.76）：`SELECT rowid, * FROM rcontact WHERE rcontact.username LIKE ?`。
+ *
+ * 与 [looksLikeContactSelectorQuery] 的关键区别是它既不带拼音列也不带 ` order by `，所以那条规则认不出它。
+ * 这里反过来只认「按 LIKE 找联系人」，并且放过 `username =` 这类单行读 —— 那是宿主自己按名字取联系人，
+ * 加一条 NOT IN 会让它读不到人（contact-list 规则因为同样的原因放过 `rowid=`/`encryptusername=`）。
+ */
+private fun looksLikeContactSearchQuery(lower: String): Boolean {
+    if (!lower.contains("select")) return false
+    if (!lower.contains("from rcontact")) return false
+    if (!lower.contains("like")) return false
+    if (lower.contains("where rowid=") || lower.contains("encryptusername=")) return false
+    return !lower.contains("username =")
+}
+
 private fun looksLikeContactSelectorQuery(lower: String): Boolean {
     if (!lower.contains("select")) return false
     if (!lower.contains("from rcontact")) return false
@@ -444,6 +468,10 @@ private fun wrapWithNotIn(sql: String, column: String, hidden: Set<String>): Str
 private const val FEED_MARKER_RAW = "(sourceType & 2 != 0 )"
 private const val FEED_MARKER_ENHANCED = "(1=1)"
 
+/** 信息流语句里已有的作者过滤子句（本功能或别的实现注入的），用来把名单并进去而不是跳过。 */
+private val ALREADY_INJECTED_SNS =
+    Regex("SnsInfo\\.userName\\s+not\\s+in\\s*\\(([^)]*)\\)", RegexOption.IGNORE_CASE)
+
 /** Called from `HideContacts.onQuery`; returns null to leave the query untouched. */
 fun rewriteMomentsFeedSql(sql: String): String? {
     if (HideContacts.isTemporarilyShown) return null
@@ -452,10 +480,22 @@ fun rewriteMomentsFeedSql(sql: String): String? {
     val hidden = HideContacts.hiddenContacts
     if (hidden.isEmpty()) return null
 
-    // 只处理主信息流查询: 排除个人主页 (userName=) 与已注入的查询
+    // 只处理主信息流查询: 排除个人主页 (userName=)
     if (!sql.contains("from SnsInfo", false)) return null
     if (sql.contains("SnsInfo.userName=", false)) return null
-    if (sql.contains("SnsInfo.userName not in", true)) return null
+
+    // 已经注入过（本功能早前的重写，或别的实现注入的）：把名单并进去，别直接放过。
+    // 早先这里是 `return null` —— 名单一变（新加一个密友）那条语句就永远不再更新。
+    val injected = ALREADY_INJECTED_SNS.find(sql)
+    if (injected != null) {
+        val merged = injected.groupValues[1].split(',')
+            .map { it.trim().trim('\'') }
+            .filter { it.isNotEmpty() }
+            .toSet() + hidden
+        val mergedList = merged.joinToString(",") { "'${it.replace("'", "''")}'" }
+        WeLogger.i(TAG, "merged moments feed filter (${merged.size}): ${sql.take(80)}")
+        return sql.replaceRange(injected.range, "SnsInfo.userName NOT IN ($mergedList)")
+    }
 
     val filter = " AND SnsInfo.userName NOT IN (${hidden.toSqlList()}) "
 
@@ -470,6 +510,8 @@ fun rewriteMomentsFeedSql(sql: String): String? {
         else -> return null
     }
 
-    WeLogger.i(TAG, "hid ${hidden.size} contacts from moments feed")
+    // SQL 原文前 80 字符一起打：这条改写命中过几十次却仍然显示动态，说明"命中的是不是出列表
+    // 那条语句"从来没被证实过，光有次数判不了。
+    WeLogger.i(TAG, "hid ${hidden.size} contacts from moments feed: ${sql.take(80)}")
     return rewritten
 }

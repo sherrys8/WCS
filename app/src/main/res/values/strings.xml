@@ -3047,6 +3047,8 @@ Time: {time}</string>
     <string name="contacts_hide_surface_moments_desc">Hide likes and comments left by hidden contacts in the Moments message list</string>
     <string name="contacts_hide_surface_moments_inline">Moments interactions</string>
     <string name="contacts_hide_surface_moments_inline_desc">Hide likes and comments from hidden contacts under posts by other people</string>
+    <string name="contacts_hide_surface_group_icon">Moments group badge</string>
+    <string name="contacts_hide_surface_group_icon_desc">Hide the partial-visibility badge on Moments posts, on this device only; the real visibility scope is untouched</string>
     <string name="contacts_hide_surface_discover">Discover tab badge</string>
     <string name="contacts_hide_surface_discover_desc">Exclude new Moments from hidden contacts when computing the Discover tab red dot</string>
     <string name="contacts_hide_surface_voip">Audio and video calls</string>
@@ -3056,7 +3058,9 @@ Time: {time}</string>
     <string name="contacts_hide_surface_pat">Pats</string>
     <string name="contacts_hide_surface_pat_desc">Discard pat messages that come from hidden contacts</string>
     <string name="contacts_hide_surface_team_summary">WeChat Team alert</string>
-    <string name="contacts_hide_surface_team_summary_desc">When notifications are suppressed, leave a line in the WeChat Team chat instead of staying silent</string>
+    <string name="contacts_hide_surface_team_summary_desc">When notifications are suppressed, post an alert that opens the WeChat Team chat when tapped</string>
+    <string name="contacts_hide_alert_title">WeChat Team</string>
+    <string name="contacts_hide_alert_channel">WcS alert</string>
     <string name="contacts_hide_surface_block_chat">Block entering chats</string>
     <string name="contacts_hide_surface_block_chat_desc">Chats of hidden contacts cannot be opened, even from a notification, a search result or a link</string>
     <string name="contacts_hide_surface_block_profile">Block viewing profiles</string>
@@ -3082,7 +3086,6 @@ Time: {time}</string>
     <string name="contacts_hide_triple_click_ms">Triple-tap interval</string>
     <string name="contacts_hide_triple_click_ms_description">Maximum gap between two taps that still counts as the same triple-tap</string>
     <string name="contacts_hide_blocked">This contact is hidden</string>
-    <string name="contacts_hide_team_message">A hidden contact sent you a new message</string>
     <string name="contacts_schedule_monday">Mon</string>
     <string name="contacts_schedule_tuesday">Tue</string>
     <string name="contacts_schedule_wednesday">Wed</string>
