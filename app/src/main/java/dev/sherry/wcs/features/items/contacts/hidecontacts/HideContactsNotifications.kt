@@ -1,16 +1,13 @@
 package dev.sherry.wcs.features.items.contacts.hidecontacts
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.ComponentName
+import android.content.ContentValues
 import android.content.Context
-import android.content.Intent
 import dev.sherry.wcs.R
-import dev.sherry.wcs.constants.PackageNames
 import dev.sherry.wcs.dexkit.abc.IResolveDex
 import dev.sherry.wcs.dexkit.dsl.dexMethod
+import dev.sherry.wcs.features.api.core.WeDatabaseListenerApi
+import dev.sherry.wcs.features.api.core.WeMessageApi
+import dev.sherry.wcs.features.api.core.models.MessageType
 import dev.sherry.wcs.features.core.ApiFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.items.contacts.HideContacts
@@ -21,6 +18,7 @@ import dev.sherry.wcs.i18n.WcSLocaleController
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.TargetProcess
+import dev.sherry.wcs.utils.TargetProcesses
 import dev.sherry.wcs.utils.WeLogger
 
 /**
@@ -144,111 +142,47 @@ object HideContactsNotifications : ApiFeature(), IResolveDex {
                 WePrefs.getBoolOrDef(HideContacts.technicalId, false) &&
                 wxId in HideContacts.hiddenContacts
 
-    // ── 微信团队汇总提醒 ─────────────────────────────────────────────────────────────────────────
+    // ── 微信团队提醒 ────────────────────────────────────────────────────────────────────────────
     //
-    // With 消息通知 on, a hidden contact's messages leave no trace at all — including a total absence
-    // of the notification the user would otherwise have felt. This surface replaces that silence with
-    // one aggregated notification titled 微信团队, so the phone still reports that *something*
-    // arrived without naming the sender or the chat. It only ever counts messages that were
-    // suppressed (i.e. it runs strictly after isSuppressed), so turning 消息通知 off turns the
-    // summary off with it.
+    // With 消息通知 on, a hidden contact's messages leave no trace at all — including the notification
+    // the user would otherwise have felt. This replaces that silence with a line in WeChat's own
+    // 微信团队 chat: a real conversation message, so the unread badge, the notification and the tap
+    // target are all WeChat's, and nothing names the sender or the chat.
+    //
+    // It hangs off the message *insert*, not off the suppressed notification, because that is the only
+    // process where the message storage API is initialised: notification building lives in `:push`,
+    // where [WeMessageApi] never runs its `onEnable`. The consequence is that a digest is written when
+    // WeChat's main process is the one storing the message.
 
-    private const val CHANNEL_SUMMARY = "wcs_hidden_summary"
-    private const val KEY_SUMMARY_COUNT = "hide_team_summary_count"
-    private const val SUMMARY_NOTIFICATION_ID = 0x5AC5
-    private const val LAUNCHER_UI = "${PackageNames.WECHAT}.ui.LauncherUI"
+    private const val WEIXIN_TALKER = "weixin"
 
-    /**
-     * Called from `:push` right before a notification is swallowed.
-     *
-     * The count is persisted rather than kept in memory because `:push` may be killed at any time
-     * while the notification outlives it; reading it back is what keeps the text from restarting at
-     * "1 条" after every push-process restart. `setOnlyAlertOnce` makes every update after the first
-     * silent, so per-message arrivals do not turn into a stream of pings.
-     */
-    private fun noteSuppressed() {
-        if (!HideContacts.surfaceOn(HideSurface.TEAM_SUMMARY)) return
+    private object HiddenMessageWatcher : WeDatabaseListenerApi.IInsertListener {
+        override fun onInsert(table: String, values: ContentValues) {
+            if (table != "message") return
+            val talker = values.getAsString("talker") ?: return
+            // Our own digest re-enters this listener; without this bail a hidden 微信团队 would make
+            // every digest spawn another one.
+            if (talker == WEIXIN_TALKER) return
+            if (HideContacts.isTemporarilyShown) return
+            if (!isSuppressed(talker)) return
+            if (!HideContacts.surfaceOn(HideSurface.TEAM_SUMMARY)) return
 
-        val count = WePrefs.getIntOrDef(KEY_SUMMARY_COUNT, 0) + 1
-        WePrefs.putInt(KEY_SUMMARY_COUNT, count)
-        postSummary(count)
-    }
-
-    /**
-     * Drops the summary once the user has actually seen WeChat.
-     *
-     * Called from the LauncherUI onCreate hook in the main process: at that point the user is looking
-     * at the real conversation list, so the digest has served its purpose. Cleared by process start
-     * instead would be wrong — `:push` is woken by every message and would wipe the counter between
-     * the notification and the moment the user unlocks the phone.
-     */
-    fun clearSummary() {
-        if (WePrefs.getIntOrDef(KEY_SUMMARY_COUNT, 0) == 0) return
-        WePrefs.putInt(KEY_SUMMARY_COUNT, 0)
-        notificationManager().cancel(SUMMARY_NOTIFICATION_ID)
-        WeLogger.d(TAG, "cleared the hidden-contact summary")
-    }
-
-    private fun postSummary(count: Int) {
-        val context = HostInfo.application
-        val manager = notificationManager()
-        ensureSummaryChannel(manager, context)
-
-        val resources = LocalizedContextFactory.create(
-            context,
-            WcSLocaleController.resolvedLocale,
-            LocaleResourceMode.InjectedHost,
-        )
-        val title = resources.getString(R.string.contacts_hide_summary_title)
-        val text = resources.resources.getQuantityString(R.plurals.contacts_hide_summary_body, count, count)
-
-        val builder = Notification.Builder(context, CHANNEL_SUMMARY)
-            .setSmallIcon(android.R.drawable.stat_notify_chat)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setStyle(Notification.BigTextStyle().bigText(text))
-            .setWhen(System.currentTimeMillis())
-            .setShowWhen(true)
-            .setAutoCancel(true)
-            .setOnlyAlertOnce(true)
-            .setCategory(Notification.CATEGORY_MESSAGE)
-            .setPriority(Notification.PRIORITY_DEFAULT)
-            .setContentIntent(
-                PendingIntent.getActivity(
-                    context,
-                    SUMMARY_NOTIFICATION_ID,
-                    Intent().apply {
-                        component = ComponentName(context.packageName, LAUNCHER_UI)
-                        addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK or
-                                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                                    Intent.FLAG_ACTIVITY_SINGLE_TOP
-                        )
-                    },
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
+            WeMessageApi.createSimpleMsgInfoAndInsert(
+                MessageType.SYSTEM.code,
+                WEIXIN_TALKER,
+                localizedSummaryContext().getString(R.string.contacts_hide_team_message),
+                System.currentTimeMillis(),
             )
-        manager.notify(SUMMARY_NOTIFICATION_ID, builder.build())
+            WeLogger.d(TAG, "wrote a 微信团队 digest for a suppressed message from $talker")
+        }
     }
 
-    private fun ensureSummaryChannel(manager: NotificationManager, context: Context) {
-        if (manager.getNotificationChannel(CHANNEL_SUMMARY) != null) return
-        manager.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_SUMMARY,
-                LocalizedContextFactory.create(
-                    context,
-                    WcSLocaleController.resolvedLocale,
-                    LocaleResourceMode.InjectedHost,
-                ).getString(R.string.contacts_hide_summary_channel),
-                NotificationManager.IMPORTANCE_DEFAULT,
-            )
-        )
-    }
-
-    private fun notificationManager(): NotificationManager =
-        HostInfo.application.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
+    /** The host resources, in the locale WcS was configured with, for reading the digest text. */
+    private fun localizedSummaryContext(): Context = LocalizedContextFactory.create(
+        HostInfo.application,
+        WcSLocaleController.resolvedLocale,
+        LocaleResourceMode.InjectedHost,
+    )
 
     override fun onEnable() {
         // Both bodies only cancel the call; they mutate no WeChat state and so cannot re-trigger the
@@ -267,9 +201,10 @@ object HideContactsNotifications : ApiFeature(), IResolveDex {
             val talker = args[1] as? String ?: return@hookBefore
             if (!isSuppressed(talker)) return@hookBefore
             WeLogger.i(TAG, "suppressing message notification from $talker")
-            noteSuppressed()
             result = null
         }
+
+        if (TargetProcesses.isInMain) WeDatabaseListenerApi.addListener(HiddenMessageWatcher)
 
         if (methodNotifyForLightPush.isPlaceholder) {
             WeLogger.w(TAG, "LightPush notify method not resolved; its notifications stay visible")
@@ -280,7 +215,6 @@ object HideContactsNotifications : ApiFeature(), IResolveDex {
             val userName = args[1] as? String ?: return@hookBefore
             if (!isSuppressed(userName)) return@hookBefore
             WeLogger.i(TAG, "suppressing LightPush notification from $userName")
-            noteSuppressed()
             result = null
         }
     }

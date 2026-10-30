@@ -1,16 +1,13 @@
 package dev.sherry.wcs.features.items.contacts.hidecontacts
 
 import android.app.Activity
-import android.content.Intent
 import android.widget.BaseAdapter
 import com.tencent.mm.plugin.profile.ui.ContactInfoUI
 import dev.ujhhgtg.reflekt.reflekt
-import dev.ujhhgtg.reflekt.utils.Modifiers
 import dev.ujhhgtg.reflekt.utils.isSubclassOf
 import dev.ujhhgtg.reflekt.utils.makeAccessible
 import dev.sherry.wcs.R
 import dev.sherry.wcs.constants.PackageNames
-import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.ui.WeContactPrefsScreenApi
 import dev.sherry.wcs.features.items.contacts.HideContacts
 import dev.sherry.wcs.features.items.contacts.localizedContactsString
@@ -20,8 +17,14 @@ import dev.sherry.wcs.utils.android.showToast
 
 private const val TAG = "HideContacts.Profile"
 
-/** Key of the row this file inserts into a simulated profile. Never collides with `contact_profile_*`. */
-private const val ADD_CONTACT_KEY = "wcs_profile_add_contact"
+/**
+ * The host's own 「添加到通讯录」 row.
+ *
+ * `ContactInfoUI` builds it on every profile and hides it while the contact is a friend, so revealing
+ * it is one `hidePreference(key, false)` call rather than an injected row — and the native row keeps
+ * the native click target, which opens WeChat's own 验证 page.
+ */
+private const val ADD_CONTACT_KEY = "contact_profile_add_contact"
 
 private const val CONTACT_INFO_UI = "${PackageNames.WECHAT}.plugin.profile.ui.ContactInfoUI"
 
@@ -54,10 +57,10 @@ private val FRIEND_ONLY_PROFILE_KEYS = listOf(
  * contact should look and behave like someone who was never added.
  *
  * **资料模拟非好友** reworks the contact profile page. Friend-only rows are hidden through the
- * preference screen's own hide method, a 「添加到通讯录」 row is appended to the page, and clicks that
- * survive the hiding are swallowed with a toast. Nothing about the actual relationship changes — the
- * chat and the database row are untouched, which is also why 临时显示 lifts the whole simulation
- * ([HideContacts.isHiddenNow] is the single predicate).
+ * preference screen's own hide method, the host's own 「添加到通讯录」 row is revealed by the same call,
+ * and clicks on any friend-only row that somehow survived are swallowed with a toast. Nothing about the
+ * actual relationship changes — the chat and the database row are untouched, which is also why 临时显示
+ * lifts the whole simulation ([HideContacts.isHiddenNow] is the single predicate).
  *
  * **拦截提交加好友** covers the other half: the add row opens WeChat's own 验证 page so the flow looks
  * native, but the commit button's `onClick` is cancelled before it can send anything. The page then
@@ -97,12 +100,14 @@ private fun isSimulatedStranger(activity: Activity): Boolean {
 }
 
 /**
- * Hides the friend-only rows of a simulated profile.
+ * Hides the friend-only rows of a simulated profile and reveals the host's own add-contact row.
  *
  * WeChat's preference screen exposes `hidePreference(String, boolean)` — the same call its own pages
- * use — which keeps the row's bookkeeping (position, separators, adapter notify) inside the host. The
- * method is found by signature, never by name: it is obfuscated differently on every version while
- * the `(String, boolean)` shape has not changed.
+ * use — which keeps the row's bookkeeping (position, separators, adapter notify) inside the host. It is
+ * found by parameter list only: both the name and the return type are obfuscated host classes that
+ * differ per version, and demanding `void` here made the lookup miss on 8.0.76 and left every
+ * friend-only row on screen. The resolved name is logged because a signature-only match is the kind of
+ * thing that needs to be checkable from a device log.
  *
  * A miss leaves the rows visible; the click gate in [SimulatedStrangerProvider] still keeps them
  * inert, so the page degrades to "looks normal, does nothing" rather than failing open.
@@ -123,19 +128,21 @@ private fun HideContacts.hookSimulatedProfileRows() {
         val hidePreference = screen.javaClass.reflekt()
             .firstMethodOrNull {
                 parameters(String::class, Boolean::class)
-                returnType = Void.TYPE
-                modifiers { it.contains(Modifiers.PUBLIC) }
                 superclass()
             }?.self
 
         if (hidePreference == null) {
-            WeLogger.w(TAG, "preference screen has no hidePreference(String, boolean); rows stay visible")
+            WeLogger.w(
+                TAG,
+                "preference screen ${screen.javaClass.name} has no (String, boolean) row switch; rows stay visible",
+            )
             return@hookAfter
         }
 
+        WeLogger.d(TAG, "row switch is ${screen.javaClass.name}.${hidePreference.name}")
         FRIEND_ONLY_PROFILE_KEYS.forEach { hidePreference.invoke(screen, it, true) }
+        hidePreference.invoke(screen, ADD_CONTACT_KEY, false)
         (screen as BaseAdapter).notifyDataSetChanged()
-        WeLogger.d(TAG, "hid ${FRIEND_ONLY_PROFILE_KEYS.size} friend-only row(s) on a simulated profile")
     }
 }
 
@@ -181,72 +188,23 @@ private fun HideContacts.hookFriendRequestSubmit() {
 }
 
 /**
- * The 添加到通讯录 row and the click gate, both delivered through [WeContactPrefsScreenApi] so the row
- * is added with WeChat's own adapter call instead of by mutating the screen from the outside.
+ * The click gate, delivered through [WeContactPrefsScreenApi].
+ *
+ * It contributes no rows of its own: the 添加到通讯录 row comes from the host (see [ADD_CONTACT_KEY]),
+ * so intercepting that key would only get in its way. What stays is the fallback for the case the row
+ * switch could not be resolved — a friend-only row that is still on screen must not open a chat, start
+ * a call or reveal the relationship when tapped.
  */
 private object SimulatedStrangerProvider : WeContactPrefsScreenApi.IContactInfoProvider {
 
-    override fun getContactInfoItem(activity: Activity): List<WeContactPrefsScreenApi.PreferenceItem> {
-        if (!isSimulatedStranger(activity)) return emptyList()
-        // Without a resolved page the row could only toast an error, so don't offer it at all.
-        if (resolvedVerifyPage() == null) return emptyList()
-
-        return listOf(
-            WeContactPrefsScreenApi.PreferenceItem(
-                key = ADD_CONTACT_KEY,
-                title = localizedContactsString(R.string.contacts_hide_add_contact),
-                position = 1,
-            )
-        )
-    }
+    override fun getContactInfoItem(activity: Activity): List<WeContactPrefsScreenApi.PreferenceItem> =
+        emptyList()
 
     override fun onItemClick(activity: Activity, key: String): Boolean {
         if (!isSimulatedStranger(activity)) return false
+        if (key !in FRIEND_ONLY_PROFILE_KEYS) return false
 
-        if (key == ADD_CONTACT_KEY) {
-            openNativeVerifyPage(activity)
-            return true
-        }
-        if (key in FRIEND_ONLY_PROFILE_KEYS) {
-            showToast(activity, localizedContactsString(R.string.contacts_hide_not_a_friend))
-            return true
-        }
-        return false
+        showToast(activity, localizedContactsString(R.string.contacts_hide_not_a_friend))
+        return true
     }
-}
-
-/** The resolved page class, or null when the resolution missed or landed on a non-Activity. */
-private fun resolvedVerifyPage(): Class<*>? {
-    if (HideContacts.classVerifyPage.isPlaceholder) return null
-
-    val pageClass = HideContacts.classVerifyPage.clazz
-    if (!Activity::class.java.isAssignableFrom(pageClass)) {
-        WeLogger.w(TAG, "resolved verify page ${pageClass.name} is not an Activity")
-        return null
-    }
-    return pageClass
-}
-
-/**
- * Opens WeChat's own verify page for a hidden contact.
- *
- * The extras are the page's documented entry contract: who to request, and which optional fields the
- * page may prefill. The profile's own intent is copied first so group-context extras (a member opened
- * from a chat) survive into the verify page, exactly as the donor implementation does.
- */
-private fun openNativeVerifyPage(activity: Activity) {
-    val pageClass = resolvedVerifyPage() ?: return
-    val wxId = activity.currentWxId ?: return
-
-    val intent = Intent(activity, pageClass).putExtras(activity.intent)
-    intent.putExtra("Contact_User", wxId)
-    intent.putExtra("Contact_Nick", WeDatabaseApi.getDisplayName(wxId))
-    intent.putExtra("Contact_RemarkName", "")
-    intent.putExtra("Contact_IsForceVerifyFriend", true)
-    intent.putExtra("sayhi_with_sns_perm_send_verify", true)
-    intent.putExtra("sayhi_with_sns_perm_add_remark", true)
-    intent.putExtra("sayhi_with_sns_perm_set_label", false)
-
-    activity.startActivity(intent)
-    WeLogger.d(TAG, "opened the native verify page for a simulated profile")
 }

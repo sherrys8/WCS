@@ -128,6 +128,12 @@ enum class HideSurface(
         R.string.contacts_hide_surface_voip_desc,
         false,
     ),
+    MUTE(
+        "hide_surface_mute",
+        R.string.contacts_hide_surface_mute,
+        R.string.contacts_hide_surface_mute_desc,
+        false,
+    ),
     NOTIFICATIONS(
         "hide_surface_notifications",
         R.string.contacts_hide_surface_notifications,

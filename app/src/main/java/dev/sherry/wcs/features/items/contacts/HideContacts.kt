@@ -20,7 +20,6 @@ import dev.ujhhgtg.reflekt.reflekt
 import dev.ujhhgtg.reflekt.utils.isSubclassOf
 import dev.sherry.wcs.dexkit.abc.IResolveDex
 import dev.sherry.wcs.dexkit.dsl.data
-import dev.sherry.wcs.dexkit.dsl.dexClass
 import dev.sherry.wcs.dexkit.dsl.dexMethod
 import dev.sherry.wcs.features.api.core.WeConversationApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
@@ -30,7 +29,6 @@ import dev.sherry.wcs.features.api.ui.WeMainActivityBeautifyApi
 import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.items.contacts.hidecontacts.HideSurface
-import dev.sherry.wcs.features.items.contacts.hidecontacts.HideContactsNotifications
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installBlockHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installExtraSurfaceHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installListHooks
@@ -40,6 +38,7 @@ import dev.sherry.wcs.features.items.contacts.hidecontacts.installSchedules
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installSearchHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installSqlHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installVoipHooks
+import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteFtsSql
 import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteMomentsFeedSql
 import dev.sherry.wcs.features.items.contacts.hidecontacts.surfaceOn
 import dev.sherry.wcs.features.items.contacts.hidecontacts.uninstallBlockHooks
@@ -83,8 +82,10 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
             // overwrite a mute the user set themselves. See the design doc.
             val newlyHidden = value - WePrefs.getStringSetOrDef(KEY_CONTACTS, emptySet())
             WePrefs.putStringSet(KEY_CONTACTS, value)
-            for (convId in newlyHidden) {
-                WeConversationApi.setDnd(convId, true)
+            if (surfaceOn(HideSurface.MUTE)) {
+                for (convId in newlyHidden) {
+                    WeConversationApi.setDnd(convId, true)
+                }
             }
             WeConversationApi.reloadConversations()
         }
@@ -211,10 +212,6 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
                 .get()!! as Activity
 
             registerScreenOffReceiver()
-
-            // The user is looking at the real conversation list again, so the aggregate
-            // "N messages" notification has served its purpose. See HideContactsNotifications.
-            HideContactsNotifications.clearSummary()
 
             installTitleGestures(context)
         }
@@ -405,7 +402,7 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         }
     }
 
-    override fun onQuery(sql: String): String? = rewriteMomentsFeedSql(sql)
+    override fun onQuery(sql: String): String? = rewriteMomentsFeedSql(sql) ?: rewriteFtsSql(sql)
 
     // The parentRef marker older versions wrote via WeConversationApi.setConversationsVisibility to
     // hide a chat. WeChat's native list filter (m4.O) hides rows whose parentRef isn't null/empty.
@@ -1105,27 +1102,7 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     // See hidecontacts/HideContactsProfile.kt for how the two are used.
 
     /**
-     * `SayHiWithSnsPermissionUI3` — the 添加到通讯录 page 资料模拟非好友 opens.
-     *
-     * Matched on the page's own log tag plus the two intent extras that are the contract between the
-     * profile page and this Activity; the class name itself has been stable, but the tag is what a
-     * class-level query can key on if a future build renames it.
-     *
-     * `allowFailure`: an opt-in surface whose anchors have not been verified across our supported
-     * trees. A miss only removes the add row — the row hiding and click gate are independent.
-     */
-    val classVerifyPage by dexClass(allowFailure = true) {
-        matcher {
-            usingEqStrings(
-                "MicroMsg.SayHiWithSnsPermissionUI3",
-                "Contact_IsForceVerifyFriend",
-                "sayhi_with_sns_perm_send_verify",
-            )
-        }
-    }
-
-    /**
-     * The 发送 button on that page: `SayHiWithSnsPermissionUI3$5.onClick(View)`.
+     * The 发送 button on WeChat's 验证 page: `SayHiWithSnsPermissionUI3$5.onClick(View)`.
      *
      * The listener is a synthetic class, so its own name is the only stable anchor a string query can
      * use; the log line next to it belongs to this method alone.

@@ -28,6 +28,10 @@ private const val CONTACT_INFO_UI = "${PackageNames.WECHAT}.plugin.profile.ui.Co
  * The decision is made per entry, against the hidden set and [HideContacts.isHiddenNow], so 临时显示
  * lifts the block exactly like it lifts every other surface.
  *
+ * Only the chat gate says anything. 「该联系人已隐藏」 is itself a tell — a toast that names the block
+ * defeats the point of hiding the contact — and a profile page that simply does not open reads the
+ * same as one the user never tapped.
+ *
  * Blocked in two places, because neither alone covers every entry:
  *
  * - [WeStartActivityApi] sees every `startActivity`/`startActivityForResult` the host makes, so the
@@ -54,11 +58,11 @@ fun HideContacts.installBlockHooks() {
         parameters(Bundle::class)
     }.hookBefore {
         val activity = thisObject as Activity
-        if (!blocksOpening(activity.javaClass.name, activity.intent)) return@hookBefore
+        val surface = blockedSurface(activity.javaClass.name, activity.intent) ?: return@hookBefore
 
         WeLogger.i(TAG, "closing ${activity.javaClass.simpleName} for a hidden contact")
         activity.finish()
-        showBlockedToast()
+        if (surface == HideSurface.BLOCK_CHAT) showBlockedToast()
     }
 }
 
@@ -72,35 +76,35 @@ private object BlockedActivityLauncher : WeStartActivityApi.IStartActivityListen
         // if enable() fails after installBlockHooks() the feature is inactive but this would still be
         // listening. Stay inert in that case instead of blocking chats behind a disabled switch.
         if (!HideContacts.isActive) return
-        if (!blocksOpening(intent.component?.className, intent)) return
+        val surface = blockedSurface(intent.component?.className, intent) ?: return
 
         // startActivity/startActivityForResult return void: assigning a result (null included) is
         // what tells the bridge to skip the original call. Done first, so nothing below can leave the
         // Activity un-cancelled.
         param.result = null
         WeLogger.i(TAG, "blocked startActivity to ${intent.component?.className} for a hidden contact")
-        showBlockedToast()
+        if (surface == HideSurface.BLOCK_CHAT) showBlockedToast()
     }
 }
 
 /**
- * Whether opening [className] with [intent] would reach a hidden contact's chat or profile.
+ * Which gate [className] + [intent] trips, or null when opening it should be left alone.
  *
  * The two Activities take the wxid as a plain string extra; their own names are the only stable
  * anchors (`ChattingUI`/`ContactInfoUI` are both unobfuscated and have been for every supported
  * version). A missing component or extra means the target cannot be identified, so the call is let
  * through rather than blocked blind.
  */
-private fun blocksOpening(className: String?, intent: Intent): Boolean {
+private fun blockedSurface(className: String?, intent: Intent): HideSurface? {
     val (surface, extra) = when (className) {
         CHATTING_UI -> HideSurface.BLOCK_CHAT to "Chat_User"
         CONTACT_INFO_UI -> HideSurface.BLOCK_PROFILE to "Contact_User"
-        else -> return false
+        else -> return null
     }
-    if (!HideContacts.surfaceOn(surface)) return false
+    if (!HideContacts.surfaceOn(surface)) return null
 
-    val wxId = intent.getStringExtra(extra) ?: return false
-    return HideContacts.isHiddenNow(wxId)
+    val wxId = intent.getStringExtra(extra) ?: return null
+    return if (HideContacts.isHiddenNow(wxId)) surface else null
 }
 
 private fun showBlockedToast() {

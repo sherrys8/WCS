@@ -3068,6 +3068,8 @@
     <string name="contacts_hide_surface_new_friends_desc">隐藏来自隐藏联系人的好友申请，包括顶部头像与红点计数</string>
     <string name="contacts_hide_surface_unread">未读角标</string>
     <string name="contacts_hide_surface_unread_desc">计算桌面图标与底部标签未读数时不计入隐藏联系人的消息</string>
+    <string name="contacts_hide_surface_mute">自动免打扰</string>
+    <string name="contacts_hide_surface_mute_desc">把联系人加进隐藏名单的同时，立即为它开启消息免打扰</string>
     <string name="contacts_hide_surface_search">全局搜索</string>
     <string name="contacts_hide_surface_search_desc">从搜索结果中移除隐藏联系人及其会话</string>
     <string name="contacts_hide_surface_group_members">群成员列表</string>
@@ -3106,7 +3108,6 @@
     <string name="contacts_hide_surface_profile_stranger_desc">隐藏联系人的资料页显示为未添加：好友专属入口全部隐藏，改为提供「添加到通讯录」</string>
     <string name="contacts_hide_surface_block_friend_request">拦截提交加好友</string>
     <string name="contacts_hide_surface_block_friend_request_desc">从被模拟的资料页提交好友申请时只在本地模拟成功，实际不会发出</string>
-    <string name="contacts_hide_add_contact">添加到通讯录</string>
     <string name="contacts_hide_not_a_friend">当前联系人未添加到通讯录</string>
     <string name="contacts_hide_request_sent">已发送</string>
     <string name="contacts_hide_group_general">隐藏名单</string>
@@ -3124,9 +3125,7 @@
     <string name="contacts_hide_triple_click_ms">三击判定间隔</string>
     <string name="contacts_hide_triple_click_ms_description">两次点击之间不超过该间隔才算同一次三击</string>
     <string name="contacts_hide_blocked">该联系人已隐藏</string>
-    <string name="contacts_hide_summary_title">微信团队</string>
-    <string name="contacts_hide_summary_channel">微信团队汇总</string>
-    <plurals name="contacts_hide_summary_body"><item quantity="one">已汇总 %1$d 条消息</item><item quantity="other">已汇总 %1$d 条消息</item></plurals>
+    <string name="contacts_hide_team_message">隐藏联系人给你发来了一条新消息</string>
     <string name="contacts_schedule_monday">周一</string>
     <string name="contacts_schedule_tuesday">周二</string>
     <string name="contacts_schedule_wednesday">周三</string>

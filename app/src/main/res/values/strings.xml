@@ -3025,6 +3025,8 @@ Time: {time}</string>
     <string name="contacts_hide_surface_new_friends_desc">Hide friend requests from hidden contacts, including the header avatars and the red dot count</string>
     <string name="contacts_hide_surface_unread">Unread badges</string>
     <string name="contacts_hide_surface_unread_desc">Do not count messages from hidden contacts in the launcher and tab badges</string>
+    <string name="contacts_hide_surface_mute">Auto do-not-disturb</string>
+    <string name="contacts_hide_surface_mute_desc">Turn on message do-not-disturb for a contact the moment it is added to the hidden list</string>
     <string name="contacts_hide_surface_search">Global search</string>
     <string name="contacts_hide_surface_search_desc">Remove hidden contacts and their chats from search results</string>
     <string name="contacts_hide_surface_group_members">Group member lists</string>
@@ -3063,7 +3065,6 @@ Time: {time}</string>
     <string name="contacts_hide_surface_profile_stranger_desc">Profiles of hidden contacts look like those of people you have not added: friend-only rows disappear and Add to Contacts appears instead</string>
     <string name="contacts_hide_surface_block_friend_request">Intercept friend requests</string>
     <string name="contacts_hide_surface_block_friend_request_desc">A request submitted from a simulated profile is acknowledged locally and never sent</string>
-    <string name="contacts_hide_add_contact">Add to Contacts</string>
     <string name="contacts_hide_not_a_friend">This contact is not in your contacts</string>
     <string name="contacts_hide_request_sent">Sent</string>
     <string name="contacts_hide_group_general">Hidden list</string>
@@ -3081,9 +3082,7 @@ Time: {time}</string>
     <string name="contacts_hide_triple_click_ms">Triple-tap interval</string>
     <string name="contacts_hide_triple_click_ms_description">Maximum gap between two taps that still counts as the same triple-tap</string>
     <string name="contacts_hide_blocked">This contact is hidden</string>
-    <string name="contacts_hide_summary_title">WeChat Team</string>
-    <string name="contacts_hide_summary_channel">WeChat Team summary</string>
-    <plurals name="contacts_hide_summary_body"><item quantity="one">%1$d message has been aggregated</item><item quantity="other">%1$d messages have been aggregated</item></plurals>
+    <string name="contacts_hide_team_message">A hidden contact sent you a new message</string>
     <string name="contacts_schedule_monday">Mon</string>
     <string name="contacts_schedule_tuesday">Tue</string>
     <string name="contacts_schedule_wednesday">Wed</string>

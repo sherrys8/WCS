@@ -40,6 +40,7 @@ import dev.sherry.wcs.utils.android.showToast
 private val MESSAGE_SURFACES = listOf(
     HideSurface.CONVERSATIONS,
     HideSurface.UNREAD,
+    HideSurface.MUTE,
     HideSurface.NOTIFICATIONS,
     HideSurface.TEAM_SUMMARY,
     HideSurface.PAT,

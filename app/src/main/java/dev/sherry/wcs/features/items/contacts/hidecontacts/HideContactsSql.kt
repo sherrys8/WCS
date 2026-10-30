@@ -2,11 +2,8 @@ package dev.sherry.wcs.features.items.contacts.hidecontacts
 
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 
-import com.tencent.wcdb.database.SQLiteDatabase
-import dev.ujhhgtg.reflekt.reflekt
 import dev.sherry.wcs.features.items.contacts.HideContacts
 import dev.sherry.wcs.utils.WeLogger
-import dev.sherry.wcs.utils.reflection.BString
 
 private const val TAG = "HideContacts.Sql"
 
@@ -19,17 +16,14 @@ private const val TAG = "HideContacts.Sql"
  * so hiding a contact from a new surface is usually a matter of recognising one more query shape
  * rather than finding a new hook. That is what [WRAPPER_RULES] is for.
  *
- * Two paths bypass the wrapper and are handled separately:
- * - FTS (global search) issues its reads via `com.tencent.wcdb.database.SQLiteDatabase
- *   .rawQueryWithFactory` — see [installFtsHook].
- * - The Moments feed goes through `WeDatabaseListenerApi`, which calls [rewriteMomentsFeedSql].
+ * One path bypasses the wrapper: the Moments feed and FTS (全局搜索) are both rewritten from
+ * [WeDatabaseListenerApi]'s query listener — see [rewriteMomentsFeedSql] and [rewriteFtsSql].
  *
  * Bind arguments are always passed separately from the SQL text, so injecting literal
  * `NOT IN ('...')` predicates is safe everywhere here.
  */
 fun HideContacts.installSqlHooks() {
     installWrapperHook()
-    installFtsHook()
 }
 
 // ── the wrapper chokepoint ───────────────────────────────────────────────────────────────────
@@ -184,9 +178,28 @@ private fun HideContacts.installWrapperHook() {
     }
     WeDatabaseApi.methodSqliteWrapperRawQuery.hookBefore {
         val sql = args.firstOrNull() as? String ?: return@hookBefore
-        val rewritten = rewriteWrapperSql(sql) ?: return@hookBefore
+        val rewritten = rewriteWrapperSql(sql)
+        if (rewritten == null) {
+            logUnmatchedContactQuery(sql)
+            return@hookBefore
+        }
         args[0] = rewritten
     }
+}
+
+/**
+ * 全局搜索里那条读联系人的语句到底长什么样，只能从现场读出来。
+ *
+ * 联系人名下的形状很多，而 [WRAPPER_RULES] 刻意放过 `rowid=`/`encryptusername=` 这类单行读取；
+ * 「开了搜索隐藏却什么都没挡」时，缺的就是这一行读数。只打前 80 个字符，够认表名和 where 的
+ * 形状，不会把用户输入的关键词抄进日志。
+ */
+private fun logUnmatchedContactQuery(sql: String) {
+    if (!HideContacts.surfaceOn(HideSurface.SEARCH)) return
+    val lower = sql.lowercase()
+    if (!lower.contains("rcontact")) return
+    if (!lower.contains("like") && !lower.contains("match")) return
+    WeLogger.d(TAG, "search on, no rule matched: ${sql.take(80)}")
 }
 
 /** Returns the rewritten SQL, or null to leave the query untouched. */
@@ -341,26 +354,39 @@ private val AUX_INDEX_PINNED_REGEX = Regex("aux_index\\s*=\\s*[?']", RegexOption
 private const val CHATROOM_MEMBERS_JOIN = "FTS5ChatRoomMembers ON (aux_index = chatroom)"
 private const val CHATROOM_MEMBERS_CROSS_JOIN = "FROM FTS5ChatRoomMembers, "
 
-private fun HideContacts.installFtsHook() {
-    SQLiteDatabase::class.reflekt().firstMethod {
-        name = "rawQueryWithFactory"
-        parameters(SQLiteDatabase.CursorFactory::class, BString, Array<Any>::class, BString)
-    }.hookBefore {
-        if (isTemporarilyShown) return@hookBefore
-        if (!surfaceOn(HideSurface.SEARCH)) return@hookBefore
+/**
+ * FTS (全局搜索) rewriting, called from [HideContacts.onQuery].
+ *
+ * It rides the same `WeDatabaseListenerApi` query listener the Moments feed rewrite uses rather than a
+ * hook of its own: that API already covers both shapes the host can use — `wcdb.compat.SQLiteDatabase
+ * .rawQuery(String, Object[])` on the new path and `wcdb.database.SQLiteDatabase.rawQueryWithFactory`
+ * on the old one — and picks between them at install time. A hook pinned to one of the two simply never
+ * runs when the host takes the other, which is how this one lost 全局搜索 on 8.0.76 (the old hook did
+ * install, it was just on the door nobody uses).
+ */
+fun rewriteFtsSql(sql: String): String? {
+    if (HideContacts.isTemporarilyShown) return null
+    if (!HideContacts.surfaceOn(HideSurface.SEARCH)) return null
 
-        // An empty set would render `aux_index NOT IN ()` — a SQLite syntax error that breaks ALL
-        // global search while the feature is enabled but nothing is hidden yet.
-        val hidden = hiddenContacts
-        if (hidden.isEmpty()) return@hookBefore
+    // An empty set would render `aux_index NOT IN ()` — a SQLite syntax error that breaks ALL
+    // global search while the feature is enabled but nothing is hidden yet.
+    val hidden = HideContacts.hiddenContacts
+    if (hidden.isEmpty()) return null
 
-        val sql = args[1] as? String ?: return@hookBefore
-        args[1] = rewriteFtsSql(sql, hidden) ?: return@hookBefore
+    val rewritten = rewriteFtsStatement(sql, hidden)
+    if (rewritten == null) {
+        // Which FTS statement 全局搜索 actually runs is only knowable from the device, and every shape
+        // below is a pattern match. 80 characters is enough to recognise the table and the where
+        // clause without copying the user's search term into the log.
+        if (sql.contains("FTS5")) WeLogger.d(TAG, "fts query left alone: ${sql.take(80)}")
+        return null
     }
+    WeLogger.d(TAG, "filtered hidden contacts out of an fts query")
+    return rewritten
 }
 
 /** Returns the rewritten FTS query, or null to leave it untouched. */
-private fun rewriteFtsSql(sql: String, hidden: Set<String>): String? {
+private fun rewriteFtsStatement(sql: String, hidden: Set<String>): String? {
     // Checked first: its SQL also carries `aux_index = 'notifymessage'`, which the pinned-aux_index
     // bail below would otherwise (wrongly) treat as a chat-scoped search.
     if (sql.startsWith(SQL_SELECT_SERVICE_NOTIFY)) return wrapWithNotIn(sql, "talker", hidden)
