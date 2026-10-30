@@ -3098,8 +3098,8 @@
     <string name="contacts_hide_surface_notifications_desc">不为隐藏联系人的消息发送系统通知</string>
     <string name="contacts_hide_surface_pat">拍一拍</string>
     <string name="contacts_hide_surface_pat_desc">丢弃来自隐藏联系人的拍一拍</string>
-    <string name="contacts_hide_surface_team_summary">微信团队汇总</string>
-    <string name="contacts_hide_surface_team_summary_desc">通知被拦截时改为发送一条汇总通知，而不是完全静默</string>
+    <string name="contacts_hide_surface_team_summary">微信团队提醒</string>
+    <string name="contacts_hide_surface_team_summary_desc">通知被拦截时，改为往「微信团队」会话写一条提示，而不是完全静默</string>
     <string name="contacts_hide_surface_block_chat">禁止进入聊天</string>
     <string name="contacts_hide_surface_block_chat_desc">即使从通知、搜索结果或链接进入，也无法打开隐藏联系人的聊天</string>
     <string name="contacts_hide_surface_block_profile">禁止查看资料</string>
