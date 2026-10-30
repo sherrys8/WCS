@@ -9,6 +9,7 @@ import dev.ujhhgtg.reflekt.utils.Modifiers
 import dev.ujhhgtg.reflekt.utils.isSubclassOf
 import dev.ujhhgtg.reflekt.utils.makeAccessible
 import dev.sherry.wcs.R
+import dev.sherry.wcs.constants.PackageNames
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.ui.WeContactPrefsScreenApi
 import dev.sherry.wcs.features.items.contacts.HideContacts
@@ -21,6 +22,8 @@ private const val TAG = "HideContacts.Profile"
 
 /** Key of the row this file inserts into a simulated profile. Never collides with `contact_profile_*`. */
 private const val ADD_CONTACT_KEY = "wcs_profile_add_contact"
+
+private const val CONTACT_INFO_UI = "${PackageNames.WECHAT}.plugin.profile.ui.ContactInfoUI"
 
 /**
  * Rows a friend's profile has but a stranger's does not.
@@ -84,7 +87,9 @@ private fun isSimulatedStranger(activity: Activity): Boolean {
     // The provider is registered with another feature's API, so it is not covered by unhookAll():
     // stay inert when this feature is off instead of simulating profiles behind a disabled switch.
     if (!HideContacts.isActive) return false
-    if (activity !is ContactInfoUI) return false
+    // Compared by name rather than with `is ContactInfoUI`: the stub has no superclass, so an `is`
+    // check here is provably true at compile time and rejected by the compiler.
+    if (activity.javaClass.name != CONTACT_INFO_UI) return false
     if (!HideContacts.surfaceOn(HideSurface.PROFILE_STRANGER)) return false
 
     val wxId = activity.currentWxId ?: return false
