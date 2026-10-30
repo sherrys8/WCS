@@ -37,6 +37,11 @@ fun HideContacts.installSqlHooks() {
 /**
  * One recognisable query shape and the predicate to add to it.
  *
+ * [surface] is the switch this shape belongs to. A rule whose surface is off does not fall through
+ * to a later rule that would happen to match the same statement: the two contact-list rules below
+ * overlap by design (a 标签 member query is also a contact-selector query), so "first shape wins,
+ * then its own switch decides" is the only way the 标签页 switch can mean anything.
+ *
  * [matches] is handed the SQL already lowercased, so predicates must be written in lower case.
  * [condition] receives the hidden-contact set and returns a single boolean expression; it is
  * inserted by [injectCondition], which handles joining onto an existing `WHERE` and staying ahead
@@ -44,18 +49,26 @@ fun HideContacts.installSqlHooks() {
  */
 private class SqlRule(
     val name: String,
+    val surface: HideSurface,
     val matches: (lowerSql: String) -> Boolean,
     val condition: (hidden: Set<String>) -> String,
 )
 
 private val WRAPPER_RULES = listOf(
-    SqlRule("conversation-list", ::looksLikeConversationListQuery) {
+    SqlRule("conversation-list", HideSurface.CONVERSATIONS, ::looksLikeConversationListQuery) {
         "rconversation.username NOT IN (${it.toSqlList()})"
+    },
+    // 通讯录 -> 标签 -> 成员列表. A contact-selector query narrowed to label membership, matched first
+    // so the 标签页 switch can drop just this surface. The matcher is a strict subset of the
+    // contact-selector one below, so a host version that scopes labels differently simply falls
+    // through to the 通讯录 rule instead of leaving label members unfiltered.
+    SqlRule("contact-label", HideSurface.CONTACT_LABEL, ::looksLikeContactLabelQuery) {
+        "rcontact.username NOT IN (${it.toSqlList()})"
     },
     // Qualify as rcontact.username: several of these queries are joins (e.g. "from rcontact,
     // bizinfo" for the 公众号 list, or the OpenIM left join) where a bare `username` would be an
     // ambiguous column reference.
-    SqlRule("contact-list", ::looksLikeContactSelectorQuery) {
+    SqlRule("contact-list", HideSurface.CONTACTS, ::looksLikeContactSelectorQuery) {
         "rcontact.username NOT IN (${it.toSqlList()})"
     },
     // 通讯录 -> 新的朋友. Friend requests live in their own table (FMessageConversationStorage),
@@ -66,14 +79,14 @@ private val WRAPPER_RULES = listOf(
     //   select * from fmessage_conversation  where isNew = 1 ORDER BY ... limit 4    (avatars)
     //   select count(*) from fmessage_conversation                                  (total)
     //   select count(*) from fmessage_conversation where isNew = 1 and fmsgIsSend < 2 (red dot)
-    SqlRule("new-friends", ::looksLikeNewFriendsQuery) {
+    SqlRule("new-friends", HideSurface.NEW_FRIENDS, ::looksLikeNewFriendsQuery) {
         "talker NOT IN (${it.toSqlList()})"
     },
     // Unread totals: the launcher-icon badge and the 微信 bottom-tab count both come from
     // ConversationLogic's `unReadCount > 0` reads, which a hidden contact's messages would otherwise
     // still inflate. Covers the aggregation, the per-username incremental refresh and the
     // per-contact shortcut-badge join in one rule.
-    SqlRule("unread-count", ::looksLikeUnreadCountQuery) {
+    SqlRule("unread-count", HideSurface.UNREAD, ::looksLikeUnreadCountQuery) {
         "rconversation.username NOT IN (${it.toSqlList()})"
     },
     // 朋友圈 -> 消息列表: likes and comments a hidden contact left, on our posts or on mutual
@@ -83,7 +96,7 @@ private val WRAPPER_RULES = listOf(
     // NB: SnsComment DELETEs run through a different (exec) entry point and contain no "select", so
     // they can never match here — narrowing this rule would otherwise risk silently skipping the
     // deletion of a hidden contact's comments.
-    SqlRule("moments-comments", { it.contains("from snscomment") }) {
+    SqlRule("moments-comments", HideSurface.MOMENTS, { it.contains("from snscomment") }) {
         "talker NOT IN (${it.toSqlList()})"
     },
     // 通讯录 -> 群聊 的底部「N 个群聊」计数 (ContactCountView with contactType == 2). The statement is
@@ -99,7 +112,7 @@ private val WRAPPER_RULES = listOf(
     //
     // Everything e2.c appends after the prefix is parenthesised or a plain `and`, and there is no
     // ORDER BY / LIMIT tail, so appending is safe.
-    SqlRule("group-count", ::looksLikeGroupCountQuery) {
+    SqlRule("group-count", HideSurface.CONTACTS, ::looksLikeGroupCountQuery) {
         "rcontact.username NOT IN (${it.toSqlList()})"
     },
     // 微信运动排行榜. `ExdeviceRankInfoStg` reads the ranking with
@@ -110,7 +123,7 @@ private val WRAPPER_RULES = listOf(
     // Deliberately narrow: `select COUNT(*) from HardDeviceRankInfo where rankID = ?`
     // (ExdeviceRankInfoUI) decides insert-vs-update when the server pushes new rank data, so
     // filtering *that* could make WeChat insert duplicate rows.
-    SqlRule("exdevice-rank", ::looksLikeExdeviceRankQuery) {
+    SqlRule("exdevice-rank", HideSurface.EXDEVICE, ::looksLikeExdeviceRankQuery) {
         "username NOT IN (${it.toSqlList()})"
     },
 )
@@ -184,6 +197,7 @@ private fun rewriteWrapperSql(sql: String): String? {
 
     val lower = sql.lowercase()
     val rule = WRAPPER_RULES.firstOrNull { it.matches(lower) } ?: return null
+    if (!HideContacts.surfaceOn(rule.surface)) return null
     return injectCondition(sql, rule.condition(hidden))
 }
 
@@ -199,6 +213,22 @@ private fun looksLikeConversationListQuery(lower: String): Boolean {
             lower.contains("unreadcount") &&
             lower.contains("digestuser")
 }
+
+/**
+ * Recognises the 标签 member list: a contact-selector query that also filters on label membership.
+ *
+ * This is deliberately a strict subset of [looksLikeContactSelectorQuery] rather than an
+ * independent shape: the rule sits in front of the 通讯录 one, so it can only ever claim statements
+ * the 通讯录 switch would otherwise have handled. Anything it fails to recognise — a host version
+ * that scopes labels some other way — then falls through to 通讯录 instead of leaving label members
+ * unfiltered. Requiring a `labelIDList` *predicate* (not merely the column in the projection, which
+ * the generic list query may also carry) is what keeps a plain 通讯录 query from being mistaken for
+ * a label one.
+ */
+private val LABEL_MEMBERSHIP_PREDICATE = Regex("""labelidlist\s*(?:like|in|=)""")
+
+private fun looksLikeContactLabelQuery(lower: String): Boolean =
+    looksLikeContactSelectorQuery(lower) && LABEL_MEMBERSHIP_PREDICATE.containsMatchIn(lower)
 
 /**
  * Recognises full contact-list queries (contact selector, 群聊 list, 标签 members, OpenIM, 公众号).
@@ -317,6 +347,7 @@ private fun HideContacts.installFtsHook() {
         parameters(SQLiteDatabase.CursorFactory::class, BString, Array<Any>::class, BString)
     }.hookBefore {
         if (isTemporarilyShown) return@hookBefore
+        if (!surfaceOn(HideSurface.SEARCH)) return@hookBefore
 
         // An empty set would render `aux_index NOT IN ()` — a SQLite syntax error that breaks ALL
         // global search while the feature is enabled but nothing is hidden yet.
@@ -390,6 +421,7 @@ private const val FEED_MARKER_ENHANCED = "(1=1)"
 /** Called from `HideContacts.onQuery`; returns null to leave the query untouched. */
 fun rewriteMomentsFeedSql(sql: String): String? {
     if (HideContacts.isTemporarilyShown) return null
+    if (!HideContacts.surfaceOn(HideSurface.MOMENTS)) return null
 
     val hidden = HideContacts.hiddenContacts
     if (hidden.isEmpty()) return null

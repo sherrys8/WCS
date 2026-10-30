@@ -10,19 +10,8 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.widget.TextView
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import com.composables.icons.materialsymbols.MaterialSymbols
-import com.composables.icons.materialsymbols.outlined.Chevron_right
 import dev.sherry.wcs.R
 import com.tencent.mm.pluginsdk.ui.chat.ChatFooter
 import com.tencent.mm.ui.LauncherUI
@@ -31,6 +20,7 @@ import dev.ujhhgtg.reflekt.reflekt
 import dev.ujhhgtg.reflekt.utils.isSubclassOf
 import dev.sherry.wcs.dexkit.abc.IResolveDex
 import dev.sherry.wcs.dexkit.dsl.data
+import dev.sherry.wcs.dexkit.dsl.dexClass
 import dev.sherry.wcs.dexkit.dsl.dexMethod
 import dev.sherry.wcs.features.api.core.WeConversationApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
@@ -39,36 +29,32 @@ import dev.sherry.wcs.features.api.ui.WeChatInputBarApi
 import dev.sherry.wcs.features.api.ui.WeMainActivityBeautifyApi
 import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
+import dev.sherry.wcs.features.items.contacts.hidecontacts.HideSurface
+import dev.sherry.wcs.features.items.contacts.hidecontacts.HideContactsNotifications
+import dev.sherry.wcs.features.items.contacts.hidecontacts.installBlockHooks
+import dev.sherry.wcs.features.items.contacts.hidecontacts.installExtraSurfaceHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installListHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installMomentsHooks
+import dev.sherry.wcs.features.items.contacts.hidecontacts.installProfileHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installSchedules
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installSearchHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installSqlHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installVoipHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteMomentsFeedSql
-import dev.sherry.wcs.features.items.contacts.hidecontacts.showSchedulesDialog
+import dev.sherry.wcs.features.items.contacts.hidecontacts.surfaceOn
+import dev.sherry.wcs.features.items.contacts.hidecontacts.uninstallBlockHooks
+import dev.sherry.wcs.features.items.contacts.hidecontacts.uninstallProfileHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.uninstallSchedules
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
-import dev.sherry.wcs.ui.content.AlertDialogContent
-import dev.sherry.wcs.ui.content.ContactsSelector
-import dev.sherry.wcs.ui.content.TextButton
-import dev.sherry.wcs.ui.content.m3.BaseWidget
-import dev.sherry.wcs.ui.content.m3.SegmentedColumn
-import dev.sherry.wcs.ui.content.m3.SwitchWidget
-import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.getSystemService
 import dev.sherry.wcs.utils.android.showToast
-import dev.sherry.wcs.utils.now
 import org.luckypray.dexkit.query.enums.MatchType
 import org.luckypray.dexkit.query.matchers.MethodMatcher
 import java.lang.ref.WeakReference
 import kotlin.math.sqrt
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Instant
-import java.lang.reflect.Modifier as JavaModifier
 
 
 object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputBarListener,
@@ -226,21 +212,11 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
             registerScreenOffReceiver()
 
-            // Triple-click on the main-screen title to toggle temporary show/hide.
-            val titleView = context.window?.decorView
-                ?.findViewById<TextView>(android.R.id.text1) ?: return@hookAfter
-            var clickCount = 0
-            var lastClickTime = Instant.DISTANT_PAST
-            titleView.setOnClickListener {
-                if (!tripleClickTitle) return@setOnClickListener
-                val now = now()
-                if (now - lastClickTime > TRIPLE_TAP_WINDOW) clickCount = 1 else clickCount++
-                lastClickTime = now
-                if (clickCount >= 3) {
-                    clickCount = 0
-                    toggleTemporarilyShown(context)
-                }
-            }
+            // The user is looking at the real conversation list again, so the aggregate
+            // "N messages" notification has served its purpose. See HideContactsNotifications.
+            HideContactsNotifications.clearSummary()
+
+            installTitleGestures(context)
         }
 
         // --- shake to leave ---
@@ -296,6 +272,28 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
         installMomentsHooks()
 
+        // --- 最近转发, 存储空间管理, 状态 ---
+        //
+        // The three surfaces that are neither a rewriteable query nor an adapter input: a raw
+        // `List<String>` cache, an adapter publishing a row list it never set, and a network-built
+        // group list. See hidecontacts/HideContactsExtraSurfaces.kt.
+
+        installExtraSurfaceHooks()
+
+        // --- 禁止进入聊天 / 禁止查看资料 ---
+        //
+        // Gates the two Activities themselves rather than any list. See
+        // hidecontacts/HideContactsBlock.kt.
+
+        installBlockHooks()
+
+        // --- 资料模拟非好友 / 拦截提交加好友 ---
+        //
+        // The profile page itself: friend-only rows and the add-friend commit. See
+        // hidecontacts/HideContactsProfile.kt.
+
+        installProfileHooks()
+
         // --- command ---
 
         WeChatInputBarApi.addListener(this)
@@ -325,6 +323,8 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
     override fun onDisable() {
         uninstallSchedules()
+        uninstallBlockHooks()
+        uninstallProfileHooks()
         unregisterScreenOffReceiver()
         ShakeDetector.stop()
         chattingUi?.clear()
@@ -455,13 +455,80 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
     val autoRejectVoipEnabled: Boolean get() = autoRejectVoip
 
-    private var autoRejectVoip by prefOption("hide_auto_reject", false)
-    private var tripleClickTitle by prefOption("hide_triple_click_title", false)
+    var autoRejectVoip by prefOption("hide_auto_reject", false)
 
-    // Three taps within this window on the main-screen title register as a triple-click.
-    // Matches WeChat's own double-tap detection threshold (f8/r8 tab listener, 300 ms),
-    // with a slightly wider window so the gesture stays comfortable.
-    private val TRIPLE_TAP_WINDOW = 500L.milliseconds
+    /** Long-press the home-screen title for [longPressMs] to toggle the temporary reveal. */
+    var longPressTitle by prefOption("hide_long_press_title", false)
+
+    /** Minimum hold time, in milliseconds, that counts as a long press. */
+    var longPressMs by prefOption("hide_long_press_ms", 500)
+
+    var tripleClickTitle by prefOption("hide_triple_click_title", false)
+
+    /**
+     * Maximum gap between two taps, in milliseconds, for them to count as consecutive taps of the
+     * triple-tap gesture. Set on the last tap of a triple (which is how WeChat's own double-tap
+     * detection measures it), so a slower rhythm simply starts the count over.
+     */
+    var tripleTapMs by prefOption("hide_triple_tap_ms", 500)
+
+    /**
+     * Attaches the two 临时显示 gestures to the home-screen title.
+     *
+     * Both gestures share one touch listener on purpose — the title is a plain label with no other
+     * behaviour, and a single listener is the only way to tell "held long enough to be a long press"
+     * apart from "the first tap of a triple tap". The click listener is still installed, and is a
+     * no-op: a View only receives ACTION_DOWN/UP events while it is clickable, so it is what keeps
+     * the touch stream coming.
+     *
+     * Thresholds are read inside the listener rather than captured at install time, so changing
+     * them in settings applies from the next touch without restarting WeChat.
+     */
+    private fun installTitleGestures(context: Activity) {
+        val titleView = context.window?.decorView
+            ?.findViewById<TextView>(android.R.id.text1)
+        if (titleView == null) {
+            WeLogger.w(TAG, "home-screen title not found; 长按/三击 gestures stay unavailable")
+            return
+        }
+
+        var tapCount = 0
+        var lastTapTime = 0L
+        var downTime = 0L
+
+        titleView.setOnClickListener { }
+        titleView.setOnTouchListener { _, event ->
+            // The listener outlives the feature: turning 隐藏联系人 off unhooks everything else but
+            // leaves this View's listener in place, so it has to stay inert by itself.
+            if (!isActive) return@setOnTouchListener false
+
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> downTime = event.eventTime
+
+                MotionEvent.ACTION_UP -> {
+                    val longPress = longPressTitle && event.eventTime - downTime >= longPressMs
+                    when {
+                        longPress -> {
+                            tapCount = 0
+                            toggleTemporarilyShown(context)
+                        }
+                        tripleClickTitle -> {
+                            tapCount = if (event.eventTime - lastTapTime > tripleTapMs) 1 else tapCount + 1
+                            lastTapTime = event.eventTime
+                            if (tapCount >= 3) {
+                                tapCount = 0
+                                toggleTemporarilyShown(context)
+                            }
+                        }
+                        else -> tapCount = 0
+                    }
+                }
+
+                MotionEvent.ACTION_CANCEL -> tapCount = 0
+            }
+            false
+        }
+    }
 
     // Hooks the ConversationStorage notify dispatcher to cancel per-row update events (type 3)
     // for hidden contacts before they reach list adapters. WeChat fires b(3, storage, talker)
@@ -498,6 +565,7 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
             val eventType = args[0] as? Int ?: return@hookBefore
             if (eventType != 3) return@hookBefore
             if (temporarilyShown) return@hookBefore
+            if (!surfaceOn(HideSurface.CONVERSATIONS)) return@hookBefore
             val talker = args[2] as? String ?: return@hookBefore
             if (talker.isEmpty()) return@hookBefore
             if (talker !in hiddenContacts) return@hookBefore
@@ -551,6 +619,7 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         }
 
         methodPatMsgInsert.hookBefore {
+            if (!surfaceOn(HideSurface.PAT)) return@hookBefore
             val fromUser = args[1] as? String ?: return@hookBefore
             if (!isHiddenNow(fromUser)) return@hookBefore
 
@@ -560,96 +629,7 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     }
 
     override fun onClick(context: ComponentActivity) {
-        val regularContacts = WeDatabaseApi.getFriends() + WeDatabaseApi.getGroups()
-
-        showComposeDialog(context) {
-            AlertDialogContent(
-                title = { Text(stringResource(R.string.feature_hide_contacts_name)) },
-                text = {
-                    var autoRejectVoipInput by remember { mutableStateOf(autoRejectVoip) }
-                    var tripleClickTitleInput by remember { mutableStateOf(tripleClickTitle) }
-
-                    SegmentedColumn(contentPadding = PaddingValues(0.dp)) {
-                        item {
-                            BaseWidget(
-                                iconPlaceholder = false,
-                                title = stringResource(R.string.contacts_hide_configure),
-                                description = stringResource(R.string.contacts_hide_configure_description),
-                                onClick = {
-                                showComposeDialog(context) {
-                                    ContactsSelector(
-                                        title = context.localizedContactsString(R.string.contacts_hide_select),
-                                        contacts = regularContacts,
-                                        initialSelectedWxIds = hiddenContacts,
-                                        onDismiss = onDismiss
-                                    ) {
-                                        showToast(
-                                            localizedContactsQuantity(
-                                                R.plurals.contacts_hide_saved,
-                                                it.size,
-                                                it.size,
-                                            ),
-                                        )
-                                        hiddenContacts = it
-                                        onDismiss()
-                                    }
-                                }
-                                },
-                                trailingContent = {
-                                    Icon(
-                                        MaterialSymbols.Outlined.Chevron_right,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                },
-                            )
-                        }
-                        item {
-                            SwitchWidget(
-                                iconPlaceholder = false,
-                                title = stringResource(R.string.contacts_hide_auto_reject),
-                                description = stringResource(R.string.contacts_hide_auto_reject_description),
-                                checked = autoRejectVoipInput,
-                                onCheckedChange = {
-                                    autoRejectVoipInput = it
-                                    autoRejectVoip = it
-                                },
-                            )
-                        }
-                        item {
-                            BaseWidget(
-                                iconPlaceholder = false,
-                                title = stringResource(R.string.contacts_hide_schedule),
-                                description = stringResource(R.string.contacts_hide_schedule_description),
-                                onClick = { showSchedulesDialog(context) },
-                                trailingContent = {
-                                    Icon(
-                                        MaterialSymbols.Outlined.Chevron_right,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                },
-                            )
-                        }
-                        item {
-                            SwitchWidget(
-                                iconPlaceholder = false,
-                                title = stringResource(R.string.contacts_hide_triple_click),
-                                description = stringResource(R.string.contacts_hide_triple_click_description),
-                                checked = tripleClickTitleInput,
-                                onCheckedChange = {
-                                    tripleClickTitleInput = it
-                                    tripleClickTitle = it
-                                },
-                            )
-                        }
-                    }
-                },
-                dismissButton = {
-                    TextButton(onDismiss) { Text(stringResource(R.string.dialog_close)) }
-                },
-            )
-        }
+        showSettingsDialog(context)
     }
 
     //    private val methodMainAdapterPerformSearch by dexMethod()
@@ -1071,4 +1051,93 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
 //    private val classVoipFloatCard by dexClass()
 //    private val classRecentForwardInfoHelperV3 by dexClass()
 //    private val classContactRecommendHelperV3 by dexClass()
+
+    // ── surfaces with neither a query we can rewrite nor an adapter input we can filter ────────
+    // See hidecontacts/HideContactsExtraSurfaces.kt for how each one is filtered.
+
+    /**
+     * `RecentForwardInfoStorage`'s `(int, int, int) -> List` read — 转发 -> 最近转发.
+     *
+     * The storage class is obfuscated, the two constants are not: `"MicroMsg.RecentForwardInfoStorage"`
+     * is its tag and `"start query frequentCount:"` is emitted by this one method only, and no other
+     * method on that class pairs the tag with a three-int signature returning a list.
+     *
+     * `allowFailure`: this is a new opt-in surface whose anchors have not been verified against our
+     * supported trees; a miss must leave 最近转发 unfiltered rather than fail resolution for the whole
+     * feature, which would take every other hidden-contact surface down with it.
+     */
+    val methodRecentForwardList by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings("MicroMsg.RecentForwardInfoStorage", "start query frequentCount:")
+            returnType("java.util.List")
+            paramTypes("int", "int", "int")
+        }
+    }
+
+    /**
+     * `CleanChattingAdapter.getView(int, View, ViewGroup) -> View` — 存储空间 -> 聊天记录管理.
+     *
+     * Only resolved to name the adapter class: its rows are never handed over through a setter, so the
+     * hook itself lands on `BaseAdapter.notifyDataSetChanged` with an `isInstance` guard. See the
+     * extra-surfaces file.
+     */
+    val methodStorageAdapterGetView by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings("MicroMsg.CleanChattingAdapter", "get item is null. [%d]")
+            returnType("android.view.View")
+            paramTypes("int", "android.view.View", "android.view.ViewGroup")
+        }
+    }
+
+    /**
+     * 状态's `(Context, List<group>) -> List<group layout>` — turns the topic groups into the per-topic
+     * avatar rows. `"arrow@name"` is a layout constant carried by this method alone.
+     */
+    val methodStatusGroupLayout by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings("arrow@name")
+            returnType("java.util.List")
+            paramTypes("android.content.Context", "java.util.List")
+        }
+    }
+
+    // ── 资料模拟非好友 / 拦截提交加好友 ─────────────────────────────────────────────────────────
+    // See hidecontacts/HideContactsProfile.kt for how the two are used.
+
+    /**
+     * `SayHiWithSnsPermissionUI3` — the 添加到通讯录 page 资料模拟非好友 opens.
+     *
+     * Matched on the page's own log tag plus the two intent extras that are the contract between the
+     * profile page and this Activity; the class name itself has been stable, but the tag is what a
+     * class-level query can key on if a future build renames it.
+     *
+     * `allowFailure`: an opt-in surface whose anchors have not been verified across our supported
+     * trees. A miss only removes the add row — the row hiding and click gate are independent.
+     */
+    val classVerifyPage by dexClass(allowFailure = true) {
+        matcher {
+            usingEqStrings(
+                "MicroMsg.SayHiWithSnsPermissionUI3",
+                "Contact_IsForceVerifyFriend",
+                "sayhi_with_sns_perm_send_verify",
+            )
+        }
+    }
+
+    /**
+     * The 发送 button on that page: `SayHiWithSnsPermissionUI3$5.onClick(View)`.
+     *
+     * The listener is a synthetic class, so its own name is the only stable anchor a string query can
+     * use; the log line next to it belongs to this method alone.
+     */
+    val methodVerifySubmit by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings(
+                $$"com/tencent/mm/plugin/profile/ui/SayHiWithSnsPermissionUI3$5",
+                "mCommitBtn onClick() called needVerify:%s userName:%s",
+            )
+            returnType("void")
+            paramTypes("android.view.View")
+        }
+    }
 }

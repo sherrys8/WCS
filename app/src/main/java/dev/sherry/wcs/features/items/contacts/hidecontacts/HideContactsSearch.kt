@@ -50,6 +50,7 @@ private fun HideContacts.installChatroomMemberSearchHook() {
 
     methodFtsSearchChatroomMemberTask.hookAfter {
         if (isTemporarilyShown) return@hookAfter
+        if (!surfaceOn(HideSurface.SEARCH)) return@hookAfter
         if (hiddenContacts.isEmpty()) return@hookAfter
 
         val entries = searchResultEntries(args[0]) ?: return@hookAfter
@@ -83,6 +84,7 @@ private fun HideContacts.installCommonChatroomUserSearchHook() {
 
     methodFtsSearchCommonChatroomUserTask.hookAfter {
         if (isTemporarilyShown) return@hookAfter
+        if (!surfaceOn(HideSurface.SEARCH)) return@hookAfter
         if (hiddenContacts.isEmpty()) return@hookAfter
 
         val response = args[0] ?: return@hookAfter

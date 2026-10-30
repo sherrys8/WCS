@@ -77,11 +77,19 @@ fun HideContacts.installListHooks() {
  * hence the shared [hookMvvmListPreprocess] helper, which is the only thing either surface installs.
  */
 private fun HideContacts.installMvvmListHooks() {
-    hookMvvmListPreprocess(methodAddressMvvmListPreprocessList, "AddressLiveList")
-    hookMvvmListPreprocess(methodAtSomeoneMvvmListPreprocessList, "AtSomeoneLiveList")
+    hookMvvmListPreprocess(methodAddressMvvmListPreprocessList, "AddressLiveList", HideSurface.CONTACTS)
+    hookMvvmListPreprocess(
+        methodAtSomeoneMvvmListPreprocessList,
+        "AtSomeoneLiveList",
+        HideSurface.GROUP_MEMBERS,
+    )
 }
 
-private fun HideContacts.hookMvvmListPreprocess(target: DexMethodDelegate, label: String) {
+private fun HideContacts.hookMvvmListPreprocess(
+    target: DexMethodDelegate,
+    label: String,
+    surface: HideSurface,
+) {
     if (target.isPlaceholder) {
         WeLogger.w(TAG, "$label preprocess method wasn't resolved; that list stays unfiltered")
         return
@@ -89,6 +97,7 @@ private fun HideContacts.hookMvvmListPreprocess(target: DexMethodDelegate, label
 
     target.hookBefore {
         if (isTemporarilyShown) return@hookBefore
+        if (!surfaceOn(surface)) return@hookBefore
 
         val contacts = args[0] as? List<*> ?: return@hookBefore
         // MvvmList hands us an empty snapshot on the initial load and whenever a filter matches
@@ -166,6 +175,7 @@ private fun HideContacts.installContactCountHook() {
 
     methodNormalContactCount.hookAfter {
         if (isTemporarilyShown) return@hookAfter
+        if (!surfaceOn(HideSurface.CONTACTS)) return@hookAfter
         val total = result as? Int ?: return@hookAfter
 
         val hidden = hiddenContacts
@@ -286,6 +296,7 @@ private fun HideContacts.installGroupMemberHooks() {
     } else {
         methodSeeRoomMemberSetMemberList.hookBefore {
             if (isTemporarilyShown) return@hookBefore
+            if (!surfaceOn(HideSurface.GROUP_MEMBERS)) return@hookBefore
             val members = args[0] as? List<*> ?: return@hookBefore
             val filtered = filterHiddenUsernames(members) ?: return@hookBefore
             WeLogger.d(TAG, "filtered ${members.size - filtered.size} hidden member(s) from SeeRoomMemberUI")
@@ -300,6 +311,7 @@ private fun HideContacts.installGroupMemberHooks() {
 
     methodSelectMemberUiGetMemberList.hookAfter {
         if (isTemporarilyShown) return@hookAfter
+        if (!surfaceOn(HideSurface.GROUP_MEMBERS)) return@hookAfter
         val members = result as? List<*> ?: return@hookAfter
         val filtered = filterHiddenUsernames(members) ?: return@hookAfter
         WeLogger.d(TAG, "filtered ${members.size - filtered.size} hidden member(s) from SelectMemberUI")
@@ -344,6 +356,7 @@ private fun HideContacts.installFavoriteHooks() {
 
     methodFavoriteAdapterSetDataList.hookBefore {
         if (isTemporarilyShown) return@hookBefore
+        if (!surfaceOn(HideSurface.FAVORITES)) return@hookBefore
 
         // `r(null)` is a real call shape (FavApiLogic returns null when the storage is missing),
         // so this must tolerate a null argument rather than assume a list.
@@ -418,6 +431,7 @@ private fun HideContacts.installFinderLikeHooks() {
     } else {
         methodFinderLikeDrawerRefresh.hookBefore {
             if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookBefore
+            if (!surfaceOn(HideSurface.FINDER_LIKE)) return@hookBefore
 
             val data = args[0] ?: return@hookBefore
             val listField = data.reflekt()
@@ -438,6 +452,7 @@ private fun HideContacts.installFinderLikeHooks() {
 
     methodFinderLikeDrawerLoadMore.hookBefore {
         if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookBefore
+        if (!surfaceOn(HideSurface.FINDER_LIKE)) return@hookBefore
 
         val likes = args[0] as? List<*> ?: return@hookBefore
         val filtered = likes.filterNot { it != null && isHiddenLikeEntry(it) }

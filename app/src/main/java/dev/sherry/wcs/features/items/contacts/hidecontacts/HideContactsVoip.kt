@@ -14,6 +14,16 @@ import dev.sherry.wcs.utils.reflection.BString
 private const val TAG = "HideContacts.Voip"
 
 /**
+ * [HideContacts.isHiddenNow], additionally gated by the 通话 switch.
+ *
+ * Every body in this file decides per invocation instead of at install time, so the 通话 row flips
+ * without a restart. `isHiddenNow` itself stays un-gated: the other surfaces must keep hiding the
+ * same contact while calls are allowed through.
+ */
+private fun HideContacts.isHiddenCallNow(wxId: String): Boolean =
+    surfaceOn(HideSurface.VOIP) && isHiddenNow(wxId)
+
+/**
  * Hides — and optionally auto-rejects — calls from hidden contacts.
  *
  * ## Which stack actually runs on 8.0.7x
@@ -81,7 +91,7 @@ private fun HideContacts.installVoipMpHooks() {
     methodVoipMpLaunchBanner.hookBefore {
         voipMpLauncher = thisObject
         val wxId = args[5] as? String ?: return@hookBefore
-        if (!isHiddenNow(wxId)) return@hookBefore
+        if (!isHiddenCallNow(wxId)) return@hookBefore
         WeLogger.i(TAG, "suppressing incoming-call banner from $wxId")
         result = null
     }
@@ -90,7 +100,7 @@ private fun HideContacts.installVoipMpHooks() {
     // can actually reach the caller. NB: hookAfter, never hookBefore — see the KDoc above.
     methodVoipMpLaunchIncomingCard.hookAfter {
         val wxId = String(args[5] as ByteArray)
-        if (!isHiddenNow(wxId)) return@hookAfter
+        if (!isHiddenCallNow(wxId)) return@hookAfter
         if (!autoRejectVoipEnabled) {
             // Hide-only: the presentation is already suppressed, the call is simply left to time
             // out on the caller's side exactly as an unanswered call would.
@@ -104,7 +114,7 @@ private fun HideContacts.installVoipMpHooks() {
     // hidden contact's call still rang. This is the real chokepoint, and it carries the wxid.
     methodVoipMpStartRing.hookBefore {
         val wxId = args[0] as? String ?: return@hookBefore
-        if (!isHiddenNow(wxId)) return@hookBefore
+        if (!isHiddenCallNow(wxId)) return@hookBefore
         WeLogger.i(TAG, "suppressing ringtone for $wxId")
         result = null
     }
@@ -113,7 +123,7 @@ private fun HideContacts.installVoipMpHooks() {
     // then calling stopSelf() avoids a ForegroundServiceDidNotStartInTimeException on Android 12+.
     methodVoipMpStartFgs.hookBefore {
         val wxId = args[0] as? String ?: return@hookBefore
-        if (!isHiddenNow(wxId)) return@hookBefore
+        if (!isHiddenCallNow(wxId)) return@hookBefore
         result = null
     }
 }
@@ -156,7 +166,7 @@ private fun HideContacts.installMultiTalkHooks() {
         val (chatroom, inviter) = readMultiTalkInvite(group) ?: return@hookBefore
 
         // Either the group itself or the person who invited us being hidden is enough.
-        val hiddenTarget = listOfNotNull(chatroom, inviter).firstOrNull { isHiddenNow(it) }
+        val hiddenTarget = listOfNotNull(chatroom, inviter).firstOrNull { isHiddenCallNow(it) }
             ?: return@hookBefore
 
         WeLogger.i(TAG, "suppressing multitalk invite (chatroom=$chatroom inviter=$inviter)")
@@ -217,7 +227,7 @@ private fun HideContacts.installVoipRecordHooks() {
     methodVoipMpInsertMsg.hookBefore {
         voipMpLauncher = thisObject
         val wxId = args[0] as? String ?: return@hookBefore
-        if (!isHiddenNow(wxId)) return@hookBefore
+        if (!isHiddenCallNow(wxId)) return@hookBefore
         result = null
     }
 
@@ -227,7 +237,7 @@ private fun HideContacts.installVoipRecordHooks() {
         val addMsg = args.getOrNull(1) ?: return@hookBefore
         val talker = runCatching {
             addMsg.reflekt().fields { type = BString }.firstNotNullOfOrNull { field ->
-                (field.get() as? String)?.takeIf { isHiddenNow(it) }
+                (field.get() as? String)?.takeIf { isHiddenCallNow(it) }
             }
         }.getOrNull() ?: return@hookBefore
         WeLogger.i(TAG, "suppressing pushed voip bubble from $talker")
@@ -241,7 +251,7 @@ private fun HideContacts.installVoipRecordHooks() {
     if (!methodVoipLegacyInsertMsg.isPlaceholder) {
         methodVoipLegacyInsertMsg.hookBefore {
             val wxId = args[0] as? String ?: return@hookBefore
-            if (!isHiddenNow(wxId)) return@hookBefore
+            if (!isHiddenCallNow(wxId)) return@hookBefore
             result = null
         }
     }
@@ -256,7 +266,7 @@ private fun HideContacts.installLegacyVoipHooks() {
     // so this one is genuinely live on 8.0.76 too.
     methodVoipShowFloatingCard.hookBefore {
         val wxId = args[5] as? String ?: return@hookBefore
-        if (!isHiddenNow(wxId)) return@hookBefore
+        if (!isHiddenCallNow(wxId)) return@hookBefore
         result = null
     }
 
@@ -268,7 +278,7 @@ private fun HideContacts.installLegacyVoipHooks() {
     } else {
         methodVoipShowFinishCard.hookBefore {
             val wxId = args[1] as? String ?: return@hookBefore
-            if (!isHiddenNow(wxId)) return@hookBefore
+            if (!isHiddenCallNow(wxId)) return@hookBefore
             WeLogger.i(TAG, "suppressing post-reject banner for $wxId")
             result = null
         }
@@ -278,13 +288,13 @@ private fun HideContacts.installLegacyVoipHooks() {
     // hook bridge performs no primitive coercion and `result = null` would unbox null.
     methodVoipAcceptIncomingCall.hookBefore {
         val callerWxId = legacyCallerWxId() ?: return@hookBefore
-        if (!isHiddenNow(callerWxId)) return@hookBefore
+        if (!isHiddenCallNow(callerWxId)) return@hookBefore
         result = false
     }
 
     methodVoipStartAcceptVoip.hookBefore {
         val callerWxId = legacyCallerWxId() ?: return@hookBefore
-        if (!isHiddenNow(callerWxId)) return@hookBefore
+        if (!isHiddenCallNow(callerWxId)) return@hookBefore
         result = null
     }
 
@@ -293,14 +303,14 @@ private fun HideContacts.installLegacyVoipHooks() {
     // hiding we cancel it up front so no state is established and no packet goes out.
     methodVoipServiceExSetInviteContent.hookBefore {
         val wxId = legacyCallerWxId() ?: return@hookBefore
-        if (!isHiddenNow(wxId)) return@hookBefore
+        if (!isHiddenCallNow(wxId)) return@hookBefore
         if (!autoRejectVoipEnabled) result = false
     }
 
     methodVoipServiceExSetInviteContent.hookAfter {
         if (!autoRejectVoipEnabled) return@hookAfter
         val wxId = legacyCallerWxId() ?: return@hookAfter
-        if (!isHiddenNow(wxId)) return@hookAfter
+        if (!isHiddenCallNow(wxId)) return@hookAfter
         WeLogger.i(TAG, "auto-rejecting legacy call from $wxId")
         runCatching { methodVoipServiceExReject.method.invoke(thisObject) }
             .onFailure { WeLogger.w(TAG, "legacy reject failed for $wxId", it) }
@@ -312,7 +322,7 @@ private fun HideContacts.installLegacyVoipHooks() {
         val self = thisObject as VoipForegroundService
         val intent = args[0] as? Intent ?: return@hookBefore
         val wxId = intent.getStringExtra("Voip_User") ?: return@hookBefore
-        if (!isHiddenNow(wxId)) return@hookBefore
+        if (!isHiddenCallNow(wxId)) return@hookBefore
         self.stopSelf()
         result = Service.START_NOT_STICKY
     }
