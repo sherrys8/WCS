@@ -717,6 +717,23 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     }
 
     /**
+     * `ContactLabelStorage.getUserNameListById(String)` —— 一个标签的成员用户名列表。8.0.76 是
+     * `storage/g4.smali:3114` 的 `s2(String): ArrayList`，方法体里那条日志字面量
+     * `getUserNameListById() called with: id = [` 是它的身份（类名与方法名都混淆，日志串没混淆）。
+     *
+     * 标签这一面的所有消费方都汇到这一个方法（`ba3/{q5,j3,m1,s1,b3,k0}`、`fa3/{e2,n1}` 共 8 处在调），
+     * 所以筛这一处就够，不用一页一页追；为什么不能筛 SQL、也不能筛上一版那个 UI 控件，
+     * 见 `HideContactsLists.installLabelMemberHooks` 的读数。
+     */
+    val methodLabelUserNamesById by dexMethod(allowFailure = true) {
+        matcher {
+            usingStrings("getUserNameListById() called with")
+            paramTypes("java.lang.String")
+            returnType = "java.util.ArrayList"
+        }
+    }
+
+    /**
      * 搜索结果段的接活入口 —— 8.0.76 是 `plugin/fts/ui/a.o0(j23.v)`（`a.smali:719`）。
      *
      * 主页搜索每个结果段（联系人 / 聊天记录 / 公众号…）都继承这个基类，`o0` 把这一次搜索的

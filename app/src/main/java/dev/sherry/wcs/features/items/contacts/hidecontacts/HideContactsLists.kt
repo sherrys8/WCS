@@ -5,7 +5,6 @@ import android.view.ViewGroup
 import android.widget.Adapter
 import dev.ujhhgtg.reflekt.reflekt
 import dev.ujhhgtg.reflekt.utils.makeAccessible
-import dev.ujhhgtg.reflekt.utils.toClassOrNull
 import dev.sherry.wcs.constants.PackageNames
 import dev.sherry.wcs.dexkit.dsl.DexClassDelegate
 import dev.sherry.wcs.dexkit.dsl.DexMethodDelegate
@@ -508,61 +507,46 @@ private fun protoGetString(proto: Any, fieldIndex: Int): String? = runCatching {
 }.getOrNull()
 
 // ---------------------------------------------------------------------------------------------
-// 标签成员列表
+// 标签成员
 // ---------------------------------------------------------------------------------------------
 
-/** 标签页那行「展开看成员」的控件；类名没被混淆，跨版本稳定。 */
-private const val LABEL_EXPAND_PREFERENCE =
-    "com.tencent.mm.pluginsdk.ui.applet.ContactListExpandPreference"
-
 /**
- * 通讯录 -> 标签 -> 点开某个标签展开出来的成员行.
+ * 通讯录 -> 标签 -> 某个标签的成员。**打在存储层那一次读上** —— 同类密友模块也挂在同一处。
  *
- * 这一面在 SQL 层修不好，是真机 2026-10-31 的现场判的：标签页读的是全量映射
- * `SELECT user, label_id FROM FTS5ContactLabels`（回 Java 侧再分组），连
- * `SELECT user FROM FTS5ContactLabels WHERE label_id=?` 都没打过来，`labelIDList` 全天 0 次
- * —— 之前那条 `contact-label` 规则钉的形状宿主根本不走。浮云 也是在装配这一层解决的
- * （把宿主已经装配好的 List 重建一份、摘掉密友），所以这一面照它那一层做。
+ * 为什么不是 UI 也不是 SQL：
+ * - SQL 侧证否：标签页成员读的是全量映射 `SELECT user, label_id FROM FTS5ContactLabels`
+ *   （`plugin/fts/logic/c0` = LoadLabelCacheTask），而 `WHERE label_id=?` 那条出自
+ *   MarkLabelDirtyTask（`h0.smali:109`）—— 刷索引用的，筛它等于让宿主把「这个标签没有文档」缓存进
+ *   `l.p:HashMap`；`labelIDList` 在真机全天 0 次，`contact-label` 那条规则钉的是宿主不走的路径。
+ * - UI 侧也证否了：上一版按 `ContactListExpandPreference` 的 `void (List)` 入口挂（钩子是挂上了，
+ *   `label member setters: V, X`），但 `out of a label list` 在多轮真机日志里 **0 次** —— 标签页
+ *   根本不走那个控件。这一版把它换掉，不留死钩子。
  *
- * 落点选这个控件而不是存储方法（`storage.g4.s2` = `getUserNameListById`），因为存储层那条还被
- * 群发/标签消息之类的逻辑用着，在那里摘人就不再是"看不见"而是"发不到"了。
+ * 落点 `ContactLabelStorage.getUserNameListById(String)`（8.0.76 是 `storage/g4.smali:3114` 的
+ * `s2`，字面量 `getUserNameListById() called with: id = [`）：一个方法服务所有消费方 ——
+ * `ba3/{q5,j3,m1,s1,b3,k0}`、`fa3/{e2,n1}` 都在调它（标签成员页、标签选择器、LabelHelper…），
+ * 在源头筛一次就都对了，不用一个页面一个页面地追。返回的是用户名字符串的 ArrayList，元素直接比。
  *
- * 它有两个把列表交给展开适配器的入口（8.0.76：`V` 在 :231，走 `T(String,List,boolean)`；
- * `X` 在 :276，直接 `iput-object … a55/v1->f:Ljava/util/List;`），元素就是用户名字符串
- * （`v1.h()` 里逐个 cast 成 String 再 `j4.n(String,Z)` 取联系人）。方法名是混淆的，所以装载时按
- * 签名挑 `void (java.util.List)` —— 全类 17 个方法只有这两条形参相符，两个都挂；少挂一个也只是
- * 那一条路径不生效，绝不会挂错行。
+ * 换表而不原地删（同类实现同样是这条：新建 ArrayList 逐元素过滤，**只在 size 变了才返回新表**）：
+ * `g4.g:HashMap` 把这个列表缓存着，原地删会让「临时显示」和三击喊不回来。
+ *
+ * 明确接受的代价：存储层这条不只喂显示 —— 按标签群发/标签消息也读它，所以隐藏联系人会一起收不到。
+ * 这是挂在这一层必然带来的语义，不是显示层能两全的位置；要分开得再拆一层。
  */
 private fun HideContacts.installLabelMemberHooks() {
-    val preference = LABEL_EXPAND_PREFERENCE.toClassOrNull()
-    if (preference == null) {
-        WeLogger.w(TAG, "ContactListExpandPreference missing; 标签成员 stays unfiltered")
+    if (methodLabelUserNamesById.isPlaceholder) {
+        WeLogger.w(TAG, "getUserNameListById wasn't resolved; 标签成员 stays unfiltered")
         return
     }
 
-    val setters = preference.declaredMethods.filter { method ->
-        method.returnType == Void.TYPE &&
-            method.parameterCount == 1 &&
-            method.parameterTypes[0] == List::class.java
-    }
-    if (setters.isEmpty()) {
-        WeLogger.w(TAG, "no (List)->void setter on ContactListExpandPreference; 标签成员 stays unfiltered")
-        return
-    }
-    // 挑中了哪几条要打进日志：这两条是按形状选的，不看日志就分不清"没挑到"和"挑到了但传进来的不是人"。
-    WeLogger.i(TAG, "label member setters: ${setters.joinToString { it.name }}")
+    methodLabelUserNamesById.hookAfter {
+        if (isTemporarilyShown) return@hookAfter
+        if (!surfaceOn(HideSurface.CONTACT_LABEL)) return@hookAfter
 
-    setters.forEach { setter ->
-        setter.makeAccessible()
-        setter.hookBefore {
-            if (isTemporarilyShown) return@hookBefore
-            if (!surfaceOn(HideSurface.CONTACT_LABEL)) return@hookBefore
-
-            val members = args[0] as? List<*> ?: return@hookBefore
-            val filtered = filterHiddenUsernames(members) ?: return@hookBefore
-            WeLogger.d(TAG, "filtered ${members.size - filtered.size} hidden member(s) out of a label list")
-            args[0] = filtered
-        }
+        val members = result as? List<*> ?: return@hookAfter
+        val filtered = filterHiddenUsernames(members) ?: return@hookAfter
+        WeLogger.d(TAG, "filtered ${members.size - filtered.size} hidden member(s) out of a label")
+        result = filtered
     }
 }
 
@@ -790,7 +774,7 @@ private val searchRowBaselines = WeakHashMap<View, SearchRowBaseline>()
  * 层次是三轮真机读数选出来的：SQL 文本改不到（身份在绑定参数里，而且同级模块早就在给 FTS 查询套
  * `aux_index NOT IN` 了，界面照旧）；FTS 段基类 `a.o0` 只管「结果真从 FTS 查询来」的段（聊天记录段
  * `e33.u` 实测能少一条），联系人那一整段一次都没经过它。剩下能兜住这行的就是渲染那一下 ——
- * `fm5.u` / `fm5.e` 的 `getView`。浮云 在 8.0.76 上做的也正是这一层：命中就 `setVisibility(GONE)`
+ * `fm5.u` / `fm5.e` 的 `getView`。同类密友模块在 8.0.76 上走的也正是这一层：命中就 `setVisibility(GONE)`
  * 并把 `LayoutParams` 宽高写 0（ListView 里单靠 GONE 不收回高度），原尺寸存 WeakHashMap 以便还原。
  *
  * 「这一行是谁」用宿主自己的映射，不再自己数下标：`getItem(position)` 是 `com.tencent.mm.ui.z9`
