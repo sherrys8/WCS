@@ -570,6 +570,9 @@ private fun HideContacts.installLabelMemberHooks() {
  */
 private val searchItemStringFields = ConcurrentHashMap<Class<*>, List<Field>>()
 
+/** 行对象（`n23.i`）的字段，同样按类缓存；见 [pruneSearchRow]。 */
+private val searchRowFields = ConcurrentHashMap<Class<*>, List<Field>>()
+
 /**
  * 主页搜索里每一个结果段（联系人 / 聊天记录 / 公众号…）的行列表.
  *
@@ -581,13 +584,20 @@ private val searchItemStringFields = ConcurrentHashMap<Class<*>, List<Field>>()
  * 段自己的 `s(v, HashSet)` 去渲染）—— 宿主把这一次搜索的结果对象交出去就在这一下。类和成员名
  * 全是混淆的，锚点用的是它自己打的那条日志字面量（全 dex 唯一）。
  *
+ * **两头都要改，只改前面那次没打中**：真机 2026-10-31 装 `b83283ef` 后
+ * `filtered 1 hidden row(s) out of a search result section` 打了 4 次、界面照旧。原因是渲染根本不读
+ * 那个结果对象 —— adapter 逐位取行走 `a.c(int)`（`a.smali:70`），它索引的是**段自己的** `n:List`
+ * （`a.smali:16`，装的是 `n23/i` 行组）。所以 hookBefore 筛 `v.e` 是"少给它几条原料"，
+ * hookAfter 再筛一次 `n` 才是"把要画的那几行摘掉"。
+ *
+ * `n` 是 final 字段，所以这里只能就地删（换引用不行）。可以接受：宿主自己在每次搜索开始时
+ * `n.clear()`（`a.smali:64`）后重建，删掉的东西下一次搜索一定会按当时的隐藏集重新长回来；
+ * 代价只是「搜索进行中三击临时显示」要等下一次搜索才恢复，和 视频号 那一面同规格。
+ *
  * 结果对象里只有一个 `java.util.List` 字段（`j23/v.smali:15`），装的就是这个段的行；元素的身份
  * 字段名混淆且每版改（8.0.76 是 `y.e:String`，靠 `z23/u1.smali:52-62` 把它交给
  * `storage.j4.n(String,Z)` 才坐实是 wxid），所以**按内容认人**：任一声明的 String 字段正好等于
  * 一个隐藏 id 就算这一行是它的。
- *
- * 替换字段值而不是原地 `removeAll`：这个结果对象可能被宿主按关键词缓存着，原地删掉之后
- * 「临时显示」和三击就把人喊不回来了。原列表对象本身一个字节都不动。
  */
 private fun HideContacts.installFtsSearchResultHook() {
     if (methodFtsResultSectionReceive.isPlaceholder) {
@@ -595,28 +605,56 @@ private fun HideContacts.installFtsSearchResultHook() {
         return
     }
 
-    val holderClass = methodFtsResultSectionReceive.method.parameterTypes.firstOrNull()
+    val receiver = methodFtsResultSectionReceive.method
+    val holderClass = receiver.parameterTypes.firstOrNull()
     val listField = holderClass?.declaredFields?.firstOrNull { it.type == List::class.java }
-    if (listField == null) {
-        WeLogger.w(TAG, "no java.util.List field on the fts result holder; 主页搜索 stays unfiltered")
+    // 段自己的行列表：声明在收到结果的那一层基类上（8.0.76 是 `a.n`），子类不能再有自己的，
+    // 所以按 receiver 的声明类找，而不是按 thisObject 的运行时类找。
+    val rowsField = receiver.declaringClass.reflekt()
+        .firstFieldOrNull { type = List::class }
+        ?.self?.makeAccessible()
+    if (listField == null || rowsField == null) {
+        WeLogger.w(TAG, "no java.util.List field on the fts holder or section; 主页搜索 stays unfiltered")
         return
     }
     listField.makeAccessible()
-    WeLogger.i(TAG, "fts result receiver is ${holderClass.name}, list field ${listField.name}")
+    WeLogger.i(
+        TAG,
+        "fts result receiver is ${receiver.declaringClass.name}.${receiver.name}: " +
+            "holder ${holderClass.name}.${listField.name}, rows ${receiver.declaringClass.name}.${rowsField.name}",
+    )
 
     methodFtsResultSectionReceive.hookBefore {
         if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookBefore
         if (!surfaceOn(HideSurface.SEARCH)) return@hookBefore
 
-        val holder = args.getOrNull(0) ?: return@hookBefore
+        val holder = args[0]
         val items = listField.get(holder) as? List<*> ?: return@hookBefore
         if (items.isEmpty()) return@hookBefore
 
         val kept = items.filterNot { it != null && isHiddenSearchItem(it) }
         if (kept.size == items.size) return@hookBefore
 
-        WeLogger.d(TAG, "filtered ${items.size - kept.size} hidden row(s) out of a search result section")
+        WeLogger.d(
+            TAG,
+            "dropped ${items.size - kept.size} of ${items.size} fts result item(s) for " +
+                "${thisObject.javaClass.name}",
+        )
         listField.set(holder, ArrayList(kept))
+    }
+
+    // 渲染读的是这一段，所以真正决定"看不看得见"的是这里。
+    methodFtsResultSectionReceive.hookAfter {
+        if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookAfter
+        if (!surfaceOn(HideSurface.SEARCH)) return@hookAfter
+
+        val rows = rowsField.get(thisObject) as? MutableList<Any?> ?: return@hookAfter
+        if (rows.isEmpty()) return@hookAfter
+
+        val removed = rows.removeAll { row -> row != null && pruneSearchRow(row) }
+        if (removed) {
+            WeLogger.d(TAG, "removed hidden row(s) from the rendered fts section ${thisObject.javaClass.name}")
+        }
     }
 }
 
@@ -629,4 +667,30 @@ private fun HideContacts.isHiddenSearchItem(item: Any): Boolean {
         val value = field.get(item) as? String
         value != null && isHiddenNow(value)
     }
+}
+
+/**
+ * 一行（`n23/i`）自己不带 id：8.0.76 上它把条目放在 `i:Lj23/y;`（单个）或 `f:Ljava/util/List;`
+ * （一组）里，所以往下走一层再按内容认。别钉 `i`/`f` 这两个名字，它们每版都改。
+ *
+ * 返回「这一整行该不该摘掉」：单个条目就是那个人 → 摘整行（联系人段一行就是一个人）；
+ * 一组条目里只有部分是人 → 只把那几条从组里换掉、整行留着，别把同组里别人的结果一起删了。
+ */
+private fun HideContacts.pruneSearchRow(row: Any): Boolean {
+    var drop = false
+    searchRowFields.getOrPut(row.javaClass) {
+        row.javaClass.reflekt().fields().map { it.self.makeAccessible() }
+    }.forEach { field ->
+        when (val value = field.get(row)) {
+            null -> Unit
+            is List<*> -> {
+                val kept = value.filterNot { it != null && isHiddenSearchItem(it) }
+                if (kept.size < value.size) {
+                    if (kept.isEmpty()) drop = true else field.set(row, ArrayList(kept))
+                }
+            }
+            else -> if (isHiddenSearchItem(value)) drop = true
+        }
+    }
+    return drop
 }
