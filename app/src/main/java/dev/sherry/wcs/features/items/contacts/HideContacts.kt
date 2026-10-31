@@ -402,7 +402,8 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         }
     }
 
-    override fun onQuery(sql: String): String? = rewriteMomentsFeedSql(sql) ?: rewriteFtsSql(sql)
+    override fun onQuery(sql: String, bindArgs: Array<out Any?>?): String? =
+        rewriteMomentsFeedSql(sql) ?: rewriteFtsSql(sql, bindArgs)
 
     // The parentRef marker older versions wrote via WeConversationApi.setConversationsVisibility to
     // hide a chat. WeChat's native list filter (m4.O) hides rows whose parentRef isn't null/empty.

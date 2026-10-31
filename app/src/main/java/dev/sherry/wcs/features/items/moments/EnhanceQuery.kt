@@ -23,7 +23,7 @@ object EnhanceQuery : SwitchFeature(), WeDatabaseListenerApi.IQueryListener {
         WeDatabaseListenerApi.removeListener(this)
     }
 
-    override fun onQuery(sql: String): String? {
+    override fun onQuery(sql: String, bindArgs: Array<out Any?>?): String? {
         val rewritten = rewriteSql(sql)
 
         if (rewritten != sql) {

@@ -390,20 +390,29 @@ private const val CHATROOM_MEMBERS_CROSS_JOIN = "FROM FTS5ChatRoomMembers, "
  * FTS (全局搜索) rewriting, called from [HideContacts.onQuery].
  *
  * It rides the same `WeDatabaseListenerApi` query listener the Moments feed rewrite uses rather than a
- * hook of its own: that API already covers both shapes the host can use — `wcdb.compat.SQLiteDatabase
- * .rawQuery(String, Object[])` on the new path and `wcdb.database.SQLiteDatabase.rawQueryWithFactory`
- * on the old one — and picks between them at install time. A hook pinned to one of the two simply never
- * runs when the host takes the other, which is how this one lost 全局搜索 on 8.0.76 (the old hook did
- * install, it was just on the door nobody uses).
+ * hook of its own: that API now covers **both** WCDB read entry points. They coexist on 8.0.76 and each
+ * has one internal chokepoint — `compat.SQLiteDatabase`'s 3-arg `rawQuery` and `database.SQLiteDatabase`'s
+ * 5-arg `rawQueryWithFactory` — and the two never call each other, so hooking only one leaves whole
+ * features unreadable: 朋友圈 `SnsInfo` came out of compat while 全局搜索 is served by
+ * `MicroMsg.FTS.FTSIndexDB` (`com/tencent/mm/plugin/fts/o.smali:1683`) on the database class. With the
+ * old either-or install the search statements never even reached this function.
+ *
+ * [bindArgs] matters for the same reason: the FTS search tasks resolve a person into docids with
+ * `… WHERE aux_index=? …`, so the identity is only in the bind array, never in the SQL text.
  */
-fun rewriteFtsSql(sql: String): String? {
+fun rewriteFtsSql(sql: String, bindArgs: Array<out Any?>?): String? {
     if (HideContacts.isTemporarilyShown) return null
-    if (!HideContacts.surfaceOn(HideSurface.SEARCH)) return null
 
     // An empty set would render `aux_index NOT IN ()` — a SQLite syntax error that breaks ALL
     // global search while the feature is enabled but nothing is hidden yet.
     val hidden = HideContacts.hiddenContacts
     if (hidden.isEmpty()) return null
+
+    // 标签成员表与「把人解析成 docid」那两条，归「标签内隐藏」和「主页搜索隐藏」共管，所以放在
+    // SEARCH 那道总闸之前 —— 只开标签面时也必须生效。
+    rewriteFtsMemberSql(sql, bindArgs, hidden)?.let { return it }
+
+    if (!HideContacts.surfaceOn(HideSurface.SEARCH)) return null
 
     val rewritten = rewriteFtsStatement(sql, hidden)
     if (rewritten == null) {
@@ -415,6 +424,53 @@ fun rewriteFtsSql(sql: String): String? {
     }
     WeLogger.d(TAG, "filtered hidden contacts out of an fts query: ${sql.take(80)}")
     return rewritten
+}
+
+/**
+ * 标签的成员列表：`SELECT user FROM FTS5ContactLabels WHERE label_id=?;`
+ * (`com/tencent/mm/plugin/fts/logic/h0.smali:109`，把 label_id 绑成十进制字符串后逐行读 `user`)。
+ *
+ * 「标签内隐藏」以前一直没生效就是因为这条读根本不走 `ka5.b0` wrapper，也不带 `labelIDList`
+ * —— 真机 2026-10-31 的日志里 `labelidlist` 出现 0 次，而这条语句在用户翻标签页时打了 5 次。
+ * `user` 就在投影里，外层直接筛掉即可。
+ */
+private const val SQL_LABEL_MEMBERS = "SELECT user FROM FTS5ContactLabels WHERE label_id=?"
+
+/**
+ * 搜索任务把「人」换成 docid 的那类读：`… WHERE aux_index=? …`，绑进去的第一个值就是被查的人
+ * （`i23/a.smali:2379` 的 `w(int[], String, int)` 与 `fts/logic/n3.smali:640`；调用方全在
+ * `plugin/fts/logic` 的搜索任务里 —— e0/g0/h0/y/n3，只读，不参与索引写入）。
+ *
+ * 命中时让这条语句返回零行：那个人就解析不出 docid，自然出不了结果。
+ *
+ * 只认占位符形式 `aux_index=?`：会话内搜索写的是 `aux_index='wxid_x'` 字面量
+ * （见 [AUX_INDEX_PINNED_REGEX] 的说明），那种语句的 bindArgs 里装的是关键词，误判会把会话内
+ * 搜索整个打死。同样只认 SELECT —— `DELETE FROM … WHERE rowid IN (SELECT docid FROM … WHERE
+ * aux_index=? AND timestamp <= ?)`（`plugin/fts/o.smali:1172`）嵌着同形状的 subquery，
+ * 给 DELETE 加条件只会让索引删不掉旧行，那是纯粹的副作用。
+ */
+private val AUX_INDEX_PLACEHOLDER = Regex("aux_index\\s*=\\s*\\?", RegexOption.IGNORE_CASE)
+
+/** Returns the rewritten statement, or null when this read is none of the two member-shaped surfaces. */
+private fun rewriteFtsMemberSql(sql: String, bindArgs: Array<out Any?>?, hidden: Set<String>): String? {
+    if (HideContacts.surfaceOn(HideSurface.CONTACT_LABEL) && sql.startsWith(SQL_LABEL_MEMBERS)) {
+        WeLogger.d(TAG, "filtered hidden contacts out of a label member list")
+        return wrapWithNotIn(sql, "user", hidden)
+    }
+
+    if (!HideContacts.surfaceOn(HideSurface.SEARCH) && !HideContacts.surfaceOn(HideSurface.CONTACT_LABEL)) {
+        return null
+    }
+    if (!sql.startsWith("SELECT", true)) return null
+    if (!AUX_INDEX_PLACEHOLDER.containsMatchIn(sql)) return null
+    val target = bindArgs?.firstOrNull() as? String ?: return null
+    if (!HideContacts.isHiddenNow(target)) return null
+
+    // 宿主把这些语句拼出来时都以字面 `;` 收尾（`i23/a.w` 里最后 append 的就是 ";"），条件要插到它
+    // 之前；万一没有分号，原样追加也一样合法。
+    val body = sql.trimEnd().removeSuffix(";")
+    WeLogger.d(TAG, "vetoed an fts docid lookup for $target: ${sql.take(80)}")
+    return "$body AND aux_index NOT IN (${hidden.toSqlList()});"
 }
 
 /** Returns the rewritten FTS query, or null to leave it untouched. */

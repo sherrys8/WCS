@@ -495,7 +495,7 @@ object ConversationAggregation : ClickableFeature(),
         refreshAllFolders.set(false)
     }
 
-    override fun onQuery(sql: String): String? {
+    override fun onQuery(sql: String, bindArgs: Array<out Any?>?): String? {
         if (suppressQueryRewrite.get()!!) return null
 
         val folderId = activeFolderId ?: return null
@@ -803,7 +803,7 @@ object ConversationAggregation : ClickableFeature(),
         WeDatabaseApi.methodSqliteWrapperRawQuery.hookBefore {
             if (suppressQueryRewrite.get()!!) return@hookBefore
             val sql = args.firstOrNull() as? String ?: return@hookBefore
-            onQuery(sql)?.let { args[0] = it }
+            onQuery(sql, null)?.let { args[0] = it }
         }
     }
 
