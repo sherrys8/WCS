@@ -739,22 +739,42 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
      * 为什么必须换到这一层：三轮真机读数把上面那条 `a.o0` 的覆盖面钉住了 —— 它只管「结果从 FTS 查询里
      * 来的段」（聊天记录段 `e33.u` 实测少了一条），联系人那一整段一次都没经过它，而且整场搜索里连一条
      * 按关键词读 `rcontact` 的语句都没出现。`fm5/e`、`fm5/w` 才是调 `e01/jb.smali:154`（按关键词
-     * LIKE 找人）的地方，`fm5/u` 就是那份结果的适配器 —— 行在这里bind 成 View，绕不过去。
+     * LIKE 找人）的地方，`fm5/u` 就是那份结果的适配器 —— 行在这里 bind 成 View，绕不过去。
      *
-     * 类名混淆、tag 没混淆，所以按 tag 钉类。两者都 extends `com.tencent.mm.ui.z9`
-     * （`smali_classes8/com/tencent/mm/ui/z9.smali:2`，`super android.widget.BaseAdapter`），
-     * 它的 `getItem(int)`（`:177`）会按 `o(position)` 跳过 header 再从 map/cursor 取行，所以拿
-     * `getItem` 定位「这一行是谁」是宿主自己的映射，比我们再数一遍位置可靠。
+     * 类名混淆、tag 没混淆，但**光靠 tag 钉不住**：真机 8.0.76 上 `usingEqStrings` 这两个字面量各自都
+     * 命中两个类（`fm5.p` 与 `fm5.u`、`fm5.b` 与 `fm5.e` —— 前两个是回调/监听类，也打了同一个 tag），
+     * DexKit 报 `Multiple classes found for key: classSearchResultAdapter, count: 2, classes: fm5.p,fm5.u`。
+     * 所以要再加一条结构约束：这个类必须**自己声明** `getView(int, View, ViewGroup)`。方法名是覆写
+     * Android SDK 的，混淆改不掉；而 `getView` 恰好只有适配器有、监听类没有（`fm5/p:1` 是
+     * `super Object + implements ic5.e`，一个 getView 都不声明）—— 这是唯一能把两者分开的判据。
+     *
+     * 两者都 extends `com.tencent.mm.ui.z9`（`smali_classes8/com/tencent/mm/ui/z9.smali:2`，
+     * `super android.widget.BaseAdapter`），它的 `getItem(int)`（`:177`）会按 `o(position)` 跳过 header
+     * 再从 map/cursor 取行，所以拿 `getItem` 定位「这一行是谁」是宿主自己的映射，比我们再数一遍位置可靠。
      */
     val classSearchResultAdapter by dexClass(allowFailure = true) {
         matcher {
             usingEqStrings("MicroMsg.SearchResultAdapter")
+            methods {
+                add {
+                    name = "getView"
+                    paramTypes("int", "android.view.View", "android.view.ViewGroup")
+                    returnType = "android.view.View"
+                }
+            }
         }
     }
 
     val classSearchConversationAdapter by dexClass(allowFailure = true) {
         matcher {
             usingEqStrings("MicroMsg.SearchConversationAdapter")
+            methods {
+                add {
+                    name = "getView"
+                    paramTypes("int", "android.view.View", "android.view.ViewGroup")
+                    returnType = "android.view.View"
+                }
+            }
         }
     }
 
