@@ -2,12 +2,16 @@ package dev.sherry.wcs.features.items.contacts.hidecontacts
 
 import dev.ujhhgtg.reflekt.reflekt
 import dev.ujhhgtg.reflekt.utils.makeAccessible
+import dev.ujhhgtg.reflekt.utils.toClassOrNull
 import dev.sherry.wcs.constants.PackageNames
 import dev.sherry.wcs.dexkit.dsl.DexMethodDelegate
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.items.contacts.HideContacts
 import dev.sherry.wcs.utils.WeLogger
+import dev.sherry.wcs.utils.reflection.BString
+import java.lang.reflect.Field
 import java.util.LinkedList
+import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "HideContacts.Lists"
 
@@ -15,14 +19,18 @@ private const val TAG = "HideContacts.Lists"
  * List/adapter-level hiding for the surfaces whose rows never pass through a rewritable SQL query.
  *
  * The SQL rewriter in HideContactsSql.kt covers everything WeChat reads out of `rcontact` /
- * `rconversation` with a statement we can see. The four surfaces installed here are invisible to it:
+ * `rconversation` with a statement we can see. The surfaces installed here are invisible to it:
  *
  * - the 通讯录 and @成员 lists are MVVM "live lists" whose rows are already-materialised
  *   `Contact` objects by the time any adapter sees them;
  * - group-member lists come from `chatroom.memberlist`, a `;`-separated string column, so there is
  *   no per-member row to filter in SQL at all;
  * - 收藏 has largely moved to the WCDB ORM builder (`r82.e` / `br5.f`), which emits no raw SQL;
- * - 视频号 like lists are network-driven protobuf, with no local table behind them.
+ * - 视频号 like lists are network-driven protobuf, with no local table behind them;
+ * - 标签成员 and 主页搜索结果 both read through FTS tables whose statements either never reach the
+ *   rewriter or carry the contact only as a bind argument — and on 2026-10-31 the device proved the
+ *   rewriting that *is* applied there changes nothing on screen, which is what pushed these two
+ *   surfaces down to the assembly point as well.
  *
  * Every hook here filters the *input* the adapter is built from rather than remapping adapter
  * indices. That is deliberate: an earlier iteration of this feature shifted `getView` positions
@@ -43,6 +51,8 @@ fun HideContacts.installListHooks() {
     installGroupMemberHooks()
     installFavoriteHooks()
     installFinderLikeHooks()
+    installLabelMemberHooks()
+    installFtsSearchResultHook()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -490,3 +500,133 @@ private fun protoGetString(proto: Any, fieldIndex: Int): String? = runCatching {
     }
     null
 }.getOrNull()
+
+// ---------------------------------------------------------------------------------------------
+// 标签成员列表
+// ---------------------------------------------------------------------------------------------
+
+/** 标签页那行「展开看成员」的控件；类名没被混淆，跨版本稳定。 */
+private const val LABEL_EXPAND_PREFERENCE =
+    "com.tencent.mm.pluginsdk.ui.applet.ContactListExpandPreference"
+
+/**
+ * 通讯录 -> 标签 -> 点开某个标签展开出来的成员行.
+ *
+ * 这一面在 SQL 层修不好，是真机 2026-10-31 的现场判的：标签页读的是全量映射
+ * `SELECT user, label_id FROM FTS5ContactLabels`（回 Java 侧再分组），连
+ * `SELECT user FROM FTS5ContactLabels WHERE label_id=?` 都没打过来，`labelIDList` 全天 0 次
+ * —— 之前那条 `contact-label` 规则钉的形状宿主根本不走。浮云 也是在装配这一层解决的
+ * （把宿主已经装配好的 List 重建一份、摘掉密友），所以这一面照它那一层做。
+ *
+ * 落点选这个控件而不是存储方法（`storage.g4.s2` = `getUserNameListById`），因为存储层那条还被
+ * 群发/标签消息之类的逻辑用着，在那里摘人就不再是"看不见"而是"发不到"了。
+ *
+ * 它有两个把列表交给展开适配器的入口（8.0.76：`V` 在 :231，走 `T(String,List,boolean)`；
+ * `X` 在 :276，直接 `iput-object … a55/v1->f:Ljava/util/List;`），元素就是用户名字符串
+ * （`v1.h()` 里逐个 cast 成 String 再 `j4.n(String,Z)` 取联系人）。方法名是混淆的，所以装载时按
+ * 签名挑 `void (java.util.List)` —— 全类 17 个方法只有这两条形参相符，两个都挂；少挂一个也只是
+ * 那一条路径不生效，绝不会挂错行。
+ */
+private fun HideContacts.installLabelMemberHooks() {
+    val preference = LABEL_EXPAND_PREFERENCE.toClassOrNull()
+    if (preference == null) {
+        WeLogger.w(TAG, "ContactListExpandPreference missing; 标签成员 stays unfiltered")
+        return
+    }
+
+    val setters = preference.declaredMethods.filter { method ->
+        method.returnType == Void.TYPE &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0] == List::class.java
+    }
+    if (setters.isEmpty()) {
+        WeLogger.w(TAG, "no (List)->void setter on ContactListExpandPreference; 标签成员 stays unfiltered")
+        return
+    }
+    // 挑中了哪几条要打进日志：这两条是按形状选的，不看日志就分不清"没挑到"和"挑到了但传进来的不是人"。
+    WeLogger.i(TAG, "label member setters: ${setters.joinToString { it.name }}")
+
+    setters.forEach { setter ->
+        setter.makeAccessible()
+        setter.hookBefore {
+            if (isTemporarilyShown) return@hookBefore
+            if (!surfaceOn(HideSurface.CONTACT_LABEL)) return@hookBefore
+
+            val members = args[0] as? List<*> ?: return@hookBefore
+            val filtered = filterHiddenUsernames(members) ?: return@hookBefore
+            WeLogger.d(TAG, "filtered ${members.size - filtered.size} hidden member(s) out of a label list")
+            args[0] = filtered
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 主页搜索的结果段
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * 搜索结果条目的 String 字段，按条目类缓存一次。`j23.y` 这类条目每段都可能换一个类，
+ * 而这一句跑在每次敲字的每一行上，不能每次都反射。
+ */
+private val searchItemStringFields = ConcurrentHashMap<Class<*>, List<Field>>()
+
+/**
+ * 主页搜索里每一个结果段（联系人 / 聊天记录 / 公众号…）的行列表.
+ *
+ * SQL 这条路已经证否了：现场日志显示同级模块早就在给 `FTS5MetaContact` 那条查询套
+ * `SELECT * FROM (…) WHERE aux_index NOT IN (…)`，界面照旧；而 `… WHERE aux_index=?` 这类解析读
+ * 的身份只出现在绑定参数里，文本改写结构上就够不着。所以这一面只能打在装配点。
+ *
+ * 落点是各段共同的基类方法 `o0(j23.v)`（8.0.76 `plugin/fts/ui/a.smali:719`，紧接着 `:1034` 才调
+ * 段自己的 `s(v, HashSet)` 去渲染）—— 宿主把这一次搜索的结果对象交出去就在这一下。类和成员名
+ * 全是混淆的，锚点用的是它自己打的那条日志字面量（全 dex 唯一）。
+ *
+ * 结果对象里只有一个 `java.util.List` 字段（`j23/v.smali:15`），装的就是这个段的行；元素的身份
+ * 字段名混淆且每版改（8.0.76 是 `y.e:String`，靠 `z23/u1.smali:52-62` 把它交给
+ * `storage.j4.n(String,Z)` 才坐实是 wxid），所以**按内容认人**：任一声明的 String 字段正好等于
+ * 一个隐藏 id 就算这一行是它的。
+ *
+ * 替换字段值而不是原地 `removeAll`：这个结果对象可能被宿主按关键词缓存着，原地删掉之后
+ * 「临时显示」和三击就把人喊不回来了。原列表对象本身一个字节都不动。
+ */
+private fun HideContacts.installFtsSearchResultHook() {
+    if (methodFtsResultSectionReceive.isPlaceholder) {
+        WeLogger.w(TAG, "fts result receiver wasn't resolved; 主页搜索 stays unfiltered")
+        return
+    }
+
+    val holderClass = methodFtsResultSectionReceive.method.parameterTypes.firstOrNull()
+    val listField = holderClass?.declaredFields?.firstOrNull { it.type == List::class.java }
+    if (listField == null) {
+        WeLogger.w(TAG, "no java.util.List field on the fts result holder; 主页搜索 stays unfiltered")
+        return
+    }
+    listField.makeAccessible()
+    WeLogger.i(TAG, "fts result receiver is ${holderClass.name}, list field ${listField.name}")
+
+    methodFtsResultSectionReceive.hookBefore {
+        if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookBefore
+        if (!surfaceOn(HideSurface.SEARCH)) return@hookBefore
+
+        val holder = args.getOrNull(0) ?: return@hookBefore
+        val items = listField.get(holder) as? List<*> ?: return@hookBefore
+        if (items.isEmpty()) return@hookBefore
+
+        val kept = items.filterNot { it != null && isHiddenSearchItem(it) }
+        if (kept.size == items.size) return@hookBefore
+
+        WeLogger.d(TAG, "filtered ${items.size - kept.size} hidden row(s) out of a search result section")
+        listField.set(holder, ArrayList(kept))
+    }
+}
+
+/** 条目里的 String 字段按内容比对；只可能是那个 wxid 字段命中，昵称/摘要这类值不等于 id。 */
+private fun HideContacts.isHiddenSearchItem(item: Any): Boolean {
+    val fields = searchItemStringFields.getOrPut(item.javaClass) {
+        item.javaClass.reflekt().fields { type = BString }.map { it.self.makeAccessible() }
+    }
+    return fields.any { field ->
+        val value = field.get(item) as? String
+        value != null && isHiddenNow(value)
+    }
+}

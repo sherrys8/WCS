@@ -31,14 +31,11 @@ object WeDatabaseListenerApi : ApiFeature() {
 
     fun interface IQueryListener {
         /**
-         * [bindArgs] 是宿主传进来的那条绑定数组，顺序原样。
-         *
-         * 为什么必须给：有一类读把要查的人整个钉成占位符 —— `… WHERE aux_index=? AND type IN (…)`
-         * （`i23/a.w`、`fts/logic/n3`），SQL 文本里根本没有身份，只有绑定值有。只看文本的监听器对
-         * 这种语句永远只能"放过"，真机 2026-10-31 的日志就是这样：一次搜索里几十条
-         * `SELECT docid FROM FTS5MetaContact WHERE aux_index=?` 全在 left alone 里。
+         * 只有 SQL 文本：绑定参数里可能藏着这条读的主角（FTS 的 `… WHERE aux_index=?`），
+         * 需要按人否决一类查询的面上别在这里想办法，改到装配点去做 —— 见
+         * `hidecontacts/HideContactsSql.kt` 里 rewriteFtsSql 的那段现场结论。
          */
-        fun onQuery(sql: String, bindArgs: Array<out Any?>?): String?
+        fun onQuery(sql: String): String?
     }
 
     private const val TAG = "WeDatabaseListenerApi"
@@ -205,12 +202,11 @@ object WeDatabaseListenerApi : ApiFeature() {
 
                     val sql = args[0] as? String ?: return@hookBefore
                     var currentSql = sql
-                    val bindArgs = args.getOrNull(1) as? Array<*>
 
                     logWithStack("rawQuery", "N/A", args)
 
                     queryListeners.forEach { listener ->
-                        listener.onQuery(currentSql, bindArgs)?.let { currentSql = it }
+                        listener.onQuery(currentSql)?.let { currentSql = it }
                     }
 
                     if (currentSql != sql) {
@@ -238,7 +234,6 @@ object WeDatabaseListenerApi : ApiFeature() {
 
                 val sql = args[1] as? String ?: return@hookBefore
                 var currentSql = sql
-                val bindArgs = args.getOrNull(2) as? Array<*>
 
                 logWithStack(
                     "rawQueryWithFactory",
@@ -247,7 +242,7 @@ object WeDatabaseListenerApi : ApiFeature() {
                 )
 
                 queryListeners.forEach { listener ->
-                    listener.onQuery(currentSql, bindArgs)?.let { currentSql = it }
+                    listener.onQuery(currentSql)?.let { currentSql = it }
                 }
 
                 if (currentSql != sql) {

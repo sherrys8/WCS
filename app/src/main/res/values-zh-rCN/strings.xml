@@ -3103,6 +3103,7 @@
     <string name="contacts_hide_surface_team_summary">微信团队提醒</string>
     <string name="contacts_hide_surface_team_summary_desc">隐藏联系人的通知被拦下时，改发一条本模块的通知；点它会打开「微信团队」会话</string>
     <string name="contacts_hide_alert_title">微信团队</string>
+    <string name="contacts_hide_alert_body">你收到了一条新消息</string>
     <string name="contacts_hide_alert_channel">WcS提醒</string>
     <string name="contacts_hide_surface_block_chat">禁止进入聊天</string>
     <string name="contacts_hide_surface_block_chat_desc">即使从通知、搜索结果或链接进入，也无法打开隐藏联系人的聊天</string>

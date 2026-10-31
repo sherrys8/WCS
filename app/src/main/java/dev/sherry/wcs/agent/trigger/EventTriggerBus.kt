@@ -138,7 +138,7 @@ class EventTriggerBus(
         dispatchSql(SqlOp.UPDATE, table = table, sql = whereClause, values = values.toString())
     }
 
-    override fun onQuery(sql: String, bindArgs: Array<out Any?>?): String? {
+    override fun onQuery(sql: String): String? {
         dispatchSql(SqlOp.QUERY, table = null, sql = sql, values = null)
         return null // never rewrite the query
     }

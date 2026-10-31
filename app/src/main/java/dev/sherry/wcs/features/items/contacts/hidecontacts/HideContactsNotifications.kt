@@ -187,6 +187,7 @@ object HideContactsNotifications : ApiFeature(), IResolveDex {
         val notification = Notification.Builder(context, CHANNEL_ALERT)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(resources.getString(R.string.contacts_hide_alert_title))
+            .setContentText(resources.getString(R.string.contacts_hide_alert_body))
             .setWhen(System.currentTimeMillis())
             .setShowWhen(true)
             .setAutoCancel(true)

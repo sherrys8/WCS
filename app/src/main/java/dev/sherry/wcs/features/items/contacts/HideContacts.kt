@@ -402,8 +402,7 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         }
     }
 
-    override fun onQuery(sql: String, bindArgs: Array<out Any?>?): String? =
-        rewriteMomentsFeedSql(sql) ?: rewriteFtsSql(sql, bindArgs)
+    override fun onQuery(sql: String): String? = rewriteMomentsFeedSql(sql) ?: rewriteFtsSql(sql)
 
     // The parentRef marker older versions wrote via WeConversationApi.setConversationsVisibility to
     // hide a chat. WeChat's native list filter (m4.O) hides rows whose parentRef isn't null/empty.
@@ -712,6 +711,22 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         matcher {
             usingEqStrings("MicroMsg.FavoriteAdapter")
             paramTypes("java.util.List")
+            returnType("void")
+        }
+    }
+
+    /**
+     * 搜索结果段的接活入口 —— 8.0.76 是 `plugin/fts/ui/a.o0(j23.v)`（`a.smali:719`）。
+     *
+     * 主页搜索每个结果段（联系人 / 聊天记录 / 公众号…）都继承这个基类，`o0` 把这一次搜索的
+     * 结果对象交给段自己渲染。类和成员的名字全是混淆的，唯一稳定的是它打的那条日志字面量
+     * `"search type %d | result %d"` —— 全 dex 只出现在这一个方法体里（已核），所以按"方法包含该
+     * 字面量"来钉，比钉 `declaredClass` + 方法名都稳。
+     */
+    val methodFtsResultSectionReceive by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings("search type %d | result %d")
+            paramCount = 1
             returnType("void")
         }
     }

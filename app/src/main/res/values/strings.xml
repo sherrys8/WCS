@@ -3060,6 +3060,7 @@ Time: {time}</string>
     <string name="contacts_hide_surface_team_summary">WeChat Team alert</string>
     <string name="contacts_hide_surface_team_summary_desc">When notifications are suppressed, post an alert that opens the WeChat Team chat when tapped</string>
     <string name="contacts_hide_alert_title">WeChat Team</string>
+    <string name="contacts_hide_alert_body">You received a new message</string>
     <string name="contacts_hide_alert_channel">WcS alert</string>
     <string name="contacts_hide_surface_block_chat">Block entering chats</string>
     <string name="contacts_hide_surface_block_chat_desc">Chats of hidden contacts cannot be opened, even from a notification, a search result or a link</string>
