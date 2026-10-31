@@ -628,6 +628,8 @@ private fun HideContacts.installFtsSearchResultHook() {
         if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookBefore
         if (!surfaceOn(HideSurface.SEARCH)) return@hookBefore
 
+        // 虚方法的 hook，thisObject 就是这个段本身，不会是 null
+        val section = thisObject as Any
         val holder = args[0]
         val items = listField.get(holder) as? List<*> ?: return@hookBefore
         if (items.isEmpty()) return@hookBefore
@@ -638,7 +640,7 @@ private fun HideContacts.installFtsSearchResultHook() {
         WeLogger.d(
             TAG,
             "dropped ${items.size - kept.size} of ${items.size} fts result item(s) for " +
-                "${thisObject.javaClass.name}",
+                "${section.javaClass.name}",
         )
         listField.set(holder, ArrayList(kept))
     }
@@ -648,12 +650,13 @@ private fun HideContacts.installFtsSearchResultHook() {
         if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookAfter
         if (!surfaceOn(HideSurface.SEARCH)) return@hookAfter
 
-        val rows = rowsField.get(thisObject) as? MutableList<Any?> ?: return@hookAfter
+        val section = thisObject as Any
+        val rows = rowsField.get(section) as? MutableList<Any?> ?: return@hookAfter
         if (rows.isEmpty()) return@hookAfter
 
         val removed = rows.removeAll { row -> row != null && pruneSearchRow(row) }
         if (removed) {
-            WeLogger.d(TAG, "removed hidden row(s) from the rendered fts section ${thisObject.javaClass.name}")
+            WeLogger.d(TAG, "removed hidden row(s) from the rendered fts section ${section.javaClass.name}")
         }
     }
 }
