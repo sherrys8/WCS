@@ -3085,7 +3085,6 @@ Time: {time}</string>
     <string name="contacts_hide_long_press_ms_description">How long the title must be held before the toggle fires</string>
     <string name="contacts_hide_triple_click_ms">Triple-tap interval</string>
     <string name="contacts_hide_triple_click_ms_description">Maximum gap between two taps that still counts as the same triple-tap</string>
-    <string name="contacts_hide_blocked">This contact is hidden</string>
     <string name="contacts_schedule_monday">Mon</string>
     <string name="contacts_schedule_tuesday">Tue</string>
     <string name="contacts_schedule_wednesday">Wed</string>

@@ -24,6 +24,9 @@ private const val TAG = "HideContacts.Sql"
  */
 fun HideContacts.installSqlHooks() {
     installWrapperHook()
+    // 装好时记一次开关状态：下面每条判读日志都以 surfaceOn(SEARCH) 为前提交件，开关没开时现场会
+    // 一片安静，那和「钩子根本没装上」在日志里长得一模一样，分不清。
+    WeLogger.i(TAG, "query hooks installed; search surface on = ${surfaceOn(HideSurface.SEARCH)}")
 }
 
 // ── the wrapper chokepoint ───────────────────────────────────────────────────────────────────
@@ -220,6 +223,11 @@ private fun rewriteWrapperSql(sql: String): String? {
     val lower = sql.lowercase()
     val rule = WRAPPER_RULES.firstOrNull { it.matches(lower) } ?: return null
     if (!HideContacts.surfaceOn(rule.surface)) return null
+    // wrapper 通路原本一句改写日志都没有，「到底有没有命中规则」只能靠猜；搜索这一条刚加了新规则，
+    // 先只给它打点（其它规则每次通讯录渲染都会跑，打了会淹掉日志）。
+    if (rule.surface == HideSurface.SEARCH) {
+        WeLogger.d(TAG, "rule ${rule.name} matched: ${sql.take(80)}")
+    }
     return injectCondition(sql, rule.condition(hidden))
 }
 
@@ -405,7 +413,7 @@ fun rewriteFtsSql(sql: String): String? {
         if (sql.contains("FTS5")) WeLogger.d(TAG, "fts query left alone: ${sql.take(80)}")
         return null
     }
-    WeLogger.d(TAG, "filtered hidden contacts out of an fts query")
+    WeLogger.d(TAG, "filtered hidden contacts out of an fts query: ${sql.take(80)}")
     return rewritten
 }
 

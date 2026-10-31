@@ -11,6 +11,9 @@ import java.util.LinkedList
 
 private const val TAG = "HideContacts.Moments"
 
+/** 分组字段探测结果只记一次，见 [installMomentsInlineEntryHook] 里的说明。 */
+private var groupProbeLogged = false
+
 /** Every Moments-side surface a hidden contact can leak through. */
 fun HideContacts.installMomentsHooks() {
     installMomentsRedDotHook()
@@ -153,6 +156,16 @@ private fun HideContacts.installMomentsInlineEntryHook() {
                 .map { it.self.makeAccessible() }
         } else {
             emptyList()
+        }
+        // 探测结果只报一次：这一句跑在每条动态的渲染上，但「一个字段都没搜到」和「搜到了却没标记」
+        // 是两种完全不同的修法，光看有没有 stripped 日志分不出来。
+        if (iconOn && !groupProbeLogged) {
+            groupProbeLogged = true
+            WeLogger.i(
+                TAG,
+                "group field probe on ${original.javaClass.name}: " +
+                    (if (groupFields.isEmpty()) "none" else groupFields.joinToString { "${it.name}:${it.type.simpleName}" }),
+            )
         }
         val hasGroupMark = groupFields.any { field ->
             when (val value = runCatching { field.get(original) }.getOrNull()) {

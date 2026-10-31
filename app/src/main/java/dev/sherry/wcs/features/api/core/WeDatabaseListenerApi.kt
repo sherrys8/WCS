@@ -2,15 +2,14 @@ package dev.sherry.wcs.features.api.core
 
 import android.annotation.SuppressLint
 import android.content.ContentValues
+import android.os.CancellationSignal
 import com.tencent.wcdb.database.SQLiteDatabase
 import dev.ujhhgtg.reflekt.reflekt
 import dev.ujhhgtg.reflekt.utils.toClass
 import dev.sherry.wcs.R
 import dev.sherry.wcs.constants.Preferences
-import dev.sherry.wcs.constants.WeChatVersions
 import dev.sherry.wcs.features.core.ApiFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
-import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -162,23 +161,35 @@ object WeDatabaseListenerApi : ApiFeature() {
 
     // ==================== Query Hook ====================
 
+    /**
+     * 两条读语句的通路都要装，而不是按版本二选一。
+     *
+     * 宿主有两套 WCDB 入口，各自内部只有一个汇聚点：`wcdb.compat.SQLiteDatabase` 的 2 参 `rawQuery`
+     * 直接转调 3 参重载（真机 8.0.76 `com/tencent/wcdb/compat/SQLiteDatabase.smali:1221` → `:1234`），
+     * 3 参再走 `core.Handle`；`wcdb.database.SQLiteDatabase` 的 2/3 参 `rawQuery`、4 参
+     * `rawQueryWithFactory` 以及 `query()`/`queryWithFactory()` 全部转调 5 参
+     * `rawQueryWithFactory`（`com/tencent/wcdb/database/SQLiteDatabase.smali:3647`、`:3670`、`:3693`、
+     * `:3585` → `:3627`）。两套互不转调，所以同一条语句不会被分发两次。
+     *
+     * 为什么必须两套都装：要改写的语句并不都出自同一套。朋友圈 `SnsInfo` 走 compat（真机日志里
+     * `hid N contacts from moments feed` 一直是这条路），而全局搜索读的是
+     * `MicroMsg.FTS.FTSIndexDB` —— 它的查询方法调的是 database 类的 5 参
+     * `rawQueryWithFactory`（`com/tencent/mm/plugin/fts/o.smali:1683`）。早先这里按 `isNewVersion`
+     * 只挑一条装，8.0.76 挑中的是 compat，于是搜索语句根本没进过 `onQuery`：不抛异常、不打日志，
+     * 表现就是「改写规则写好了却像没生效」。Update 那侧本来就两套都装（见 hookDatabaseUpdate），
+     * 这里之前是不对称的。
+     */
     private fun hookDatabaseQuery() {
-        val isPlay = HostInfo.isHostGooglePlay
-        val version = HostInfo.versionCode
-        val isNewVersion = !isPlay && version >= WeChatVersions.MM_8_0_43 || isPlay && version >= WeChatVersions.MM_8_0_48_PLAY
-
-        if (isNewVersion) {
-            hookNewQueryMethod()
-        } else {
-            hookOldQueryMethod()
-        }
+        hookCompatQuery()
+        hookCoreQuery()
     }
 
-    private fun hookNewQueryMethod() {
+    /** 钉 3 参重载：2 参那条转调进来，所以一条就覆盖 compat 的全部读语句。 */
+    private fun hookCompatQuery() {
         com.tencent.wcdb.compat.SQLiteDatabase::class.reflekt()
             .firstMethod {
                 name = "rawQuery"
-                parameters(String::class, Array<Any>::class)
+                parameters(String::class, Array<Any>::class, CancellationSignal::class)
             }
             .hookBefore {
                 try {
@@ -202,12 +213,13 @@ object WeDatabaseListenerApi : ApiFeature() {
                             )
                     }
                 } catch (e: Throwable) {
-                    WeLogger.e(TAG, "New version query dispatch failed", e)
+                    WeLogger.e(TAG, "compat query dispatch failed", e)
                 }
             }
     }
 
-    private fun hookOldQueryMethod() {
+    /** 钉 5 参重载：database 类的 rawQuery/query/queryWithFactory 全都转调它。 */
+    private fun hookCoreQuery() {
         SQLiteDatabase::class.reflekt().firstMethod {
             name = "rawQueryWithFactory"
             parameterCount = 5
