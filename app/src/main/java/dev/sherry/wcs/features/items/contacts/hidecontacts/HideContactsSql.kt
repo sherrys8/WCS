@@ -289,12 +289,16 @@ private fun looksLikeContactSearchQuery(lower: String): Boolean {
     if (!lower.contains("from rcontact")) return false
     if (!lower.contains("like")) return false
     if (lower.contains("where rowid=") || lower.contains("encryptusername=")) return false
-    // 真机现场里这条形状只以 `LIKE '%@app'` / `LIKE '%@chatroom'` 这种形式出现过（14:03 那次抓到
-    // 的就是 `%@app`），那是宿主自己在按后缀枚举公众号/群聊，不是用户在搜索。放过它：往那种枚举里
-    // 插条件只会让宿主少算几个它自己要用的 id，而用户真正输入的关键词从来不以 `@` 开头。
-    if (lower.contains("like '%@")) return false
+    // 真机现场里这条形状只以 `rcontact.username LIKE '%@app'` 这种**正向**形式出现过（19:03 那次），
+    // 那是宿主自己在按后缀枚举公众号/群聊，不是用户在搜索。但放过它要精确：宿主自己那条按关键词找
+    // 联系人的语句（`e01/jb.smali:154`）固定带一段 `and username not like '%@%'`，那是**否定**形式，
+    // 一律放过就把真正的搜索语句也一起放掉了 —— 所以只拦正向的那个。用户输入的关键词不会以 `@` 开头。
+    if (POSITIVE_AT_LIKE.containsMatchIn(lower)) return false
     return !lower.contains("username =")
 }
+
+/** 正向的 `like '%@…'`（按后缀枚举）；`not like '%@%'`（排除服务号）不算。 */
+private val POSITIVE_AT_LIKE = Regex("""(?<!not )like '%@""")
 
 private fun looksLikeContactSelectorQuery(lower: String): Boolean {
     if (!lower.contains("select")) return false

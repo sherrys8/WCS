@@ -1,16 +1,21 @@
 package dev.sherry.wcs.features.items.contacts.hidecontacts
 
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Adapter
 import dev.ujhhgtg.reflekt.reflekt
 import dev.ujhhgtg.reflekt.utils.makeAccessible
 import dev.ujhhgtg.reflekt.utils.toClassOrNull
 import dev.sherry.wcs.constants.PackageNames
+import dev.sherry.wcs.dexkit.dsl.DexClassDelegate
 import dev.sherry.wcs.dexkit.dsl.DexMethodDelegate
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.items.contacts.HideContacts
 import dev.sherry.wcs.utils.WeLogger
-import dev.sherry.wcs.utils.reflection.BString
 import java.lang.reflect.Field
+import java.lang.reflect.Method
 import java.util.LinkedList
+import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "HideContacts.Lists"
@@ -53,6 +58,7 @@ fun HideContacts.installListHooks() {
     installFinderLikeHooks()
     installLabelMemberHooks()
     installFtsSearchResultHook()
+    installSearchResultRowHooks()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -565,13 +571,99 @@ private fun HideContacts.installLabelMemberHooks() {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * 搜索结果条目的 String 字段，按条目类缓存一次。`j23.y` 这类条目每段都可能换一个类，
- * 而这一句跑在每次敲字的每一行上，不能每次都反射。
+ * 结果行/条目的字段表，按类缓存一次：这些判据跑在每次敲字的每一条结果上，不能每行都反射。
+ * 键是宿主类，一个进程内就那么几个类，不需要回收。
+ *
+ * 要沿父类链收：联系人行是 `com.tencent.mm.storage.y3`，它的 `field_username` 声明在生成出来的基类上
+ * （`dm/f2.smali:223`），只看叶子类自己会一个字段也找不到 —— 这也是本仓 通讯录 那条钩子用
+ * `superclass()` 的同一个原因。停在 `java.*` / `android.*` 之前，否则会扫进
+ * `android.view.View` 自带的那一堆成员，造出假命中。
  */
-private val searchItemStringFields = ConcurrentHashMap<Class<*>, List<Field>>()
+private val searchFieldsByClass = ConcurrentHashMap<Class<*>, List<Field>>()
 
-/** 行对象（`n23.i`）的字段，同样按类缓存；见 [pruneSearchRow]。 */
-private val searchRowFields = ConcurrentHashMap<Class<*>, List<Field>>()
+/** 形状日志每个「段类/条目类」组合只打一次；见 [describeSearchSection]。 */
+private val loggedSearchShapes = ConcurrentHashMap.newKeySet<String>()
+
+private fun declaredSearchFields(cls: Class<*>): List<Field> =
+    searchFieldsByClass.getOrPut(cls) {
+        buildList {
+            var current: Class<*>? = cls
+            while (current != null && !current.name.startsWith("java.") && !current.name.startsWith("android.")) {
+                current.reflekt().fields().forEach { add(it.self.makeAccessible()) }
+                current = current.superclass
+            }
+        }
+    }
+
+/**
+ * 这个对象（或往下 [depth] 层）里有没有哪个 String 字段正好等于一个隐藏 id。
+ *
+ * 为什么不钉字段名：条目类与字段名每版都改（8.0.76 聊天记录段的条目是 `j23.y`，id 在 `y.e`，
+ * 靠 `z23/u1.smali:52-62` 把它交给 `storage.j4.n(String,Z)` 才坐实），而真机 2026-10-31 的第三轮
+ * 显示判据太窄也不够用 —— 联系人那一行到底把 id 放在哪一层还没量出来。
+ *
+ * 只有两个值类型会继续下钻：`List` 和宿主自己的类（`com.tencent.mm.*`）。框架对象（View、
+ * Context、Bundle…）不下钻 —— 里面什么都有，钻进去会把无关行判成隐藏。
+ *
+ * wxid 与群 id 形态都很特别（`wxid_…` / `…@chatroom`），昵称/摘要/时间串都不会等于一个 id，
+ * 所以按值比对不会误伤别人。
+ */
+private fun HideContacts.containsHiddenId(obj: Any, depth: Int): Boolean {
+    declaredSearchFields(obj.javaClass).forEach { field ->
+        when (val value = field.get(obj)) {
+            null -> Unit
+            is String -> if (isHiddenNow(value)) return true
+            is List<*> -> if (depth > 0 && value.any { it != null && containsHiddenId(it, depth - 1) }) return true
+            else -> if (depth > 0 && value.javaClass.name.startsWith("${PackageNames.WECHAT}.")) {
+                if (containsHiddenId(value, depth - 1)) return true
+            }
+        }
+    }
+    return false
+}
+
+/**
+ * 一次性把「哪个段、条目是什么类、有哪些字段、隐藏 id 此刻落在哪个字段」打出来。
+ *
+ * 这一面已经连着三轮「钩子跑到了、界面照旧」，每轮都在猜字段在哪一层；这行日志把形状本身交出来，
+ * 下一轮就不用再猜了。只在每个「段类/条目类」组合第一次 dispatch 时打。
+ */
+private fun HideContacts.describeSearchSection(section: Any, items: List<*>, item: Any?): String {
+    val hits = linkedSetOf<String>()
+    items.filterNotNull().forEach { candidate ->
+        declaredSearchFields(candidate.javaClass).forEach { field ->
+            val value = field.get(candidate)
+            if (value is String && isHiddenNow(value)) hits += "${candidate.javaClass.simpleName}.${field.name}"
+        }
+    }
+    return "fts shape section=${section.javaClass.name} item=${item?.javaClass?.name ?: "-"} " +
+        "fields=[${item?.let { declaredSearchFields(it.javaClass).joinToString { f -> "${f.name}:${f.type.simpleName}" } } ?: "-"}] " +
+        "hiddenIn=${hits.ifEmpty { "-" }}"
+}
+
+/**
+ * 一行（`n23/i`）自己不带 id：8.0.76 上它把条目放在 `i:Lj23/y;`（单个）或 `f:Ljava/util/List;`
+ * （一组）里，所以要往下走一层再按内容认。别钉 `i`/`f` 这两个名字，它们每版都改。
+ *
+ * 返回「这一整行该不该摘掉」：单个条目就是那个人 → 摘整行（联系人段一行就是一个人）；
+ * 一组条目里只有部分是人 → 只把那几条从组里换掉、整行留着，别把同组里别人的结果一起删了。
+ */
+private fun HideContacts.pruneSearchRow(row: Any): Boolean {
+    var drop = false
+    declaredSearchFields(row.javaClass).forEach { field ->
+        when (val value = field.get(row)) {
+            null -> Unit
+            is List<*> -> {
+                val kept = value.filterNot { it != null && containsHiddenId(it, 1) }
+                if (kept.size < value.size) {
+                    if (kept.isEmpty()) drop = true else field.set(row, ArrayList(kept))
+                }
+            }
+            else -> if (containsHiddenId(value, 1)) drop = true
+        }
+    }
+    return drop
+}
 
 /**
  * 主页搜索里每一个结果段（联系人 / 聊天记录 / 公众号…）的行列表.
@@ -590,14 +682,17 @@ private val searchRowFields = ConcurrentHashMap<Class<*>, List<Field>>()
  * （`a.smali:16`，装的是 `n23/i` 行组）。所以 hookBefore 筛 `v.e` 是"少给它几条原料"，
  * hookAfter 再筛一次 `n` 才是"把要画的那几行摘掉"。
  *
+ * 装 `0c547ad3` 后的第三轮读数把范围又缩了一次：`dropped 1 of 3 fts result item(s) for e33.u` ——
+ * `e33.u` 是 `MicroMsg.FTSMessageUIUnit`、`getType()=0x70`（聊天记录段），**联系人那一整段在这次搜索里
+ * 一次都没进过 `o0`**，所以 `a.n` 那第二次筛自然一行都没删到。这条锚点对"结果来自 FTS 的段"是有效的
+ * （聊天记录段真的少了 1 条），但它覆盖不到联系人那一行；下面两条形状日志就是为了让下一轮直接读出
+ * 那一行究竟住在哪个类、id 在哪一层，而不是继续猜。
+ *
  * `n` 是 final 字段，所以这里只能就地删（换引用不行）。可以接受：宿主自己在每次搜索开始时
  * `n.clear()`（`a.smali:64`）后重建，删掉的东西下一次搜索一定会按当时的隐藏集重新长回来；
  * 代价只是「搜索进行中三击临时显示」要等下一次搜索才恢复，和 视频号 那一面同规格。
  *
- * 结果对象里只有一个 `java.util.List` 字段（`j23/v.smali:15`），装的就是这个段的行；元素的身份
- * 字段名混淆且每版改（8.0.76 是 `y.e:String`，靠 `z23/u1.smali:52-62` 把它交给
- * `storage.j4.n(String,Z)` 才坐实是 wxid），所以**按内容认人**：任一声明的 String 字段正好等于
- * 一个隐藏 id 就算这一行是它的。
+ * 认人不钉字段名：条目类与字段名每版都改，所以按内容比对，并往下走一层（见 [containsHiddenId]）。
  */
 private fun HideContacts.installFtsSearchResultHook() {
     if (methodFtsResultSectionReceive.isPlaceholder) {
@@ -632,9 +727,18 @@ private fun HideContacts.installFtsSearchResultHook() {
         val section = thisObject as Any
         val holder = args[0]
         val items = listField.get(holder) as? List<*> ?: return@hookBefore
+
+        // 形状日志：这一面已经连着三轮「钩子跑到了、界面照旧」，每一轮都在猜 id 落在哪一层的哪个
+        // 字段。这里把形状本身打出来，一次一个「段类/条目类」组合，之后不再重复。
+        // 空列表也打 —— 联系人段有没有真的经过这里、进来时手里有几条，正是这次要回答的问题。
+        val sample = items.firstOrNull { it != null }
+        if (loggedSearchShapes.add("items/${section.javaClass.name}/${sample?.javaClass?.name}")) {
+            WeLogger.i(TAG, describeSearchSection(section, items, sample))
+        }
+
         if (items.isEmpty()) return@hookBefore
 
-        val kept = items.filterNot { it != null && isHiddenSearchItem(it) }
+        val kept = items.filterNot { it != null && containsHiddenId(it, 1) }
         if (kept.size == items.size) return@hookBefore
 
         WeLogger.d(
@@ -652,6 +756,11 @@ private fun HideContacts.installFtsSearchResultHook() {
 
         val section = thisObject as Any
         val rows = rowsField.get(section) as? MutableList<Any?> ?: return@hookAfter
+
+        // 同上，行这一层也先看清形状：`o0` 返回时 `n` 里到底有没有货、货是什么类。
+        if (loggedSearchShapes.add("rows/${section.javaClass.name}/${rows.firstOrNull()?.javaClass?.name}")) {
+            WeLogger.i(TAG, "fts rows shape section=${section.javaClass.name} count=${rows.size}")
+        }
         if (rows.isEmpty()) return@hookAfter
 
         val removed = rows.removeAll { row -> row != null && pruneSearchRow(row) }
@@ -661,39 +770,104 @@ private fun HideContacts.installFtsSearchResultHook() {
     }
 }
 
-/** 条目里的 String 字段按内容比对；只可能是那个 wxid 字段命中，昵称/摘要这类值不等于 id。 */
-private fun HideContacts.isHiddenSearchItem(item: Any): Boolean {
-    val fields = searchItemStringFields.getOrPut(item.javaClass) {
-        item.javaClass.reflekt().fields { type = BString }.map { it.self.makeAccessible() }
-    }
-    return fields.any { field ->
-        val value = field.get(item) as? String
-        value != null && isHiddenNow(value)
+// ---------------------------------------------------------------------------------------------
+// 主页搜索的结果行（视图级）
+// ---------------------------------------------------------------------------------------------
+
+/** 被我们改过的行 View，以及它本来的 visibility 与宽高。 */
+private class SearchRowBaseline(val visibility: Int, val width: Int, val height: Int)
+
+/**
+ * View 是复用的：这次画隐藏联系人的那个 View，下一次可能拿去画别人。所以基线按 View 存，命中就改，
+ * 没命中且被我们改过就必须还原 —— 漏了还原会留下「别人那条也变成空行」的空洞，比不隐藏更糟。
+ * 用 WeakHashMap：滚出屏幕被回收的 View 自己掉出去，不用我们清。
+ */
+private val searchRowBaselines = WeakHashMap<View, SearchRowBaseline>()
+
+/**
+ * 把主页搜索里属于隐藏联系人的结果行从屏幕上摘掉。
+ *
+ * 层次是三轮真机读数选出来的：SQL 文本改不到（身份在绑定参数里，而且同级模块早就在给 FTS 查询套
+ * `aux_index NOT IN` 了，界面照旧）；FTS 段基类 `a.o0` 只管「结果真从 FTS 查询来」的段（聊天记录段
+ * `e33.u` 实测能少一条），联系人那一整段一次都没经过它。剩下能兜住这行的就是渲染那一下 ——
+ * `fm5.u` / `fm5.e` 的 `getView`。浮云 在 8.0.76 上做的也正是这一层：命中就 `setVisibility(GONE)`
+ * 并把 `LayoutParams` 宽高写 0（ListView 里单靠 GONE 不收回高度），原尺寸存 WeakHashMap 以便还原。
+ *
+ * 「这一行是谁」用宿主自己的映射，不再自己数下标：`getItem(position)` 是 `com.tencent.mm.ui.z9`
+ * （两者的共同父类，`super android.widget.BaseAdapter`）在 `z9.smali:177` 的实现 —— 它会先用
+ * `o(position)` 判掉 header/分隔行，再从 map 或 cursor 取那一行。`fm5.u.getView` 开头也调同一个
+ * `o(I)Z`，可见位置与条目下标本来就不是一对一的。
+ *
+ * 明确接受的边界：
+ * - 只改屏幕上这一行，段计数与「查看全部 N 条」那类文案不动（能改的 SQL 面照旧在改）；点进行为本来
+ *   就被 `HideContactsBlock` 静默挡住，这里不会新开出入口。
+ * - `fts/ui/f0` 那一族不挂：它没有覆盖 `getItem(int)`，`BaseAdapter` 的默认实现返回 null，拿不到
+ *   「这一行是谁」；那条通路由上面的 `a.o0` 管。
+ */
+private fun HideContacts.installSearchResultRowHooks() {
+    listOf(classSearchResultAdapter, classSearchConversationAdapter).forEach { anchor ->
+        val getView = anchor.resolveGetView()
+        if (getView == null) {
+            WeLogger.w(TAG, "search result getView wasn't resolved; 主页搜索 stays visible")
+            return@forEach
+        }
+        WeLogger.i(TAG, "hiding 主页搜索 rows at ${getView.declaringClass.name}.${getView.name}")
+
+        getView.hookAfter {
+            if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookAfter
+            if (!surfaceOn(HideSurface.SEARCH)) return@hookAfter
+
+            val view = result as? View ?: return@hookAfter
+            val position = args[0] as Int
+            val adapter = thisObject as Adapter
+            val row = adapter.getItem(position)
+            val baseline = searchRowBaselines[view]
+
+            if (row != null && containsHiddenId(row, 1)) {
+                // 已经是隐藏态就别再动：滚动时同一个 View 会被反复 bind，否则这条日志会淹掉文件。
+                if (view.visibility == View.GONE && view.layoutParams?.height == 0) return@hookAfter
+                if (baseline == null) {
+                    searchRowBaselines[view] = SearchRowBaseline(
+                        view.visibility,
+                        view.layoutParams?.width ?: ViewGroup.LayoutParams.WRAP_CONTENT,
+                        view.layoutParams?.height ?: ViewGroup.LayoutParams.WRAP_CONTENT,
+                    )
+                }
+                view.visibility = View.GONE
+                view.layoutParams?.apply {
+                    width = 0
+                    height = 0
+                }?.let { view.layoutParams = it }
+                WeLogger.d(TAG, "hid a 主页搜索 result row in ${adapter.javaClass.name} at $position")
+            } else if (baseline != null) {
+                searchRowBaselines.remove(view)
+                view.visibility = baseline.visibility
+                view.layoutParams?.apply {
+                    width = baseline.width
+                    height = baseline.height
+                }?.let { view.layoutParams = it }
+            }
+        }
     }
 }
 
 /**
- * 一行（`n23/i`）自己不带 id：8.0.76 上它把条目放在 `i:Lj23/y;`（单个）或 `f:Ljava/util/List;`
- * （一组）里，所以往下走一层再按内容认。别钉 `i`/`f` 这两个名字，它们每版都改。
- *
- * 返回「这一整行该不该摘掉」：单个条目就是那个人 → 摘整行（联系人段一行就是一个人）；
- * 一组条目里只有部分是人 → 只把那几条从组里换掉、整行留着，别把同组里别人的结果一起删了。
+ * 找 `getView(int, View, ViewGroup)`：子类覆盖了就取子类那一份，没覆盖就沿父链上溯到真正声明它的
+ * 那一层（8.0.76 上 `fm5.u` 与 `fm5.e` 各自都声明了，见 `fm5/u.smali:202`、`fm5/e.smali:246`）。
  */
-private fun HideContacts.pruneSearchRow(row: Any): Boolean {
-    var drop = false
-    searchRowFields.getOrPut(row.javaClass) {
-        row.javaClass.reflekt().fields().map { it.self.makeAccessible() }
-    }.forEach { field ->
-        when (val value = field.get(row)) {
-            null -> Unit
-            is List<*> -> {
-                val kept = value.filterNot { it != null && isHiddenSearchItem(it) }
-                if (kept.size < value.size) {
-                    if (kept.isEmpty()) drop = true else field.set(row, ArrayList(kept))
-                }
-            }
-            else -> if (isHiddenSearchItem(value)) drop = true
+private fun DexClassDelegate.resolveGetView(): Method? {
+    if (isPlaceholder) return null
+    var cls: Class<*>? = clazz
+    while (cls != null && cls != Any::class.java) {
+        val declared: Class<*> = cls
+        val method = declared.declaredMethods.firstOrNull { candidate ->
+            candidate.name == "getView" && candidate.parameterCount == 3 &&
+                candidate.parameterTypes[0] == Int::class.javaPrimitiveType &&
+                candidate.parameterTypes[1] == View::class.java &&
+                candidate.parameterTypes[2] == ViewGroup::class.java
         }
+        if (method != null) return method.makeAccessible()
+        cls = declared.superclass
     }
-    return drop
+    return null
 }

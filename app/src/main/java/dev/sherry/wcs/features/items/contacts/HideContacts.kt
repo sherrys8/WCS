@@ -20,6 +20,7 @@ import dev.ujhhgtg.reflekt.reflekt
 import dev.ujhhgtg.reflekt.utils.isSubclassOf
 import dev.sherry.wcs.dexkit.abc.IResolveDex
 import dev.sherry.wcs.dexkit.dsl.data
+import dev.sherry.wcs.dexkit.dsl.dexClass
 import dev.sherry.wcs.dexkit.dsl.dexMethod
 import dev.sherry.wcs.features.api.core.WeConversationApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
@@ -728,6 +729,32 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
             usingEqStrings("search type %d | result %d")
             paramCount = 1
             returnType("void")
+        }
+    }
+
+    /**
+     * 主页搜索「联系人」那几行的适配器（`fm5/u`，tag 在 `fm5/u.smali:540`），以及同族的「会话」结果
+     * 适配器（`fm5/e`，tag `MicroMsg.SearchConversationAdapter`）。
+     *
+     * 为什么必须换到这一层：三轮真机读数把上面那条 `a.o0` 的覆盖面钉住了 —— 它只管「结果从 FTS 查询里
+     * 来的段」（聊天记录段 `e33.u` 实测少了一条），联系人那一整段一次都没经过它，而且整场搜索里连一条
+     * 按关键词读 `rcontact` 的语句都没出现。`fm5/e`、`fm5/w` 才是调 `e01/jb.smali:154`（按关键词
+     * LIKE 找人）的地方，`fm5/u` 就是那份结果的适配器 —— 行在这里bind 成 View，绕不过去。
+     *
+     * 类名混淆、tag 没混淆，所以按 tag 钉类。两者都 extends `com.tencent.mm.ui.z9`
+     * （`smali_classes8/com/tencent/mm/ui/z9.smali:2`，`super android.widget.BaseAdapter`），
+     * 它的 `getItem(int)`（`:177`）会按 `o(position)` 跳过 header 再从 map/cursor 取行，所以拿
+     * `getItem` 定位「这一行是谁」是宿主自己的映射，比我们再数一遍位置可靠。
+     */
+    val classSearchResultAdapter by dexClass(allowFailure = true) {
+        matcher {
+            usingEqStrings("MicroMsg.SearchResultAdapter")
+        }
+    }
+
+    val classSearchConversationAdapter by dexClass(allowFailure = true) {
+        matcher {
+            usingEqStrings("MicroMsg.SearchConversationAdapter")
         }
     }
 
