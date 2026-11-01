@@ -32,10 +32,17 @@ object BreezeTtsClient {
 
     /** 文档硬约束：一条样本，3 秒以上、5 MB 以内。 */
     const val CLONE_MAX_BYTES = 5L * 1024 * 1024
+    const val CLONE_MIN_MS = 3_000L
     val CLONE_SUFFIXES = setOf("mp3", "wav", "m4a", "flac", "aac", "ogg", "opus", "webm", "wma", "aiff", "aif")
 
-    private const val PAGE_SIZE = 100
-    private const val MAX_PAGES = 20
+    /** 参考语言文档只点名支持中文，其余一律交给服务端自动检测。 */
+    val CLONE_LANGUAGES = listOf("" to "自动检测", "zh" to "中文")
+
+    /** 指令上限：文档要求写在 1000 字以内。 */
+    const val INSTRUCTION_MAX = 1000
+
+    /** 一页多少个音色。文档上限 100、默认 50，界面按这个数换算页数。 */
+    const val VOICE_PAGE_SIZE = 50
 
     private val http by lazy {
         OkHttpClient.Builder()
@@ -84,20 +91,47 @@ object BreezeTtsClient {
 
     // ---- 音色列表 ----
 
-    /** 一次请求拿不完就翻页；[personal] 为真时取账号自己保存的音色。 */
-    fun voices(key: String, personal: Boolean): List<Voice> {
+    /**
+     * 一页音色。[total] 是整个筛选集的数量，界面靠它算「共几页」。
+     * 翻页用数字页码而不是文档更推荐的 `next_page_token`：游标只能一路往前翻，
+     * 而这里的翻页条要能点「上一页」退回去。
+     */
+    data class VoicePage(
+        val voices: List<Voice>,
+        val hasMore: Boolean,
+        val total: Int,
+    )
+
+    /** [search] 非空时走服务端搜索（公开目录是语义+文本混合匹配，本地筛不到没拉下来的音色）。 */
+    fun voicesPage(key: String, personal: Boolean, search: String, page: Int): VoicePage {
+        val query = LinkedHashMap<String, String>()
+        query["voice_type"] = if (personal) "personal" else "default"
+        query["page_size"] = VOICE_PAGE_SIZE.toString()
+        query["page"] = page.coerceAtLeast(1).toString()
+        if (search.isNotBlank()) {
+            query["search"] = search
+        } else if (!personal) {
+            // 文档：sort 只用于非搜索的浏览，且 trend 只限官方目录
+            query["sort"] = "trend"
+        }
+
+        val json = json("GET", "/v1/voices", key, query, null)
+        val arr = json.optJSONArray("voices") ?: JSONArray()
+        return VoicePage(
+            voices = (0 until arr.length()).map { parseVoice(arr.getJSONObject(it), personal) },
+            hasMore = json.optBoolean("has_more"),
+            total = json.optInt("total"),
+        )
+    }
+
+    /** 自建音色就那几个，跟着游标一次翻完；官方目录太大，不走这条路。 */
+    fun allVoices(key: String, personal: Boolean): List<Voice> {
         val out = ArrayList<Voice>()
         var page = 1
-        while (page <= MAX_PAGES) {
-            val json = json("GET", "/v1/voices", key, mapOf(
-                "voice_type" to if (personal) "personal" else "default",
-                "page" to page.toString(),
-                "page_size" to PAGE_SIZE.toString(),
-            ), null)
-            val arr = json.optJSONArray("voices") ?: JSONArray()
-            if (arr.length() == 0) break
-            for (i in 0 until arr.length()) out += parseVoice(arr.getJSONObject(i), personal)
-            if (!json.optBoolean("has_more", arr.length() >= PAGE_SIZE)) break
+        while (true) {
+            val result = voicesPage(key, personal, "", page)
+            out += result.voices
+            if (!result.hasMore || result.voices.isEmpty()) break
             page++
         }
         return out

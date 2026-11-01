@@ -1,6 +1,7 @@
 package dev.sherry.wcs.features.items.chat
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Handler
@@ -51,10 +52,10 @@ import com.composables.icons.materialsymbols.outlined.Pause
 import com.composables.icons.materialsymbols.outlined.Play_arrow
 import com.composables.icons.materialsymbols.outlined.Refresh
 import com.composables.icons.materialsymbols.outlined.Search
-import dev.sherry.wcs.features.items.chat.panel.listPanelTreeFiles
-import dev.sherry.wcs.features.items.chat.panel.pickPanelDirectory
+import dev.sherry.wcs.features.items.chat.panel.pickPanelFile
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.AlertDialogContent
+import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
@@ -65,21 +66,33 @@ import dev.sherry.wcs.utils.android.showToast
 import dev.sherry.wcs.utils.fs.KnownPaths
 import dev.sherry.wcs.utils.openInSystem
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 /** Breeze 的收藏与豆包那套分开存——两边音色 id 不在同一个空间里。 */
 object BreezeVoiceFavorites {
     private const val PREF_KEY = "breeze_voice_favorites"
 
-    fun load(): Set<String> = WePrefs.getStringSetOrDef(PREF_KEY, emptySet())
+    /**
+     * 存成 `id|名字`。官方目录上万条且按游标翻页，收藏的音色多半不在已加载的那几页里，
+     * 只存 id 会让「收藏」页签把它整个漏掉。
+     */
+    fun load(): Map<String, String> = WePrefs.getStringSetOrDef(PREF_KEY, emptySet())
+        .mapNotNullTo(mutableMapOf()) { entry ->
+            val sep = entry.indexOf('|')
+            when {
+                sep == 0 -> null
+                sep < 0 -> entry to ""
+                else -> entry.substring(0, sep) to entry.substring(sep + 1)
+            }
+        }
 
     /** 切换收藏，返回切换后的状态。 */
-    fun toggle(id: String): Boolean {
+    fun toggle(id: String, name: String): Boolean {
         val current = load()
         val added = id !in current
-        WePrefs.putStringSet(PREF_KEY, if (added) current + id else current - id)
+        val kept = current.keys - id
+        WePrefs.putStringSet(PREF_KEY, if (added) kept + "$id|$name" else kept)
         return added
     }
 }
@@ -92,10 +105,18 @@ private enum class BreezeVoiceTab(val label: String) {
 
 private val breezeMainHandler = Handler(Looper.getMainLooper())
 
-/** 克隆预览的试听音频只用来听，落在这个目录，可随时清。 */
+/** 与语音面板一致：SAF 的 mime 过滤在各家 ROM 上表现不一，先放开再自己验格式。 */
+private val BREEZE_SAMPLE_MIME = arrayOf("*/*")
+
+/** 克隆预览的试听音频与样本副本都只是中间件，落在这个目录，可随时清。 */
 private fun breezePreviewDir(): File =
     File(KnownPaths.moduleCache.toFile(), "breeze_previews").apply { mkdirs() }
 
+/**
+ * 音色选择器。官方目录是万级，所以那一栏走服务端搜索 + 底部翻页条（每页 50 个，
+ * 第 1 页 50 个、第 2 页另 50 个，不是往下接），列表里始终只有一页；
+ * 另外两栏量小，本地过滤。
+ */
 fun showBreezeVoicePicker(
     context: Context,
     currentId: String,
@@ -103,16 +124,23 @@ fun showBreezeVoicePicker(
     onPicked: (id: String, name: String) -> Unit,
 ) {
     showComposeDialog(context) {
-        var official by remember { mutableStateOf<List<BreezeTtsClient.Voice>>(emptyList()) }
-        var mine by remember { mutableStateOf<List<BreezeTtsClient.Voice>>(emptyList()) }
         var tab by remember { mutableStateOf(BreezeVoiceTab.OFFICIAL) }
         var query by remember { mutableStateOf("") }
         var picked by remember { mutableStateOf(currentId) }
         var favorites by remember { mutableStateOf(BreezeVoiceFavorites.load()) }
-        var loading by remember { mutableStateOf(false) }
+        var official by remember { mutableStateOf<List<BreezeTtsClient.Voice>>(emptyList()) }
+        var officialTotal by remember { mutableStateOf(0) }
+        var officialPage by remember { mutableStateOf(1) }
+        var officialSearch by remember { mutableStateOf("") }
+        var mine by remember { mutableStateOf<List<BreezeTtsClient.Voice>>(emptyList()) }
+        // 两栏会各自并发拉一次，所以用计数而不是布尔，免得先回来的那个把转圈提前关掉
+        var pending by remember { mutableStateOf(0) }
         var status by remember { mutableStateOf("") }
         var playing by remember { mutableStateOf<String?>(null) }
         var player by remember { mutableStateOf<MediaPlayer?>(null) }
+        // 换关键词、翻页会并发，两条链各自只认自己最新一代的回包
+        var officialGen by remember { mutableStateOf(0) }
+        var mineGen by remember { mutableStateOf(0) }
 
         DisposableEffect(Unit) {
             onDispose { player?.release() }
@@ -150,46 +178,119 @@ fun showBreezeVoicePicker(
             }
         }
 
-        fun refresh(onlyMine: Boolean) {
+        /** 换成第 [page] 页：翻页、首开都走这里，换关键词由调用方传 1。 */
+        fun loadOfficial(search: String, page: Int) {
             if (apiKey.isBlank()) {
                 status = "先在文字转语音设置里填写 Breeze API Key"
                 return
             }
-            loading = true
+            val gen = ++officialGen
+            pending += 1
             status = ""
             Thread {
-                val failure = StringBuilder()
-                val officialList = if (onlyMine) null else runCatching { BreezeTtsClient.voices(apiKey, false) }
-                    .onFailure { failure.append("官方音色：").append(it.message).append(' ') }
-                    .getOrNull()
-                val mineList = runCatching { BreezeTtsClient.voices(apiKey, true) }
-                    .onFailure { failure.append("我的音色：").append(it.message).append(' ') }
-                    .getOrNull()
+                val outcome = runCatching { BreezeTtsClient.voicesPage(apiKey, false, search, page) }
                 breezeMainHandler.post {
-                    loading = false
-                    officialList?.let { official = it }
-                    mineList?.let { mine = it }
-                    if (failure.isNotEmpty()) status = "拉取失败：$failure"
+                    pending -= 1
+                    if (gen != officialGen) return@post
+                    outcome.fold(
+                        onSuccess = { result ->
+                            official = result.voices
+                            officialTotal = result.total
+                            officialPage = page
+                            officialSearch = search
+                        },
+                        onFailure = { status = "拉取失败：${it.message}" },
+                    )
                 }
             }.start()
         }
 
-        LaunchedEffect(Unit) {
-            if (apiKey.isBlank()) status = "先在文字转语音设置里填写 Breeze API Key"
-            else if (official.isEmpty() && mine.isEmpty()) refresh(onlyMine = false)
+        fun loadMine() {
+            if (apiKey.isBlank()) {
+                status = "先在文字转语音设置里填写 Breeze API Key"
+                return
+            }
+            val gen = ++mineGen
+            pending += 1
+            status = ""
+            Thread {
+                val outcome = runCatching { BreezeTtsClient.allVoices(apiKey, true) }
+                breezeMainHandler.post {
+                    pending -= 1
+                    if (gen != mineGen) return@post
+                    outcome.fold(
+                        onSuccess = { mine = it },
+                        onFailure = { status = "拉取失败：${it.message}" },
+                    )
+                }
+            }.start()
         }
 
+        fun refresh() {
+            when (tab) {
+                // ⟳ 只重拉当前这一页，不跳回第一页
+                BreezeVoiceTab.OFFICIAL -> loadOfficial(officialSearch, officialPage)
+                BreezeVoiceTab.MINE -> loadMine()
+                BreezeVoiceTab.FAVORITE -> {
+                    loadOfficial(officialSearch, officialPage)
+                    loadMine()
+                }
+            }
+        }
+
+        // 打开就把两栏都拉了：官方只拉第一页，我的量小一次翻完，不用先点 ⟳
+        LaunchedEffect(Unit) {
+            if (apiKey.isBlank()) {
+                status = "先在文字转语音设置里填写 Breeze API Key"
+            } else {
+                if (official.isEmpty()) loadOfficial("", 1)
+                if (mine.isEmpty()) loadMine()
+            }
+        }
+
+        // 官方那一栏由服务端搜：停手 400ms 再发，别每敲一个字打一次接口；换词回到第 1 页
+        LaunchedEffect(query, tab) {
+            if (tab != BreezeVoiceTab.OFFICIAL || apiKey.isBlank()) return@LaunchedEffect
+            delay(400)
+            if (query != officialSearch) loadOfficial(query, 1)
+        }
+
+        val loaded = official + mine
+        val favoriteRows = buildList {
+            loaded.forEach { voice -> if (voice.id in favorites) add(voice) }
+            val ids = loaded.mapTo(mutableSetOf()) { it.id }
+            favorites.forEach { (id, name) ->
+                if (id !in ids) add(
+                    BreezeTtsClient.Voice(
+                        id = id,
+                        name = name.ifBlank { id },
+                        gender = "",
+                        age = "",
+                        language = "",
+                        accent = "",
+                        tone = "",
+                        previewUrl = "",
+                        personal = false,
+                    )
+                )
+            }
+        }.distinctBy { it.id }
         val pool = when (tab) {
             BreezeVoiceTab.OFFICIAL -> official
             BreezeVoiceTab.MINE -> mine
-            BreezeVoiceTab.FAVORITE -> (official + mine).filter { it.id in favorites }
+            BreezeVoiceTab.FAVORITE -> favoriteRows
         }
-        val shown = pool.filter { voice ->
+        val shown = if (tab == BreezeVoiceTab.OFFICIAL) pool else pool.filter { voice ->
             query.isBlank() || (voice.name + " " + voice.id + " " + voice.meta)
                 .contains(query, ignoreCase = true)
         }
-        // 选中项可能在别的页签上，取名字要跨两边找
-        val pickedName = (official + mine).firstOrNull { it.id == picked }?.name ?: picked.ifBlank { "未选择" }
+
+        val officialPages =
+            (officialTotal + BreezeTtsClient.VOICE_PAGE_SIZE - 1) / BreezeTtsClient.VOICE_PAGE_SIZE
+
+        fun nameOf(id: String): String = loaded.firstOrNull { it.id == id }?.name
+            ?: favorites[id]?.takeIf { it.isNotBlank() }
+            ?: id.ifBlank { "未选择" }
 
         AlertDialogContent(
             title = { Text("选择 Breeze 音色") },
@@ -212,15 +313,13 @@ fun showBreezeVoicePicker(
                         if (tab == BreezeVoiceTab.MINE) {
                             FilterChip(
                                 selected = false,
-                                onClick = {
-                                    showBreezeCloneDialog(context, apiKey) { refresh(onlyMine = true) }
-                                },
+                                onClick = { showBreezeCloneDialog(context, apiKey) { loadMine() } },
                                 label = { Text("＋ 克隆音色") },
                             )
                         }
                         FilterChip(
                             selected = false,
-                            onClick = { refresh(onlyMine = tab == BreezeVoiceTab.MINE) },
+                            onClick = { refresh() },
                             label = {
                                 Icon(
                                     MaterialSymbols.Outlined.Refresh,
@@ -239,7 +338,9 @@ fun showBreezeVoicePicker(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         leadingIcon = { Icon(MaterialSymbols.Outlined.Search, contentDescription = null) },
-                        placeholder = { Text("搜索名称、ID 或标签") },
+                        placeholder = {
+                            Text(if (tab == BreezeVoiceTab.OFFICIAL) "搜索官方目录（名称或描述）" else "搜索名称、ID 或标签")
+                        },
                     )
 
                     Spacer(Modifier.height(6.dp))
@@ -247,8 +348,12 @@ fun showBreezeVoicePicker(
                     Text(
                         when {
                             status.isNotBlank() -> status
-                            loading -> "正在拉取音色列表…"
-                            else -> "官方 ${official.size} 个 · 我的 ${mine.size} 个"
+                            pending > 0 -> "正在拉取音色列表…"
+                            tab == BreezeVoiceTab.OFFICIAL -> "官方共 $officialTotal 个 · " +
+                                if (officialSearch.isBlank()) "按热门排序" else "搜索「$officialSearch」"
+
+                            tab == BreezeVoiceTab.MINE -> "我的音色 ${mine.size} 个"
+                            else -> "已收藏 ${favorites.size} 个"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -268,15 +373,12 @@ fun showBreezeVoicePicker(
                                     if (playing == voice.id) stopPreview() else playUrl(voice.previewUrl, voice.id)
                                 },
                                 onFavorite = {
-                                    favorites = if (BreezeVoiceFavorites.toggle(voice.id)) {
-                                        favorites + voice.id
-                                    } else {
-                                        favorites - voice.id
-                                    }
+                                    BreezeVoiceFavorites.toggle(voice.id, voice.name)
+                                    favorites = BreezeVoiceFavorites.load()
                                 },
                             )
                         }
-                        if (loading) {
+                        if (pending > 0) {
                             item {
                                 CircularProgressIndicator(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
@@ -284,17 +386,17 @@ fun showBreezeVoicePicker(
                                 )
                             }
                         }
-                        if (shown.isEmpty() && !loading) {
+                        if (shown.isEmpty() && pending == 0) {
                             item {
                                 Text(
                                     when {
-                                        tab == BreezeVoiceTab.FAVORITE && favorites.isEmpty() && query.isBlank() ->
+                                        tab == BreezeVoiceTab.FAVORITE && favorites.isEmpty() ->
                                             "还没有收藏，点每个音色右侧的心形把它收进来"
 
-                                        tab == BreezeVoiceTab.MINE && query.isBlank() ->
+                                        tab == BreezeVoiceTab.MINE ->
                                             "还没有自建音色，点上面的「＋ 克隆音色」用一条参考音频克隆一个"
 
-                                        else -> "没有匹配的音色"
+                                        else -> "没有匹配的音色，换个说法再试"
                                     },
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
                                     style = MaterialTheme.typography.bodyMedium,
@@ -304,15 +406,38 @@ fun showBreezeVoicePicker(
                         }
                     }
 
+                    // 翻页条只管官方那栏；另两栏是一次全量加载的，没有下一页
+                    if (tab == BreezeVoiceTab.OFFICIAL && officialPages > 0) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(
+                                onClick = { loadOfficial(officialSearch, officialPage - 1) },
+                                enabled = officialPage > 1 && pending == 0,
+                            ) { Text("上一页") }
+                            Text(
+                                "第 $officialPage / $officialPages 页",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            TextButton(
+                                onClick = { loadOfficial(officialSearch, officialPage + 1) },
+                                enabled = officialPage < officialPages && pending == 0,
+                            ) { Text("下一页") }
+                        }
+                    }
+
                     Spacer(Modifier.height(6.dp))
-                    Text("当前选择：$pickedName")
+                    Text("当前选择：${nameOf(picked)}")
                 }
             },
             dismissButton = { TextButton(onDismiss) { Text("关闭") } },
             confirmButton = {
                 Button(onClick = {
                     stopPreview()
-                    onPicked(picked, (official + mine).firstOrNull { it.id == picked }?.name ?: picked)
+                    onPicked(picked, nameOf(picked))
                     onDismiss()
                 }) { Text("确定") }
             },
@@ -393,12 +518,9 @@ private fun showBreezeCloneDialog(
 ) {
     showComposeDialog(context) {
         var voiceName by remember { mutableStateOf("") }
-        var language by remember { mutableStateOf(CLONE_LANGUAGES.first().first) }
+        var language by remember { mutableStateOf(BreezeTtsClient.CLONE_LANGUAGES.first().first) }
         var denoise by remember { mutableStateOf(false) }
         var consent by remember { mutableStateOf(false) }
-        // null = 默认目录 Download/WcS/；换成别的目录时这里是 SAF 的 tree uri
-        var sampleTree by remember { mutableStateOf<Uri?>(null) }
-        var samples by remember { mutableStateOf(defaultSamples()) }
         var sample by remember { mutableStateOf<CloneSample?>(null) }
         var busy by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf("") }
@@ -417,40 +539,49 @@ private fun showBreezeCloneDialog(
             playing = false
         }
 
-        /** 换到用户自选目录：走和语音面板同一个系统目录选择器，列完就 finish 掉透明 Activity。 */
-        fun browseSamples() {
-            pickPanelDirectory(context) { treeUri, activity ->
+        /**
+         * 选完立刻复制进缓存并探时长：3 秒与 5 MB 是文档写死的门槛，本地先挡住，
+         * 省一次必然失败的上传。探不出时长（返回 0）不拦，交给接口判。
+         */
+        fun pickSample() {
+            pickPanelFile(context, BREEZE_SAMPLE_MIME) { name, uri, activity ->
                 busy = true
-                status = "正在列目录…"
+                status = "正在读取选中的音频…"
                 Thread {
                     val outcome = runCatching {
-                        listPanelTreeFiles(activity.contentResolver, treeUri)
-                            .filter {
-                                it.name.substringAfterLast('.', "").lowercase() in BreezeTtsClient.CLONE_SUFFIXES
-                            }
-                            .map { CloneSample(it.name, "", null, it.uri) }
+                        val suffix = name.substringAfterLast('.', "wav").lowercase()
+                        val dest = File(breezePreviewDir(), "sample-${System.currentTimeMillis()}.$suffix")
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            dest.outputStream().use(input::copyTo)
+                        } ?: throw BreezeTtsClient.BreezeError("读不到选中的文件")
+                        val bytes = dest.length()
+                        if (bytes > BreezeTtsClient.CLONE_MAX_BYTES) {
+                            throw BreezeTtsClient.BreezeError("样本超过 5 MB（当前 ${sizeText(bytes)}）")
+                        }
+                        val durationMs = probeDurationMs(dest)
+                        if (durationMs in 1 until BreezeTtsClient.CLONE_MIN_MS) {
+                            throw BreezeTtsClient.BreezeError(
+                                "样本只有 ${secondText(durationMs)}，文档要求至少 3 秒"
+                            )
+                        }
+                        CloneSample(name, dest, bytes, durationMs)
                     }
                     breezeMainHandler.post {
                         busy = false
                         activity.finish()
                         outcome.fold(
                             onSuccess = {
-                                sampleTree = treeUri
-                                samples = it
-                                sample = null
-                                status = if (it.isEmpty()) "这个目录里没有合规的音频文件" else ""
+                                sample = it
+                                status = ""
                             },
-                            onFailure = { status = "列目录失败：${it.message}" },
+                            onFailure = {
+                                sample = null
+                                status = "这条音频不能用：${it.message}"
+                            },
                         )
                     }
                 }.start()
             }
-        }
-
-        fun useDefaultSamples() {
-            sampleTree = null
-            samples = defaultSamples()
-            sample = null
         }
 
         fun audition(target: BreezeTtsClient.ClonePreview) {
@@ -508,9 +639,7 @@ private fun showBreezeCloneDialog(
             status = "正在克隆…（接口同步处理，可能要十几秒）"
             Thread {
                 val outcome = runCatching {
-                    BreezeTtsClient.clonePreview(
-                        apiKey, fileFor(context, chosen), voiceName.trim(), language, denoise,
-                    )
+                    BreezeTtsClient.clonePreview(apiKey, chosen.file, voiceName.trim(), language, denoise)
                 }
                 breezeMainHandler.post {
                     busy = false
@@ -570,9 +699,9 @@ private fun showBreezeCloneDialog(
                         Spacer(Modifier.height(10.dp))
                         DropDownMenuWidget(
                             title = "参考语言",
-                            description = "中文样本必须选中文，否则识别不到内容",
+                            description = "文档只点名支持中文，其余交给服务端自动检测",
                             value = language,
-                            options = CLONE_LANGUAGES.map { DropdownOption(it.first, it.second) },
+                            options = BreezeTtsClient.CLONE_LANGUAGES.map { DropdownOption(it.first, it.second) },
                             onValueChange = { language = it },
                         )
                         SwitchWidget(
@@ -590,55 +719,19 @@ private fun showBreezeCloneDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                if (sampleTree == null) "默认目录 Download/WcS/" else "来自自选目录",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.weight(1f),
-                            )
-                            TextButton(onClick = { browseSamples() }, enabled = !busy) { Text("浏览其他目录") }
-                            if (sampleTree != null) {
-                                TextButton(onClick = { useDefaultSamples() }, enabled = !busy) { Text("回默认") }
-                            }
-                        }
-                        if (samples.isEmpty()) {
-                            Text(
-                                if (sampleTree == null) {
-                                    "默认目录里还没有可用的音频文件。可以先用「保存语音到本地」导出 mp3，或点「浏览其他目录」。"
-                                } else {
-                                    "这个目录里没有合规的音频文件。"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        samples.forEach { item ->
-                            val chosen = item.key == sample?.key
-                            Row(
-                                Modifier.fillMaxWidth().clickable { sample = item }.padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    if (item.detail.isNotBlank()) {
-                                        Text(
-                                            item.detail,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                }
-                                if (chosen) {
-                                    Icon(
-                                        MaterialSymbols.Outlined.Check,
-                                        contentDescription = "已选择",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                            }
-                        }
+                        BaseWidget(
+                            title = "选择样本",
+                            description = sample?.let {
+                                val duration = if (it.durationMs > 0) secondText(it.durationMs) else "时长未识别"
+                                "${it.name} · ${sizeText(it.bytes)} · $duration"
+                            } ?: "未选择，点击选择一条音频",
+                            enabled = !busy,
+                            onClick = { pickSample() },
+                        )
 
+                        Spacer(Modifier.height(10.dp))
                         Row(
-                            Modifier.fillMaxWidth().padding(top = 10.dp),
+                            Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Checkbox(checked = consent, onCheckedChange = { consent = it })
@@ -708,52 +801,31 @@ private fun showBreezeCloneDialog(
     }
 }
 
-/** 参考语言只放文档点名的两种加自动，不在这里铺一长串猜不出来的代码。 */
-private val CLONE_LANGUAGES = listOf(
-    "" to "自动检测",
-    "zh" to "中文",
-    "en" to "英文",
-)
-
-/** 一条候选样本：默认目录里是 File，自选目录里是 SAF 的 uri。 */
+/** 一条参考样本：选完就复制进缓存，克隆接口要的是本地文件。 */
 private data class CloneSample(
     val name: String,
-    val detail: String,
-    val file: File?,
-    val uri: Uri?,
+    val file: File,
+    val bytes: Long,
+    val durationMs: Long,
 ) {
-    val key: String get() = file?.absolutePath ?: uri.toString()
     val stem: String get() = name.substringBeforeLast('.')
 }
 
-/** 默认目录 Download/WcS/：只列格式与体积合规的音频，最新的排前面。 */
-private fun defaultSamples(): List<CloneSample> =
-    KnownPaths.downloads.toFile().listFiles()
-        ?.filter {
-            it.isFile &&
-                it.extension.lowercase() in BreezeTtsClient.CLONE_SUFFIXES &&
-                it.length() <= BreezeTtsClient.CLONE_MAX_BYTES
-        }
-        ?.sortedByDescending { it.lastModified() }
-        ?.map { file ->
-            CloneSample(
-                name = file.name,
-                detail = "${file.length() / 1024} KB · " +
-                    SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(file.lastModified())),
-                file = file,
-                uri = null,
-            )
-        }
-        .orEmpty()
+/** 探不到时长就报 0，让调用方自己决定要不要放行。 */
+private fun probeDurationMs(file: File): Long = runCatching {
+    val retriever = MediaMetadataRetriever()
+    try {
+        retriever.setDataSource(file.absolutePath)
+        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+    } finally {
+        runCatching { retriever.release() }
+    }
+}.getOrDefault(0L)
 
-/** 自选目录里的文件要先落到本地才能进 multipart；扩展名沿用原文件名。 */
-private fun fileFor(context: Context, sample: CloneSample): File {
-    sample.file?.let { return it }
-    val uri = sample.uri ?: throw BreezeTtsClient.BreezeError("样本既没有路径也没有 uri")
-    val suffix = sample.name.substringAfterLast('.', "mp3").lowercase()
-    val dest = File(breezePreviewDir(), "sample-${System.currentTimeMillis()}.$suffix")
-    context.contentResolver.openInputStream(uri)?.use { input ->
-        dest.outputStream().use(input::copyTo)
-    } ?: throw BreezeTtsClient.BreezeError("读不到选中的文件")
-    return dest
+private fun sizeText(bytes: Long): String = if (bytes >= 1024 * 1024) {
+    String.format(Locale.ROOT, "%.1f MB", bytes / 1048576.0)
+} else {
+    "${bytes / 1024} KB"
 }
+
+private fun secondText(ms: Long): String = "${String.format(Locale.ROOT, "%.1f", ms / 1000.0)} 秒"

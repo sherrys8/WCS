@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -41,7 +39,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Chevron_right
-import com.composables.icons.materialsymbols.outlined.Check
 import com.composables.icons.materialsymbols.outlined.Compare_arrows
 import com.composables.icons.materialsymbols.outlined.Graphic_eq
 import com.composables.icons.materialsymbols.outlined.Pause
@@ -61,6 +58,7 @@ import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
+import dev.sherry.wcs.ui.content.m3.RadioButtonWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
 import dev.sherry.wcs.ui.content.m3.TextFieldDialogWidget
@@ -113,6 +111,13 @@ object TextToSpeech :
         BACKEND_BREEZE to "Breeze",
     )
 
+    /** 切换弹窗里每个后端的一行说明：要什么凭据、能做什么 */
+    private val BACKEND_TIPS = mapOf(
+        BACKEND_MOFA to "API Key · 七种情绪预设",
+        BACKEND_DOUBAO to "登录 Cookie · 在线音色库",
+        BACKEND_BREEZE to "API Key · 可克隆音色，支持自然语言指令",
+    )
+
     // 豆包网页端逆向协议: 鉴权在 WebSocket 握手阶段完成, 依赖登录态 Cookie
     private const val DOUBAO_WS = "wss://ws-samantha.doubao.com/samantha/audio/tts"
     private const val DOUBAO_ORIGIN = "https://www.doubao.com"
@@ -139,6 +144,9 @@ object TextToSpeech :
     private var breezeModel by prefOption("tts_breeze_model_id", BreezeTtsClient.DEFAULT_MODEL)
     private var breezeVoice by prefOption("tts_breeze_voice", "")
     private var breezeVoiceName by prefOption("tts_breeze_voice_name", "")
+
+    /** Breeze 没有情绪向量，只有自然语言「指令」，文档要求写在 1000 字以内 */
+    private var breezeInstructions by prefOption("tts_breeze_instructions", "")
 
     /** 入口一: 长按聊天消息气泡的菜单 */
     private var entryBubble by prefOption("tts_entry_bubble", false)
@@ -306,6 +314,9 @@ object TextToSpeech :
                         ?: EMOTIONS.first().first
                 )
             }
+            // 偏好委托直接读进组合不会自己刷新：选完音色、改完指令要当场变，所以各存一份局部状态
+            var breezeLabel by remember { mutableStateOf(breezeVoiceName.ifBlank { breezeVoice }) }
+            var instructions by remember { mutableStateOf(breezeInstructions) }
             var voices by remember {
                 mutableStateOf(
                     if (DEFAULT_VOICES.any { it.voiceId == selectedVoice }) DEFAULT_VOICES
@@ -362,14 +373,13 @@ object TextToSpeech :
                             // 整行单列：自建音色收在选择弹窗的「我的」页签里，不再单独占一列
                             BaseWidget(
                                 title = "Breeze 音色",
-                                description = breezeVoiceName.ifBlank {
-                                    if (breezeVoice.isBlank()) "未选择" else breezeVoice
-                                },
+                                description = breezeLabel.ifBlank { "未选择" },
                                 onClick = {
                                     showBreezeVoicePicker(context, voiceId, breezeKey) { id, name ->
                                         voiceId = id
                                         breezeVoice = id
                                         breezeVoiceName = name
+                                        breezeLabel = name.ifBlank { id }
                                     }
                                 },
                                 trailingContent = {
@@ -431,15 +441,33 @@ object TextToSpeech :
 
                         Spacer(Modifier.height(8.dp))
 
-                        DropDownMenuWidget(
-                            title = "语气",
-                            description = if (isDoubao) emotion else null,
-                            value = emotion,
-                            options = if (isDoubao) listOf(DropdownOption(emotion, emotion))
-                                else EMOTIONS.map { DropdownOption(it.first, it.first) },
-                            onValueChange = { emotion = it; selectedEmotion = it },
-                            enabled = !isDoubao,
-                        )
+                        if (isBreeze) {
+                            // Breeze 不吃情绪向量，样式全靠一句自然语言指令（文档：1000 字以内）
+                            TextFieldDialogWidget(
+                                title = "指令",
+                                value = instructions,
+                                onValueChange = {
+                                    instructions = it
+                                    breezeInstructions = it
+                                },
+                                dialogTitle = "填写 Breeze 指令",
+                                confirmLabel = "确认",
+                                dismissLabel = "取消",
+                                valueHint = "未设置。用自然语言描述怎么念，例如：开心地说，带点惊喜的上扬",
+                                filter = { it.take(BreezeTtsClient.INSTRUCTION_MAX) },
+                                singleLine = false,
+                            )
+                        } else {
+                            DropDownMenuWidget(
+                                title = "语气",
+                                description = if (isDoubao) emotion else null,
+                                value = emotion,
+                                options = if (isDoubao) listOf(DropdownOption(emotion, emotion))
+                                    else EMOTIONS.map { DropdownOption(it.first, it.first) },
+                                onValueChange = { emotion = it; selectedEmotion = it },
+                                enabled = !isDoubao,
+                            )
+                        }
 
                         Spacer(Modifier.height(12.dp))
 
@@ -483,8 +511,12 @@ object TextToSpeech :
                                             return@Button
                                         }
                                         generating = true
-                                        // 语气直接作为接口的 instructions 文本传过去
-                                        generateVoiceBreeze(inputText.trim(), voiceId, emotion) { path, err ->
+                                        // 指令原文透传给接口的 instructions 字段
+                                        generateVoiceBreeze(
+                                            inputText.trim(),
+                                            voiceId,
+                                            instructions,
+                                        ) { path, err ->
                                             generating = false
                                             if (path != null) {
                                                 showPreviewDialog(context, talker, path)
@@ -547,50 +579,37 @@ object TextToSpeech :
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            var backendMenu by remember { mutableStateOf(false) }
-                            Box {
-                                TextButton(onClick = { backendMenu = true }) {
-                                    Icon(
-                                        MaterialSymbols.Outlined.Compare_arrows,
-                                        contentDescription = "切换后端",
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(BACKEND_LABELS.first { it.first == backendMode }.second)
-                                }
-                                DropdownMenu(expanded = backendMenu, onDismissRequest = { backendMenu = false }) {
-                                    BACKEND_LABELS.forEach { (mode, label) ->
-                                        DropdownMenuItem(
-                                            text = { Text(label) },
-                                            trailingIcon = {
-                                                if (mode == backendMode) {
-                                                    Icon(
-                                                        MaterialSymbols.Outlined.Check,
-                                                        contentDescription = "当前后端",
-                                                    )
-                                                }
-                                            },
-                                            onClick = {
-                                                backendMenu = false
-                                                if (mode != backendMode) {
-                                                    // 离开前把当前选中写回原后端，切回来才不串台
-                                                    when (backendMode) {
-                                                        BACKEND_DOUBAO -> doubaoSpeaker = voiceId
-                                                        BACKEND_BREEZE -> breezeVoice = voiceId
-                                                        else -> selectedVoice = voiceId
-                                                    }
-                                                    backendMode = mode
-                                                    voiceId = when (mode) {
-                                                        BACKEND_DOUBAO -> doubaoSpeaker
-                                                        BACKEND_BREEZE -> breezeVoice
-                                                        else -> selectedVoice
-                                                    }
-                                                    backend = mode
-                                                }
-                                            },
-                                        )
+                            TextButton(onClick = {
+                                showBackendPickerDialog(
+                                    context,
+                                    backendMode,
+                                    apiKey.isNotBlank(),
+                                    doubaoCookie.isNotBlank(),
+                                    breezeKey.isNotBlank(),
+                                ) { mode ->
+                                    if (mode == backendMode) return@showBackendPickerDialog
+                                    // 离开前把当前选中写回原后端，切回来才不串台
+                                    when (backendMode) {
+                                        BACKEND_DOUBAO -> doubaoSpeaker = voiceId
+                                        BACKEND_BREEZE -> breezeVoice = voiceId
+                                        else -> selectedVoice = voiceId
                                     }
+                                    backendMode = mode
+                                    voiceId = when (mode) {
+                                        BACKEND_DOUBAO -> doubaoSpeaker
+                                        BACKEND_BREEZE -> breezeVoice
+                                        else -> selectedVoice
+                                    }
+                                    backend = mode
                                 }
+                            }) {
+                                Icon(
+                                    MaterialSymbols.Outlined.Compare_arrows,
+                                    contentDescription = "切换后端",
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(BACKEND_LABELS.first { it.first == backendMode }.second)
                             }
                             Row {
                                 TextButton(onClick = { showSettingsDialog(context) { credentialsRevision++ } }) {
@@ -609,6 +628,57 @@ object TextToSpeech :
                         }
                     }
                 }
+            )
+        }
+    }
+
+    /**
+     * 后端选择弹窗。三选一、选中即切并关闭（没有「保存」这一步）；
+     * 描述里写清各自要什么凭据，没填的当场标出来，省得切过去才发现生成不了。
+     */
+    private fun showBackendPickerDialog(
+        context: android.content.Context,
+        current: Int,
+        mofangReady: Boolean,
+        doubaoReady: Boolean,
+        breezeReady: Boolean,
+        onPicked: (Int) -> Unit,
+    ) {
+        showComposeDialog(context) {
+            AlertDialogContent(
+                title = { Text("切换后端") },
+                text = {
+                    Column {
+                        Text(
+                            "换后端时把当前选中的音色写回原来那一档，切回来还是原来那个。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        SegmentedColumn(title = "语音合成服务") {
+                            BACKEND_LABELS.forEach { (mode, label) ->
+                                val ready = when (mode) {
+                                    BACKEND_DOUBAO -> doubaoReady
+                                    BACKEND_BREEZE -> breezeReady
+                                    else -> mofangReady
+                                }
+                                item {
+                                    RadioButtonWidget(
+                                        title = label,
+                                        description = BACKEND_TIPS.getValue(mode) +
+                                            if (ready) "" else " · 凭据还没填",
+                                        selected = mode == current,
+                                        onSelect = {
+                                            onPicked(mode)
+                                            onDismiss()
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                dismissButton = { TextButton(onDismiss) { Text("取消") } },
             )
         }
     }
