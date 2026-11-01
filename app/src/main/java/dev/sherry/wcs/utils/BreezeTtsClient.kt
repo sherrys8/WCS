@@ -141,7 +141,7 @@ object BreezeTtsClient {
 
         val (bytes, headers) = call(
             "POST", "/v1/text-to-speech/$voiceId", key,
-            mapOf("output_format" to OUTPUT_FORMAT), body.toRequestBody(JSON_TYPE),
+            mapOf("output_format" to OUTPUT_FORMAT), body.toString().toRequestBody(JSON_TYPE),
         )
         if (bytes.isEmpty()) throw BreezeError("接口返回了空音频")
         dest.writeBytes(bytes)
@@ -198,7 +198,10 @@ object BreezeTtsClient {
     fun savePreview(key: String, generatedId: String, name: String, languageCode: String): Voice {
         val body = JSONObject().put("voice_name", name)
         if (languageCode.isNotBlank()) body.put("language_code", languageCode)
-        val json = json("POST", "/v1/voice-previews/$generatedId/save", key, null, body.toRequestBody(JSON_TYPE))
+        val json = json(
+            "POST", "/v1/voice-previews/$generatedId/save", key, null,
+            body.toString().toRequestBody(JSON_TYPE),
+        )
         return parseVoice(json, personal = true)
     }
 
@@ -244,7 +247,13 @@ object BreezeTtsClient {
 
     // ---- 传输 ----
 
-    private fun json(method: String, path: String, key: String, query: Map<String, String>?, body: RequestBody?): JSONObject {
+    private fun json(
+        method: String,
+        path: String,
+        key: String,
+        query: Map<String, String>?,
+        body: RequestBody?,
+    ): JSONObject {
         val text = String(call(method, path, key, query, body).first, Charsets.UTF_8)
         return runCatching { JSONObject(text) }
             .getOrElse { throw BreezeError("响应不是 JSON：${text.take(120)}") }

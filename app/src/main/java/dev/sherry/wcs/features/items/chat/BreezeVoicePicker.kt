@@ -344,7 +344,12 @@ private fun BreezeVoiceRow(
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(voice.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                voice.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyLarge,
+            )
             Text(
                 voice.meta.ifBlank { voice.id },
                 maxLines = 1,
@@ -370,7 +375,8 @@ private fun BreezeVoiceRow(
             Icon(
                 MaterialSymbols.Outlined.Favorite,
                 contentDescription = if (favorite) "取消收藏" else "收藏",
-                tint = if (favorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (favorite) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -655,7 +661,8 @@ private fun showBreezeCloneDialog(
                             }
                             IconButton(onClick = { audition(done) }, enabled = !busy) {
                                 Icon(
-                                    if (playing) MaterialSymbols.Outlined.Pause else MaterialSymbols.Outlined.Play_arrow,
+                                    if (playing) MaterialSymbols.Outlined.Pause
+                                        else MaterialSymbols.Outlined.Play_arrow,
                                     contentDescription = "试听克隆预览",
                                 )
                             }
