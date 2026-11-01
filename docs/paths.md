@@ -50,8 +50,8 @@ WcS 注入微信进程后，读写的不止自己的目录。这份文档列出�
 | 子项 | 用途 | 出处 |
 |------|------|------|
 | `wcs_tts/` | 文字转语音产物：魔方 `tts_*.wav`、豆包 `doubao_*.aac` | `TextToSpeech.kt:698,800` |
-| `doubao_avatars/` | 豆包音色选择器头像的 Coil 磁盘缓存 | `DoubaoVoicePicker.kt:89` |
-| `doubao_voices.json` | 豆包在线音色库缓存（373 条，含头像/试听签名地址） | `DoubaoVoicePicker.kt:134` |
+| `doubao_avatars/` | 豆包音色选择器头像的 Coil 磁盘缓存 | `DoubaoVoicePicker.kt:91` |
+| `doubao_voices.json` | 豆包在线音色库缓存（373 条，含头像/试听签名地址） | `DoubaoVoicePicker.kt:155` |
 | `monet/` | Monet 取色模块生成中间产物 | `MonetEngineModuleGenerator.kt:157` |
 | `notification-media/` | 通知里要显示的媒体副本 | `NotificationsEvolved.kt:215` |
 | `panels/` | 面板临时素材 | `PanelPaths.kt:19` |
@@ -128,8 +128,8 @@ Coil 3 的默认磁盘缓存目录是 `java.io.tmpdir / "coil3_disk_cache"`
   `GroupChatSummary.kt:424`；`GroupReportImage.kt` 那套自绘 Markdown 不走 Coil）、
   `StickerPanelSheet.kt:2619`（贴纸面板）、`HomeSidePanelImageCard.kt:169`（侧栏图片卡，
   读的是本地文件，因此实际不落磁盘缓存）。
-- `DoubaoAvatarImageLoader`（`features/items/chat/DoubaoVoicePicker.kt:84`）是豆包头像专用，
-  磁盘缓存指向外部 `cache/WcS/doubao_avatars/`（`DoubaoVoicePicker.kt:89`），方便查看和一键清理。
+- `DoubaoAvatarImageLoader`（`features/items/chat/DoubaoVoicePicker.kt:86`）是豆包头像专用，
+  磁盘缓存指向外部 `cache/WcS/doubao_avatars/`（`DoubaoVoicePicker.kt:91`），方便查看和一键清理。
   刻意不复用也不改 `GlobalImageLoader`，避免把无关功能的图片缓存一起搬走。
 
 ## 删除安全性

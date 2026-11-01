@@ -48,10 +48,12 @@ import coil3.disk.directory
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Check
+import com.composables.icons.materialsymbols.outlined.Favorite
 import com.composables.icons.materialsymbols.outlined.Pause
 import com.composables.icons.materialsymbols.outlined.Play_arrow
 import com.composables.icons.materialsymbols.outlined.Refresh
 import com.composables.icons.materialsymbols.outlined.Search
+import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.HostInfo
@@ -114,12 +116,31 @@ data class DoubaoVoiceInfo(
 
 private enum class DoubaoVoiceTab(val label: String) {
     BUILTIN("内置"),
+    FAVORITE("收藏"),
     RECOMMEND("推荐"),
     FEMALE("女声"),
     MALE("男声"),
     ROLE("角色"),
     ENGLISH("英语"),
     ACCENT("口音"),
+}
+
+/**
+ * 两个入口（文字转语音、AI 语音回复）共用一份收藏。只存音色 id，不存试听地址——
+ * 豆包的试听链接带签名、约一周失效，按 id 才能在刷新后继续用。
+ */
+object DoubaoVoiceFavorites {
+    private const val PREF_KEY = "doubao_voice_favorites"
+
+    fun load(): Set<String> = WePrefs.getStringSetOrDef(PREF_KEY, emptySet())
+
+    /** 切换收藏，返回切换后的状态。 */
+    fun toggle(id: String): Boolean {
+        val current = load()
+        val added = id !in current
+        WePrefs.putStringSet(PREF_KEY, if (added) current + id else current - id)
+        return added
+    }
 }
 
 object DoubaoVoiceStore {
@@ -259,8 +280,13 @@ private fun mergedVoices(): List<DoubaoVoiceInfo> {
     return builtin + online.values.filterNot { it.id in builtinIds }
 }
 
-private fun matchesTab(voice: DoubaoVoiceInfo, tab: DoubaoVoiceTab): Boolean = when (tab) {
+private fun matchesTab(
+    voice: DoubaoVoiceInfo,
+    tab: DoubaoVoiceTab,
+    favorites: Set<String>,
+): Boolean = when (tab) {
     DoubaoVoiceTab.BUILTIN -> voice.builtin
+    DoubaoVoiceTab.FAVORITE -> voice.id in favorites
     DoubaoVoiceTab.RECOMMEND -> voice.rank in 0 until DoubaoVoiceStore.RECOMMEND_WINDOW
     DoubaoVoiceTab.FEMALE -> voice.gender == "女"
     DoubaoVoiceTab.MALE -> voice.gender == "男"
@@ -293,6 +319,8 @@ fun showDoubaoVoicePicker(
         }
         var query by remember { mutableStateOf("") }
         var picked by remember { mutableStateOf(currentId) }
+        // 偏好代理不会随写回重组，收藏态在调用点自己拿一份
+        var favorites by remember { mutableStateOf(DoubaoVoiceFavorites.load()) }
         var busy by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf("") }
         var playing by remember { mutableStateOf<String?>(null) }
@@ -360,7 +388,7 @@ fun showDoubaoVoicePicker(
             }
         }
 
-        val shown = all.filter { matchesTab(it, tab) }.filter { voice ->
+        val shown = all.filter { matchesTab(it, tab, favorites) }.filter { voice ->
             query.isBlank() || (voice.name + " " + voice.id + " " + voice.style + " " + voice.accent)
                 .contains(query, ignoreCase = true)
         }
@@ -407,7 +435,7 @@ fun showDoubaoVoicePicker(
                                 if (tab == DoubaoVoiceTab.BUILTIN) {
                                     "已加载 $onlineTotal 个在线音色"
                                 } else {
-                                    "已加载 ${all.count { matchesTab(it, tab) }} 个音色"
+                                    "已加载 ${all.count { matchesTab(it, tab, favorites) }} 个音色"
                                 }
                             )
                             Text(
@@ -437,6 +465,14 @@ fun showDoubaoVoicePicker(
                                 playing = playing == voice.id,
                                 busy = busy && playing == voice.id,
                                 onClick = { picked = voice.id },
+                                favorite = voice.id in favorites,
+                                onFavorite = {
+                                    favorites = if (DoubaoVoiceFavorites.toggle(voice.id)) {
+                                        favorites + voice.id
+                                    } else {
+                                        favorites - voice.id
+                                    }
+                                },
                                 onPlay = {
                                     if (playing == voice.id) stopPreview() else playPreview(voice)
                                 },
@@ -445,10 +481,13 @@ fun showDoubaoVoicePicker(
                         if (shown.isEmpty()) {
                             item {
                                 Text(
-                                    if (all.all { it.builtin }) {
-                                        "这个分类还没有缓存，点上面的刷新按钮联网拉取"
-                                    } else {
-                                        "没有匹配的音色"
+                                    when {
+                                        tab == DoubaoVoiceTab.FAVORITE && favorites.isEmpty() && query.isBlank() ->
+                                            "还没有收藏，点每个音色右侧的心形把它收进来"
+
+                                        all.all { it.builtin } -> "这个分类还没有缓存，点上面的刷新按钮联网拉取"
+
+                                        else -> "没有匹配的音色"
                                     },
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
                                     style = MaterialTheme.typography.bodyMedium,
@@ -480,7 +519,9 @@ private fun VoiceRow(
     selected: Boolean,
     playing: Boolean,
     busy: Boolean,
+    favorite: Boolean,
     onClick: () -> Unit,
+    onFavorite: () -> Unit,
     onPlay: () -> Unit,
 ) {
     Row(
@@ -532,6 +573,17 @@ private fun VoiceRow(
             Icon(
                 if (playing) MaterialSymbols.Outlined.Pause else MaterialSymbols.Outlined.Play_arrow,
                 contentDescription = if (playing) "停止试听" else "试听",
+            )
+        }
+        IconButton(onClick = onFavorite) {
+            Icon(
+                MaterialSymbols.Outlined.Favorite,
+                contentDescription = if (favorite) "取消收藏" else "收藏",
+                tint = if (favorite) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
         }
     }
