@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -39,6 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Chevron_right
+import com.composables.icons.materialsymbols.outlined.Check
 import com.composables.icons.materialsymbols.outlined.Compare_arrows
 import com.composables.icons.materialsymbols.outlined.Graphic_eq
 import com.composables.icons.materialsymbols.outlined.Pause
@@ -64,6 +67,7 @@ import dev.sherry.wcs.ui.content.m3.TextFieldDialogWidget
 import dev.sherry.wcs.ui.utils.MicIcon
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.AudioUtils
+import dev.sherry.wcs.utils.BreezeTtsClient
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.showToast
 import dev.sherry.wcs.utils.fs.KnownPaths
@@ -100,6 +104,14 @@ object TextToSpeech :
 
     const val BACKEND_MOFA = 0
     const val BACKEND_DOUBAO = 1
+    const val BACKEND_BREEZE = 2
+
+    /** 底部「切换后端」菜单的顺序与文案 */
+    private val BACKEND_LABELS = listOf(
+        BACKEND_MOFA to "魔方",
+        BACKEND_DOUBAO to "豆包",
+        BACKEND_BREEZE to "Breeze",
+    )
 
     // 豆包网页端逆向协议: 鉴权在 WebSocket 握手阶段完成, 依赖登录态 Cookie
     private const val DOUBAO_WS = "wss://ws-samantha.doubao.com/samantha/audio/tts"
@@ -122,6 +134,11 @@ object TextToSpeech :
     private var doubaoCookie by prefOption("tts_doubao_cookie", "")
     private var doubaoSpeaker by prefOption("tts_doubao_speaker", "zh_female_shuangkuai_emo_v3_wvae_bigtts")
     private var doubaoSpeakerName by prefOption("tts_doubao_speaker_name", "爽快 · 女声")
+
+    private var breezeKey by prefOption("tts_breeze_api_key", "")
+    private var breezeModel by prefOption("tts_breeze_model_id", BreezeTtsClient.DEFAULT_MODEL)
+    private var breezeVoice by prefOption("tts_breeze_voice", "")
+    private var breezeVoiceName by prefOption("tts_breeze_voice_name", "")
 
     /** 入口一: 长按聊天消息气泡的菜单 */
     private var entryBubble by prefOption("tts_entry_bubble", false)
@@ -273,7 +290,16 @@ object TextToSpeech :
             var inputText by remember { mutableStateOf(initialText) }
             var backendMode by remember { mutableIntStateOf(backend) }
             val isDoubao = backendMode == BACKEND_DOUBAO
-            var voiceId by remember { mutableStateOf(if (isDoubao) doubaoSpeaker else selectedVoice) }
+            val isBreeze = backendMode == BACKEND_BREEZE
+            var voiceId by remember {
+                mutableStateOf(
+                    when (backendMode) {
+                        BACKEND_DOUBAO -> doubaoSpeaker
+                        BACKEND_BREEZE -> breezeVoice
+                        else -> selectedVoice
+                    }
+                )
+            }
             var emotion by remember {
                 mutableStateOf(
                     selectedEmotion.takeIf { e -> EMOTIONS.any { it.first == e } }
@@ -332,51 +358,74 @@ object TextToSpeech :
                         val customOptions = customVoices.map { DropdownOption(it.voiceId, it.label) }
                         val customCurrent = customOptions.any { it.value == voiceId }
 
-                        Row(Modifier.fillMaxWidth()) {
-                            Box(Modifier.weight(1f)) {
-                                if (isDoubao) {
-                                    BaseWidget(
-                                        title = "豆包音色",
-                                        description = doubaoSpeakerName,
-                                        onClick = {
-                                            showDoubaoVoicePicker(context, voiceId, doubaoCookie) { id, name ->
-                                                voiceId = id
-                                                doubaoSpeaker = id
-                                                doubaoSpeakerName = name
-                                            }
-                                        },
-                                        trailingContent = {
-                                            Icon(
-                                                imageVector = MaterialSymbols.Outlined.Chevron_right,
-                                                contentDescription = null,
-                                            )
-                                        },
+                        if (isBreeze) {
+                            // 整行单列：自建音色收在选择弹窗的「我的」页签里，不再单独占一列
+                            BaseWidget(
+                                title = "Breeze 音色",
+                                description = breezeVoiceName.ifBlank {
+                                    if (breezeVoice.isBlank()) "未选择" else breezeVoice
+                                },
+                                onClick = {
+                                    showBreezeVoicePicker(context, voiceId, breezeKey) { id, name ->
+                                        voiceId = id
+                                        breezeVoice = id
+                                        breezeVoiceName = name
+                                    }
+                                },
+                                trailingContent = {
+                                    Icon(
+                                        imageVector = MaterialSymbols.Outlined.Chevron_right,
+                                        contentDescription = null,
                                     )
-                                } else {
+                                },
+                            )
+                        } else {
+                            Row(Modifier.fillMaxWidth()) {
+                                Box(Modifier.weight(1f)) {
+                                    if (isDoubao) {
+                                        BaseWidget(
+                                            title = "豆包音色",
+                                            description = doubaoSpeakerName,
+                                            onClick = {
+                                                showDoubaoVoicePicker(context, voiceId, doubaoCookie) { id, name ->
+                                                    voiceId = id
+                                                    doubaoSpeaker = id
+                                                    doubaoSpeakerName = name
+                                                }
+                                            },
+                                            trailingContent = {
+                                                Icon(
+                                                    imageVector = MaterialSymbols.Outlined.Chevron_right,
+                                                    contentDescription = null,
+                                                )
+                                            },
+                                        )
+                                    } else {
+                                        DropDownMenuWidget(
+                                            title = "系统音色",
+                                            description = null,
+                                            value = voiceId,
+                                            options = if (mainOptions.any { it.value == voiceId }) mainOptions
+                                                else mainOptions + DropdownOption(voiceId, voiceId),
+                                            onValueChange = {
+                                                voiceId = it
+                                                selectedVoice = it
+                                            },
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Box(Modifier.weight(1f)) {
                                     DropDownMenuWidget(
-                                        title = "系统音色",
-                                        description = null,
+                                        title = "自定义音色",
+                                        description = if (customCurrent) null else "未选择",
                                         value = voiceId,
-                                        options = if (mainOptions.any { it.value == voiceId }) mainOptions
-                                            else mainOptions + DropdownOption(voiceId, voiceId),
-                                        onValueChange = {
-                                            voiceId = it
-                                            selectedVoice = it
-                                        },
+                                        options = if (customCurrent) customOptions
+                                            else customOptions + DropdownOption(voiceId, ""),
+                                        onValueChange = { voiceId = it; selectedVoice = it },
+                                        enabled = !isDoubao && customVoices.isNotEmpty(),
                                     )
                                 }
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Box(Modifier.weight(1f)) {
-                                DropDownMenuWidget(
-                                    title = "自定义音色",
-                                    description = if (customCurrent) null else "未选择",
-                                    value = voiceId,
-                                    options = if (customCurrent) customOptions
-                                        else customOptions + DropdownOption(voiceId, ""),
-                                    onValueChange = { voiceId = it; selectedVoice = it },
-                                    enabled = !isDoubao && customVoices.isNotEmpty(),
-                                )
                             }
                         }
 
@@ -414,6 +463,28 @@ object TextToSpeech :
                                         }
                                         generating = true
                                         generateVoiceDoubao(inputText.trim(), voiceId) { path, err ->
+                                            generating = false
+                                            if (path != null) {
+                                                showPreviewDialog(context, talker, path)
+                                            } else {
+                                                showToast(context, "生成失败：$err")
+                                            }
+                                        }
+                                        return@Button
+                                    }
+                                    if (isBreeze) {
+                                        if (breezeKey.isBlank()) {
+                                            showToast(context, "请先在设置中填写 Breeze API Key")
+                                            showSettingsDialog(context)
+                                            return@Button
+                                        }
+                                        if (voiceId.isBlank()) {
+                                            showToast(context, "请先选择一个 Breeze 音色")
+                                            return@Button
+                                        }
+                                        generating = true
+                                        // 语气直接作为接口的 instructions 文本传过去
+                                        generateVoiceBreeze(inputText.trim(), voiceId, emotion) { path, err ->
                                             generating = false
                                             if (path != null) {
                                                 showPreviewDialog(context, talker, path)
@@ -476,25 +547,50 @@ object TextToSpeech :
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            TextButton(onClick = {
-                                if (backendMode == BACKEND_MOFA) {
-                                    selectedVoice = voiceId
-                                    backendMode = BACKEND_DOUBAO
-                                    voiceId = doubaoSpeaker
-                                } else {
-                                    doubaoSpeaker = voiceId
-                                    backendMode = BACKEND_MOFA
-                                    voiceId = selectedVoice
+                            var backendMenu by remember { mutableStateOf(false) }
+                            Box {
+                                TextButton(onClick = { backendMenu = true }) {
+                                    Icon(
+                                        MaterialSymbols.Outlined.Compare_arrows,
+                                        contentDescription = "切换后端",
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(BACKEND_LABELS.first { it.first == backendMode }.second)
                                 }
-                                backend = backendMode
-                            }) {
-                                Icon(
-                                    MaterialSymbols.Outlined.Compare_arrows,
-                                    contentDescription = "切换后端",
-                                    modifier = Modifier.size(18.dp),
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(if (backendMode == BACKEND_MOFA) "魔方" else "豆包")
+                                DropdownMenu(expanded = backendMenu, onDismissRequest = { backendMenu = false }) {
+                                    BACKEND_LABELS.forEach { (mode, label) ->
+                                        DropdownMenuItem(
+                                            text = { Text(label) },
+                                            trailingIcon = {
+                                                if (mode == backendMode) {
+                                                    Icon(
+                                                        MaterialSymbols.Outlined.Check,
+                                                        contentDescription = "当前后端",
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                backendMenu = false
+                                                if (mode != backendMode) {
+                                                    // 离开前把当前选中写回原后端，切回来才不串台
+                                                    when (backendMode) {
+                                                        BACKEND_DOUBAO -> doubaoSpeaker = voiceId
+                                                        BACKEND_BREEZE -> breezeVoice = voiceId
+                                                        else -> selectedVoice = voiceId
+                                                    }
+                                                    backendMode = mode
+                                                    voiceId = when (mode) {
+                                                        BACKEND_DOUBAO -> doubaoSpeaker
+                                                        BACKEND_BREEZE -> breezeVoice
+                                                        else -> selectedVoice
+                                                    }
+                                                    backend = mode
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
                             }
                             Row {
                                 TextButton(onClick = { showSettingsDialog(context) { credentialsRevision++ } }) {
@@ -521,6 +617,41 @@ object TextToSpeech :
         showComposeDialog(context) {
             var apiKeyState by remember { mutableStateOf(apiKey) }
             var cookieState by remember { mutableStateOf(doubaoCookie) }
+            var breezeKeyState by remember { mutableStateOf(breezeKey) }
+            var breezeModelState by remember { mutableStateOf(breezeModel) }
+            // DropDownMenuWidget 内部是 options.first { it.value == value }，当前值必须在选项里
+            var modelOptions by remember {
+                mutableStateOf(listOf(DropdownOption(breezeModel, breezeModel)))
+            }
+            var quotaText by remember { mutableStateOf("未获取") }
+
+            fun loadBreezeAccount() {
+                if (breezeKeyState.isBlank()) {
+                    quotaText = "未填写 API Key"
+                    return
+                }
+                quotaText = "拉取中…"
+                Thread {
+                    val quota = runCatching { BreezeTtsClient.quota(breezeKeyState) }.getOrNull()
+                    val models = runCatching { BreezeTtsClient.models(breezeKeyState) }.getOrNull()
+                    mh.post {
+                        quotaText = quota?.let {
+                            "余额 ${it.balance} · 套餐 ${it.plan.ifBlank { "未知" }} · 每月 ${it.monthlyCredits}" +
+                                " · 自建上限 ${it.savedVoiceLimit} · " +
+                                if (it.commercialUseAllowed) "可商用" else "不可商用"
+                        } ?: "未获取"
+                        if (!models.isNullOrEmpty()) {
+                            val list = models.map { DropdownOption(it.id, it.name) }
+                            modelOptions = if (list.any { it.value == breezeModelState }) list
+                                else listOf(DropdownOption(breezeModelState, breezeModelState)) + list
+                        }
+                    }
+                }.start()
+            }
+
+            LaunchedEffect(breezeKeyState) {
+                if (breezeKeyState.isNotBlank()) loadBreezeAccount()
+            }
             AlertDialogContent(
                 title = { Text("文字转语音设置") },
                 text = {
@@ -567,6 +698,47 @@ object TextToSpeech :
                         }
                         Text(
                             "在已登录的 doubao.com 开发者工具 (Application → Cookies) 中复制三个字段, 形如 sessionid=…; sid_guard=…; uid_tt=…, 有效期约 30 天",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        SegmentedColumn(title = "Breeze Blue") {
+                            item {
+                                TextFieldDialogWidget(
+                                    title = "API Key",
+                                    value = breezeKeyState,
+                                    onValueChange = {
+                                        breezeKeyState = it
+                                        breezeKey = it
+                                    },
+                                    dialogTitle = "设置 Breeze API Key",
+                                    confirmLabel = "确认",
+                                    dismissLabel = "取消",
+                                    valueHint = "未设置，在 breezeblue.ai 的 Developer → API Keys 创建",
+                                    password = true,
+                                )
+                            }
+                            item {
+                                DropDownMenuWidget(
+                                    title = "模型",
+                                    description = null,
+                                    value = breezeModelState,
+                                    options = modelOptions,
+                                    onValueChange = {
+                                        breezeModelState = it
+                                        breezeModel = it
+                                    },
+                                )
+                            }
+                            item {
+                                BaseWidget(
+                                    title = "余额",
+                                    description = quotaText,
+                                    onClick = { loadBreezeAccount() },
+                                )
+                            }
+                        }
+                        Text(
+                            "Breeze 按额度计费，合成与造音色都会扣减；换 Key 后点「余额」重新拉取模型与额度。",
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -805,6 +977,34 @@ object TextToSpeech :
             }
             if (error.isNotEmpty()) WeLogger.w(TAG, "doubao tts failed: $error")
 
+            val result = path
+            val reason = error
+            mh.post { cb(result, reason) }
+        }.start()
+    }
+
+    /** Breeze 走同步 HTTP 拿 mp3，后面与魔方、豆包共用同一条转 silk 通路。 */
+    fun generateVoiceBreeze(
+        text: String,
+        voiceId: String,
+        instructions: String,
+        key: String = breezeKey,
+        model: String = breezeModel,
+        cb: (String?, String) -> Unit,
+    ) {
+        Thread {
+            var path: String? = null
+            var error = ""
+            try {
+                val dir = File(KnownPaths.moduleCache.toFile(), "wcs_tts").apply { mkdirs() }
+                val dest = File(dir, "breeze_${System.currentTimeMillis()}.mp3")
+                BreezeTtsClient.synthesize(key, voiceId, model, text, instructions, dest)
+                path = dest.absolutePath
+                lastWavPath = path
+            } catch (e: Exception) {
+                error = e.message ?: "exception"
+                WeLogger.w(TAG, "breeze tts failed: $error")
+            }
             val result = path
             val reason = error
             mh.post { cb(result, reason) }

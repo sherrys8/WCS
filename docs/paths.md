@@ -49,7 +49,8 @@ WcS 注入微信进程后，读写的不止自己的目录。这份文档列出�
 
 | 子项 | 用途 | 出处 |
 |------|------|------|
-| `wcs_tts/` | 文字转语音产物：魔方 `tts_*.wav`、豆包 `doubao_*.aac` | `TextToSpeech.kt:698,800` |
+| `wcs_tts/` | 文字转语音产物：魔方 `tts_*.wav`、豆包 `doubao_*.aac`、Breeze `breeze_*.mp3` | `TextToSpeech.kt:871,973,1000` |
+| `breeze_previews/` | Breeze 克隆的试听音频（从 `/v1/voice-previews/{id}/stream` 下载）+ 从自选目录复制出来的样本副本 | `BreezeVoicePicker.kt:95` |
 | `doubao_avatars/` | 豆包音色选择器头像的 Coil 磁盘缓存 | `DoubaoVoicePicker.kt:91` |
 | `doubao_voices.json` | 豆包在线音色库缓存（373 条，含头像/试听签名地址） | `DoubaoVoicePicker.kt:155` |
 | `monet/` | Monet 取色模块生成中间产物 | `MonetEngineModuleGenerator.kt:157` |
