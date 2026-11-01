@@ -289,7 +289,8 @@ object BreezeTtsClient {
 
     private fun queryString(query: Map<String, String>?): String {
         if (query.isNullOrEmpty()) return ""
-        return query.entries.joinToString(prefix = "?") { (name, value) ->
+        // joinToString 的默认分隔符是 ", "，漏了 separator 会把整串塞进第一个参数值里
+        return query.entries.joinToString(separator = "&", prefix = "?") { (name, value) ->
             "$name=${URLEncoder.encode(value, "UTF-8")}"
         }
     }
