@@ -78,14 +78,14 @@ object BreezeVoiceFavorites {
      * 只存 id 会让「收藏」页签把它整个漏掉。
      */
     fun load(): Map<String, String> = WePrefs.getStringSetOrDef(PREF_KEY, emptySet())
-        .mapNotNullTo(mutableMapOf()) { entry ->
+        .mapNotNull { entry ->
             val sep = entry.indexOf('|')
             when {
                 sep == 0 -> null
                 sep < 0 -> entry to ""
                 else -> entry.substring(0, sep) to entry.substring(sep + 1)
             }
-        }
+        }.toMap()
 
     /** 切换收藏，返回切换后的状态。 */
     fun toggle(id: String, name: String): Boolean {
@@ -101,6 +101,35 @@ private enum class BreezeVoiceTab(val label: String) {
     OFFICIAL("官方"),
     MINE("我的"),
     FAVORITE("收藏"),
+}
+
+/**
+ * 官方目录的分类。万级音色光翻页翻不动，所以分类交给服务端筛，总数与页数跟着缩小。
+ * 每颗 chip 只动一个维度（性别 / 语言 / 内容分类），取值照 docs.breezeblue.ai 的 list-voices。
+ */
+private enum class BreezeCategory(
+    val label: String,
+    val gender: String?,
+    val language: String?,
+    val category: String?,
+) {
+    ALL("全部", null, null, null),
+    MALE("男性", "male", null, null),
+    FEMALE("女性", "female", null, null),
+    CHINESE("中文", null, "zh", null),
+    ENGLISH("英文", null, "en", null),
+    ANIMATION("动画", null, null, "animation"),
+    GAMING("游戏", null, null, "gaming"),
+    CINEMATIC("影视", null, null, "cinematic"),
+    STYLIZED("风格化", null, null, "stylized"),
+    NARRATION("旁白叙述", null, null, "narration"),
+    SOCIAL("社交媒体", null, null, "social-media"),
+    LEARNING("教育学习", null, null, "learning"),
+    WELLNESS("疗愈冥想", null, null, "wellness"),
+    ADS("广告与品牌", null, null, "ads-brand"),
+    PODCAST("播客与主持", null, null, "podcast"),
+    SUPPORT("客服与助理", null, null, "support-agents"),
+    ROLEPLAY("角色扮演与陪伴", null, null, "roleplay"),
 }
 
 private val breezeMainHandler = Handler(Looper.getMainLooper())
@@ -125,6 +154,7 @@ fun showBreezeVoicePicker(
 ) {
     showComposeDialog(context) {
         var tab by remember { mutableStateOf(BreezeVoiceTab.OFFICIAL) }
+        var category by remember { mutableStateOf(BreezeCategory.ALL) }
         var query by remember { mutableStateOf("") }
         var picked by remember { mutableStateOf(currentId) }
         var favorites by remember { mutableStateOf(BreezeVoiceFavorites.load()) }
@@ -185,10 +215,16 @@ fun showBreezeVoicePicker(
                 return
             }
             val gen = ++officialGen
+            // 分类在起线程前就定下来，后台线程不回去读组合里的状态
+            val filter = category
             pending += 1
             status = ""
             Thread {
-                val outcome = runCatching { BreezeTtsClient.voicesPage(apiKey, false, search, page) }
+                val outcome = runCatching {
+                    BreezeTtsClient.voicesPage(
+                        apiKey, false, search, page, filter.gender, filter.language, filter.category
+                    )
+                }
                 breezeMainHandler.post {
                     pending -= 1
                     if (gen != officialGen) return@post
@@ -332,6 +368,30 @@ fun showBreezeVoicePicker(
 
                     Spacer(Modifier.height(8.dp))
 
+                    // 第二行只在官方那栏出现：数据源 × 分类，两个维度不混在同一排里
+                    if (tab == BreezeVoiceTab.OFFICIAL) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            BreezeCategory.entries.forEach { entry ->
+                                FilterChip(
+                                    selected = entry == category,
+                                    onClick = {
+                                        // 再点一次已选中的那颗 = 取消筛选，回到「全部」
+                                        val next = if (entry == category) BreezeCategory.ALL else entry
+                                        if (next != category) {
+                                            category = next
+                                            loadOfficial(officialSearch, 1)
+                                        }
+                                    },
+                                    label = { Text(entry.label) },
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+
                     OutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
@@ -350,7 +410,8 @@ fun showBreezeVoicePicker(
                             status.isNotBlank() -> status
                             pending > 0 -> "正在拉取音色列表…"
                             tab == BreezeVoiceTab.OFFICIAL -> "官方共 $officialTotal 个 · " +
-                                if (officialSearch.isBlank()) "按热门排序" else "搜索「$officialSearch」"
+                                (if (category == BreezeCategory.ALL) "" else "${category.label} · ") +
+                                (if (officialSearch.isBlank()) "按热门排序" else "搜索「$officialSearch」")
 
                             tab == BreezeVoiceTab.MINE -> "我的音色 ${mine.size} 个"
                             else -> "已收藏 ${favorites.size} 个"

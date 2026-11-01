@@ -102,8 +102,22 @@ object BreezeTtsClient {
         val total: Int,
     )
 
-    /** [search] 非空时走服务端搜索（公开目录是语义+文本混合匹配，本地筛不到没拉下来的音色）。 */
-    fun voicesPage(key: String, personal: Boolean, search: String, page: Int): VoicePage {
+    /**
+     * [search] 非空时走服务端搜索（公开目录是语义+文本混合匹配，本地筛不到没拉下来的音色）。
+     * 三个分类参数照 docs.breezeblue.ai 的 list-voices 取值：gender 为 male/female/neutral，
+     * languageCode 用 ISO 639-1 两字母，primaryCategory 取 narration/social-media/ads-brand/
+     * podcast/learning/support-agents/roleplay/gaming/animation/cinematic/wellness/stylized。
+     * 筛选是服务端做的，所以总数与页数会跟着缩小。
+     */
+    fun voicesPage(
+        key: String,
+        personal: Boolean,
+        search: String = "",
+        page: Int = 1,
+        gender: String? = null,
+        languageCode: String? = null,
+        primaryCategory: String? = null,
+    ): VoicePage {
         val query = LinkedHashMap<String, String>()
         query["voice_type"] = if (personal) "personal" else "default"
         query["page_size"] = VOICE_PAGE_SIZE.toString()
@@ -114,6 +128,9 @@ object BreezeTtsClient {
             // 文档：sort 只用于非搜索的浏览，且 trend 只限官方目录
             query["sort"] = "trend"
         }
+        if (!gender.isNullOrEmpty()) query["gender"] = gender
+        if (!languageCode.isNullOrEmpty()) query["language_code"] = languageCode
+        if (!primaryCategory.isNullOrEmpty()) query["primary_category_code"] = primaryCategory
 
         val json = json("GET", "/v1/voices", key, query, null)
         val arr = json.optJSONArray("voices") ?: JSONArray()
