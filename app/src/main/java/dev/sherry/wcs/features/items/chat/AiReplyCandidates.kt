@@ -52,8 +52,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Auto_awesome
+import com.composables.icons.materialsymbols.outlined.Autorenew
 import com.composables.icons.materialsymbols.outlined.Chevron_right
+import com.composables.icons.materialsymbols.outlined.Graphic_eq
 import com.composables.icons.materialsymbols.outlined.Keyboard_arrow_down
+import com.composables.icons.materialsymbols.outlined.Play_arrow
 import com.composables.icons.materialsymbols.outlined.Settings
 import dev.sherry.wcs.R
 import dev.sherry.wcs.agent.data.entity.ModelEntity
