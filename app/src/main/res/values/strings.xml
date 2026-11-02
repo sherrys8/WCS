@@ -1985,7 +1985,7 @@
     <string name="ai_reply_tts_custom_voice">Custom voice</string>
     <string name="ai_reply_tts_emotion">Emotion</string>
     <string name="ai_reply_generate_voice">Generate voice</string>
-    <string name="ai_reply_tts_preview">Preview voice</string>
+    <string name="ai_reply_tts_preview">Preview</string>
     <string name="ai_reply_regenerate_voice">Regenerate voice</string>
     <string name="ai_reply_send_voice">Send voice</string>
     <string name="ai_reply_tts_generating">Generating voice…</string>

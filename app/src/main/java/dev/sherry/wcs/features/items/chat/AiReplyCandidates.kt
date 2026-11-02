@@ -713,48 +713,81 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                     }
                 }
             },
-            // 底部固定两行：次行 = 取消 / 重新生成 /（音频就绪时）试听；主行 = 发送回复 + 语音位。
-            // 共享弹窗里 dismissButton 会先占掉一行宽度，FlowRow 只能在剩下的地方折行，
-            // 所以取消也收进 confirmButton 自己排，两行都是等宽槽位。
+            // 底部页脚：没有取消（返回键退出）。每行都用 weight 撑满两边 —— 上行三枚 tonal
+            // （重做那枚只占半格），下行两枚实心各一半；只剩一枚时它自己占满整行。
             confirmButton = {
+                val footerPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                val twoRows = selected >= 0 && ttsOn
+                // 合成中旧音频已作废，试听与重做一并藏掉
+                val audioReady = audioPath?.takeUnless { voiceBusy }
+                val redo: @Composable (Modifier) -> Unit = { m ->
+                    FilledTonalButton(
+                        onClick = { generate() },
+                        enabled = !busy && !voiceBusy,
+                        modifier = m,
+                        contentPadding = footerPadding,
+                    ) { Text(stringResource(R.string.ai_reply_regenerate), maxLines = 1) }
+                }
+                val preview: @Composable (String, Modifier) -> Unit = { path, m ->
+                    FilledTonalButton(
+                        onClick = { TextToSpeech.showPreviewDialog(context, talker, path) },
+                        modifier = m,
+                        contentPadding = footerPadding,
+                    ) {
+                        Icon(
+                            imageVector = MaterialSymbols.Outlined.Play_arrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.ai_reply_tts_preview), maxLines = 1)
+                    }
+                }
+                val redoVoice: @Composable (Modifier) -> Unit = { m ->
+                    FilledTonalButton(
+                        onClick = {
+                            val text = draft.trim()
+                                .ifEmpty { candidates.getOrElse(selected) { "" } }
+                            if (text.isEmpty()) {
+                                error = localizedChatString(R.string.ai_reply_empty_draft)
+                                return@FilledTonalButton
+                            }
+                            synthesize(text)
+                        },
+                        enabled = !busy,
+                        modifier = m,
+                        contentPadding = PaddingValues(0.dp),
+                    ) {
+                        Icon(
+                            imageVector = MaterialSymbols.Outlined.Autorenew,
+                            contentDescription = stringResource(R.string.ai_reply_regenerate_voice),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                            Text(stringResource(R.string.dialog_cancel))
-                        }
-                        if (selected >= 0) {
-                            OutlinedButton(
-                                onClick = { generate() },
-                                enabled = !busy && !voiceBusy,
-                                modifier = Modifier.weight(1f),
-                            ) { Text(stringResource(R.string.ai_reply_regenerate)) }
-                        }
-                        // 试听只在音频就绪时出现，不留一格死的；合成中旧音频已作废，一并藏掉
-                        audioPath?.takeUnless { voiceBusy }?.let { path ->
-                            FilledTonalButton(
-                                onClick = { TextToSpeech.showPreviewDialog(context, talker, path) },
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Icon(
-                                    imageVector = MaterialSymbols.Outlined.Play_arrow,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(stringResource(R.string.ai_reply_tts_preview))
+                    if (twoRows) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            redo(Modifier.weight(1f))
+                            audioReady?.let { path ->
+                                preview(path, Modifier.weight(1f))
+                                redoVoice(Modifier.weight(0.5f))
                             }
                         }
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        if (!twoRows && selected >= 0) redo(Modifier.weight(1f))
                         if (selected >= 0) {
                             Button(
                                 onClick = {
@@ -773,7 +806,8 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                 },
                                 enabled = !busy && !voiceBusy,
                                 modifier = Modifier.weight(1f),
-                            ) { Text(stringResource(R.string.ai_reply_send)) }
+                                contentPadding = footerPadding,
+                            ) { Text(stringResource(R.string.ai_reply_send), maxLines = 1) }
                             if (ttsOn) {
                                 // 一枚按钮两件事：没音频就生成，有音频就发送（草稿一改音频即作废，见上面输入框）
                                 Button(
@@ -795,6 +829,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                     },
                                     enabled = !busy && !voiceBusy,
                                     modifier = Modifier.weight(1f),
+                                    contentPadding = footerPadding,
                                 ) {
                                     Icon(
                                         imageVector = if (voiceBusy) MaterialSymbols.Outlined.Autorenew
@@ -804,35 +839,13 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                     )
                                     Spacer(Modifier.width(6.dp))
                                     Text(
-                                        stringResource(
+                                        text = stringResource(
                                             if (voiceBusy) R.string.ai_reply_tts_generating
                                             else if (audioPath == null) R.string.ai_reply_generate_voice
                                             else R.string.ai_reply_send_voice,
                                         ),
+                                        maxLines = 1,
                                     )
-                                }
-                                // 重做紧跟它重做的那枚；图标格不占文字槽，改草稿作废音频后自己消失
-                                if (audioPath != null && !voiceBusy) {
-                                    FilledTonalButton(
-                                        onClick = {
-                                            val text = draft.trim()
-                                                .ifEmpty { candidates.getOrElse(selected) { "" } }
-                                            if (text.isEmpty()) {
-                                                error = localizedChatString(R.string.ai_reply_empty_draft)
-                                                return@FilledTonalButton
-                                            }
-                                            synthesize(text)
-                                        },
-                                        enabled = !busy,
-                                        modifier = Modifier.width(46.dp),
-                                        contentPadding = PaddingValues(0.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = MaterialSymbols.Outlined.Autorenew,
-                                            contentDescription = stringResource(R.string.ai_reply_regenerate_voice),
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                    }
                                 }
                             }
                         } else {
@@ -840,12 +853,14 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                 onClick = { generate() },
                                 enabled = !busy && !voiceBusy,
                                 modifier = Modifier.weight(1f),
+                                contentPadding = footerPadding,
                             ) {
                                 Text(
                                     stringResource(
                                         if (candidates.isEmpty()) R.string.ai_reply_generate
                                         else R.string.ai_reply_regenerate,
                                     ),
+                                    maxLines = 1,
                                 )
                             }
                         }

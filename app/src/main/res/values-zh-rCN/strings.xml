@@ -1938,7 +1938,7 @@
     <string name="ai_reply_tts_custom_voice">自定义音色</string>
     <string name="ai_reply_tts_emotion">语气</string>
     <string name="ai_reply_generate_voice">生成语音</string>
-    <string name="ai_reply_tts_preview">试听语音</string>
+    <string name="ai_reply_tts_preview">试听</string>
     <string name="ai_reply_regenerate_voice">重新生成语音</string>
     <string name="ai_reply_send_voice">发送语音</string>
     <string name="ai_reply_tts_generating">生成语音中…</string>

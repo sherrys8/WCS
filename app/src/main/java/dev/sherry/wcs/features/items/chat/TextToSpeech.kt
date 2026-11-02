@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -490,12 +491,15 @@ object TextToSpeech :
                             Spacer(Modifier.height(8.dp))
                         }
 
+                        // 三枚等分一行，默认的 24dp 横向内边距会把「发送语音」挤成竖排
+                        val footerPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                         Row(Modifier.fillMaxWidth()) {
                             // 试听放最左边，只在真拿到过音频后出现；平时这行还是生成/发送语音两枚
                             previewPath?.let { path ->
                                 FilledTonalButton(
                                     onClick = { showPreviewDialog(context, talker, path) },
                                     modifier = Modifier.weight(1f),
+                                    contentPadding = footerPadding,
                                 ) {
                                     Icon(
                                         imageVector = MaterialSymbols.Outlined.Play_arrow,
@@ -503,9 +507,9 @@ object TextToSpeech :
                                         modifier = Modifier.size(18.dp),
                                     )
                                     Spacer(Modifier.width(6.dp))
-                                    Text("试听")
+                                    Text("试听", maxLines = 1)
                                 }
-                                Spacer(Modifier.width(12.dp))
+                                Spacer(Modifier.width(8.dp))
                             }
                             Button(
                                 onClick = {
@@ -579,10 +583,11 @@ object TextToSpeech :
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
+                                contentPadding = footerPadding,
                             ) {
-                                Text("生成")
+                                Text("生成", maxLines = 1)
                             }
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(8.dp))
                             Button(
                                 onClick = {
                                     val wav = lastWavPath
@@ -600,8 +605,9 @@ object TextToSpeech :
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
+                                contentPadding = footerPadding,
                             ) {
-                                Text("发送语音")
+                                Text("发送语音", maxLines = 1)
                             }
                         }
 
