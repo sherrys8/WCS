@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -324,6 +325,7 @@ object TextToSpeech :
             }
             // 偏好委托直接读进组合不会自己刷新：选完音色、改完指令要当场变，所以各存一份局部状态
             var breezeLabel by remember { mutableStateOf(breezeVoiceName.ifBlank { breezeVoice }) }
+            var doubaoLabel by remember { mutableStateOf(doubaoSpeakerName) }
             var instructions by remember { mutableStateOf(breezeInstructions) }
             var voices by remember {
                 mutableStateOf(
@@ -333,6 +335,10 @@ object TextToSpeech :
             }
             var customVoices by remember { mutableStateOf(emptyList<TtsVoice>()) }
             var generating by remember { mutableStateOf(false) }
+            // lastWavPath 是裸成员变量、不可观察，试听按钮要「生成完就出现」得自己镜像一份
+            var previewPath by remember {
+                mutableStateOf(lastWavPath?.takeIf { File(it).exists() })
+            }
             var credentialsRevision by remember { mutableIntStateOf(0) }
 
             LaunchedEffect(backendMode, credentialsRevision) {
@@ -401,12 +407,13 @@ object TextToSpeech :
                             // 豆包既不吃情绪向量，也没有魔方的自定义音色，整行只留音色
                             BaseWidget(
                                 title = "豆包音色",
-                                description = doubaoSpeakerName,
+                                description = doubaoLabel,
                                 onClick = {
                                     showDoubaoVoicePicker(context, voiceId, doubaoCookie) { id, name ->
                                         voiceId = id
                                         doubaoSpeaker = id
                                         doubaoSpeakerName = name
+                                        doubaoLabel = name
                                     }
                                 },
                                 trailingContent = {
@@ -484,6 +491,22 @@ object TextToSpeech :
                         }
 
                         Row(Modifier.fillMaxWidth()) {
+                            // 试听放最左边，只在真拿到过音频后出现；平时这行还是生成/发送语音两枚
+                            previewPath?.let { path ->
+                                FilledTonalButton(
+                                    onClick = { showPreviewDialog(context, talker, path) },
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Icon(
+                                        imageVector = MaterialSymbols.Outlined.Play_arrow,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("试听")
+                                }
+                                Spacer(Modifier.width(12.dp))
+                            }
                             Button(
                                 onClick = {
                                     if (inputText.trim().isEmpty()) {
@@ -500,6 +523,7 @@ object TextToSpeech :
                                         generateVoiceDoubao(inputText.trim(), voiceId) { path, err ->
                                             generating = false
                                             if (path != null) {
+                                                previewPath = path
                                                 showPreviewDialog(context, talker, path)
                                             } else {
                                                 showToast(context, "生成失败：$err")
@@ -526,6 +550,7 @@ object TextToSpeech :
                                         ) { path, err ->
                                             generating = false
                                             if (path != null) {
+                                                previewPath = path
                                                 showPreviewDialog(context, talker, path)
                                             } else {
                                                 showToast(context, "生成失败：$err")
@@ -546,6 +571,7 @@ object TextToSpeech :
                                     ) { wavPath, err ->
                                         generating = false
                                         if (wavPath != null) {
+                                            previewPath = wavPath
                                             showPreviewDialog(context, talker, wavPath)
                                         } else {
                                             showToast(context, "生成失败：$err")

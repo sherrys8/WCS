@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,12 +20,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -186,13 +187,9 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
     }
 
     /** 联网音色只有 id，行里要显示名字；名字与所选 id 不匹配时退回内置表标签，再退回 id 本身。 */
-    private fun doubaoSpeakerLabel(id: String): String =
-        if (ttsDoubaoSpeakerName.isNotBlank() && ttsDoubaoSpeaker == id) ttsDoubaoSpeakerName
+    private fun doubaoSpeakerLabel(id: String, name: String): String =
+        if (name.isNotBlank() && ttsDoubaoSpeaker == id) name
         else TextToSpeech.DOUBAO_VOICES.firstOrNull { it.id == id }?.label ?: id
-
-    /** Breeze 没有离线兜底表，没选过就显示调用方给的占位文案。 */
-    private fun breezeVoiceLabel(unselected: String): String =
-        ttsBreezeVoiceName.ifBlank { ttsBreezeVoice }.ifBlank { unselected }
 
     private fun emotionVector(): FloatArray =
         TextToSpeech.EMOTIONS.firstOrNull { it.first == ttsEmotion }?.second
@@ -713,76 +710,146 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                     }
                 }
             },
+            // 底部固定两行：次行 = 取消 / 重新生成 /（音频就绪时）试听；主行 = 发送回复 + 语音位。
+            // 共享弹窗里 dismissButton 会先占掉一行宽度，FlowRow 只能在剩下的地方折行，
+            // 所以取消也收进 confirmButton 自己排，两行都是等宽槽位。
             confirmButton = {
-                // 一行放不下就换行，避免按钮文字被挤成竖排（同短视频解析的 FlowRow 做法）
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // 生成/重新生成常驻原位；发送入口只在选中某条候选后出现
-                    Button(onClick = { generate() }, enabled = !busy && !voiceBusy) {
-                        Text(
-                            stringResource(
-                                if (candidates.isEmpty()) R.string.ai_reply_generate
-                                else R.string.ai_reply_regenerate,
-                            ),
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.dialog_cancel))
+                        }
+                        if (selected >= 0) {
+                            OutlinedButton(
+                                onClick = { generate() },
+                                enabled = !busy && !voiceBusy,
+                                modifier = Modifier.weight(1f),
+                            ) { Text(stringResource(R.string.ai_reply_regenerate)) }
+                        }
+                        // 试听只在音频就绪时出现，不留一格死的；合成中旧音频已作废，一并藏掉
+                        audioPath?.takeUnless { voiceBusy }?.let { path ->
+                            FilledTonalButton(
+                                onClick = { TextToSpeech.showPreviewDialog(context, talker, path) },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Icon(
+                                    imageVector = MaterialSymbols.Outlined.Play_arrow,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.ai_reply_tts_preview))
+                            }
+                        }
                     }
-                    if (selected >= 0 && audioPath != null) {
-                        Button(
-                            onClick = {
-                                val path = audioPath ?: return@Button
-                                TextToSpeech.sendVoiceTo(talker, path) { ok ->
-                                    if (ok) onDismiss()
-                                    else error = localizedChatString(R.string.ai_reply_send_failed)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (selected >= 0) {
+                            Button(
+                                onClick = {
+                                    val text = draft.trim()
+                                    if (text.isEmpty()) {
+                                        error = localizedChatString(R.string.ai_reply_empty_draft)
+                                        return@Button
+                                    }
+                                    scope.launch {
+                                        val sent = withContext(Dispatchers.IO) {
+                                            WeMessageApi.sendText(talker, text)
+                                        }
+                                        if (sent) onDismiss()
+                                        else error = localizedChatString(R.string.ai_reply_send_failed)
+                                    }
+                                },
+                                enabled = !busy && !voiceBusy,
+                                modifier = Modifier.weight(1f),
+                            ) { Text(stringResource(R.string.ai_reply_send)) }
+                            if (ttsOn) {
+                                // 一枚按钮两件事：没音频就生成，有音频就发送（草稿一改音频即作废，见上面输入框）
+                                Button(
+                                    onClick = {
+                                        val path = audioPath
+                                        if (path != null) {
+                                            TextToSpeech.sendVoiceTo(talker, path) { ok ->
+                                                if (ok) onDismiss()
+                                                else error = localizedChatString(R.string.ai_reply_send_failed)
+                                            }
+                                            return@Button
+                                        }
+                                        val text = draft.trim().ifEmpty { candidates.getOrElse(selected) { "" } }
+                                        if (text.isEmpty()) {
+                                            error = localizedChatString(R.string.ai_reply_empty_draft)
+                                            return@Button
+                                        }
+                                        synthesize(text)
+                                    },
+                                    enabled = !busy && !voiceBusy,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Icon(
+                                        imageVector = if (voiceBusy) MaterialSymbols.Outlined.Autorenew
+                                        else MaterialSymbols.Outlined.Graphic_eq,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        stringResource(
+                                            if (voiceBusy) R.string.ai_reply_tts_generating
+                                            else if (audioPath == null) R.string.ai_reply_generate_voice
+                                            else R.string.ai_reply_send_voice,
+                                        ),
+                                    )
                                 }
-                            },
-                            enabled = !busy && !voiceBusy,
-                        ) { Text(stringResource(R.string.ai_reply_send_voice)) }
-                    }
-                    if (selected >= 0) {
-                        Button(
-                            onClick = {
-                                val text = draft.trim()
-                                if (text.isEmpty()) {
-                                    error = localizedChatString(R.string.ai_reply_empty_draft)
-                                    return@Button
+                                // 重做紧跟它重做的那枚；图标格不占文字槽，改草稿作废音频后自己消失
+                                if (audioPath != null && !voiceBusy) {
+                                    FilledTonalButton(
+                                        onClick = {
+                                            val text = draft.trim()
+                                                .ifEmpty { candidates.getOrElse(selected) { "" } }
+                                            if (text.isEmpty()) {
+                                                error = localizedChatString(R.string.ai_reply_empty_draft)
+                                                return@FilledTonalButton
+                                            }
+                                            synthesize(text)
+                                        },
+                                        enabled = !busy,
+                                        modifier = Modifier.width(46.dp),
+                                        contentPadding = PaddingValues(0.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = MaterialSymbols.Outlined.Autorenew,
+                                            contentDescription = stringResource(R.string.ai_reply_regenerate_voice),
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
                                 }
-                                scope.launch {
-                                    val sent = withContext(Dispatchers.IO) { WeMessageApi.sendText(talker, text) }
-                                    if (sent) onDismiss()
-                                    else error = localizedChatString(R.string.ai_reply_send_failed)
-                                }
-                            },
-                            enabled = !busy && !voiceBusy,
-                        ) { Text(stringResource(R.string.ai_reply_send)) }
-                    }
-                    if (selected >= 0 && ttsOn) {
-                        Button(
-                            onClick = {
-                                val text = draft.trim().ifEmpty { candidates.getOrElse(selected) { "" } }
-                                if (text.isEmpty()) {
-                                    error = localizedChatString(R.string.ai_reply_empty_draft)
-                                    return@Button
-                                }
-                                synthesize(text)
-                            },
-                            enabled = !busy && !voiceBusy,
-                        ) {
-                            Text(
-                                stringResource(
-                                    if (voiceBusy) R.string.ai_reply_tts_generating
-                                    else if (audioPath == null) R.string.ai_reply_generate_voice
-                                    else R.string.ai_reply_regenerate_voice,
-                                ),
-                            )
+                            }
+                        } else {
+                            Button(
+                                onClick = { generate() },
+                                enabled = !busy && !voiceBusy,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (candidates.isEmpty()) R.string.ai_reply_generate
+                                        else R.string.ai_reply_regenerate,
+                                    ),
+                                )
+                            }
                         }
                     }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.dialog_cancel)) }
-            },
+            dismissButton = null,
         )
     }
 
@@ -925,9 +992,11 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
         var ttsBackendState by remember { mutableStateOf(ttsBackend) }
         var ttsApiKeyState by remember { mutableStateOf(ttsApiKey) }
         var ttsCookieState by remember { mutableStateOf(ttsDoubaoCookie) }
+        var ttsDoubaoNameState by remember { mutableStateOf(ttsDoubaoSpeakerName) }
         var ttsBreezeKeyState by remember { mutableStateOf(ttsBreezeKey) }
         var ttsBreezeVoiceState by remember { mutableStateOf(ttsBreezeVoice) }
-        var ttsBreezeLabelState by remember { mutableStateOf(ttsBreezeVoiceName) }
+        // 行里显示的就是这个本地值；MMKV 委托读起来不是可观察状态，选完音色只写委托不会触发重组
+        var ttsBreezeLabelState by remember { mutableStateOf(ttsBreezeVoiceName.ifBlank { ttsBreezeVoice }) }
         var ttsBreezeModelState by remember { mutableStateOf(ttsBreezeModel) }
         var ttsBreezeInstrState by remember { mutableStateOf(ttsBreezeInstructions) }
         var ttsVoiceState by remember { mutableStateOf(effectiveVoiceId()) }
@@ -1141,9 +1210,9 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                         when {
                                             breezeTts -> BaseWidget(
                                                 title = stringResource(R.string.ai_reply_tts_voice),
-                                                description = breezeVoiceLabel(
-                                                    stringResource(R.string.ai_reply_tts_breeze_unselected),
-                                                ),
+                                                description = ttsBreezeLabelState.ifBlank {
+                                                    stringResource(R.string.ai_reply_tts_breeze_unselected)
+                                                },
                                                 onClick = {
                                                     showBreezeVoicePicker(
                                                         context,
@@ -1166,7 +1235,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
 
                                             doubaoTts -> BaseWidget(
                                                 title = stringResource(R.string.ai_reply_tts_voice),
-                                                description = doubaoSpeakerLabel(ttsVoiceState),
+                                                description = doubaoSpeakerLabel(ttsVoiceState, ttsDoubaoNameState),
                                                 onClick = {
                                                     showDoubaoVoicePicker(
                                                         context,
@@ -1176,6 +1245,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                                                         ttsVoiceState = id
                                                         ttsDoubaoSpeaker = id
                                                         ttsDoubaoSpeakerName = name
+                                                        ttsDoubaoNameState = name
                                                     }
                                                 },
                                                 trailingContent = {
