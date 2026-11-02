@@ -393,7 +393,7 @@ Prefer these over raw Compose controls:
 - 汽水音乐改用 `api.cxzja.cn`，需要 Token 认证，搜索 `?token=&msg=&n=` → `data[{num, identifier, song_name, singers, album_cover}]`，详情 `?token=&msg=&n=num` → `data{download_url, lyric, ...}`
 - 三卡默认关闭，减少初始干扰
 - 豆包只作为 A 套 `TextToSpeech` 的可切换后端，不并入 B 套语音面板的 `TtsMode`（系统 TTS / Edge TTS / 克隆语音）
-- 豆包切换保持弹窗布局完全不变，只换数据来源；语气与自定义音色在豆包模式下禁用而非隐藏（用户明确要求不换布局）
+- 豆包切换保持弹窗布局完全不变，只换数据来源；语气与自定义音色在豆包模式下禁用而非隐藏（用户明确要求不换布局）——**此条已于 2026-11-01 推翻**：用户改要求豆包模式下这两行**直接不显示**，不再置灰。同一轮还把后端默认值改成 Breeze（顺序 Breeze → 豆包 → 魔方），豆包音色列表加每页 50 的翻页
 - 文字转语音两个菜单入口默认关闭，由用户在功能设置弹窗中自行开启（老用户升级后气泡菜单会先消失，属预期）
 - A 套弹窗新增文案沿用硬编码中文，本轮不做三语言资源化（用户选择「只新增本次需要的字符串」）
 - 本地改显示文本要「持久」就用**重绑重放**（`ICreateViewListener.onCreateView` + 按原文匹配），不去 hook 全局 `TextView.setText` 改 `args[0]`：后者每次渲染全进程生效，会污染宿主自身绘制且难定位

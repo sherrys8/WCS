@@ -411,7 +411,7 @@ fun showBreezeVoicePicker(
                             pending > 0 -> "正在拉取音色列表…"
                             tab == BreezeVoiceTab.OFFICIAL -> "官方共 $officialTotal 个 · " +
                                 (if (category == BreezeCategory.ALL) "" else "${category.label} · ") +
-                                (if (officialSearch.isBlank()) "按热门排序" else "搜索「$officialSearch」")
+                                (if (officialSearch.isBlank()) "按创建时间倒序" else "搜索「$officialSearch」")
 
                             tab == BreezeVoiceTab.MINE -> "我的音色 ${mine.size} 个"
                             else -> "已收藏 ${favorites.size} 个"

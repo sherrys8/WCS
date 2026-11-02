@@ -124,10 +124,9 @@ object BreezeTtsClient {
         query["page"] = page.coerceAtLeast(1).toString()
         if (search.isNotBlank()) {
             query["search"] = search
-        } else if (!personal) {
-            // 文档：sort 只用于非搜索的浏览，且 trend 只限官方目录
-            query["sort"] = "trend"
         }
+        // 刻意不发 sort：服务端规定 sort=trend 只能走 next_page_token 游标、page 必须是 1，
+        // 而选择器要能上一页/下一页，只能用默认的稳定顺序（created_at_unix 倒序）。
         if (!gender.isNullOrEmpty()) query["gender"] = gender
         if (!languageCode.isNullOrEmpty()) query["language_code"] = languageCode
         if (!primaryCategory.isNullOrEmpty()) query["primary_category_code"] = primaryCategory

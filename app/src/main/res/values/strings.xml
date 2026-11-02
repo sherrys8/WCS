@@ -1969,9 +1969,14 @@
     <string name="ai_reply_tts_switch">Voice replies</string>
     <string name="ai_reply_tts_switch_summary">Generate and send a voice reply from a candidate</string>
     <string name="ai_reply_tts_backend_mofang">Mofang (peiyinmofang)</string>
-    <string name="ai_reply_tts_backend_mofang_summary">Needs its own API key</string>
     <string name="ai_reply_tts_backend_doubao">Doubao</string>
-    <string name="ai_reply_tts_backend_doubao_summary">Needs a logged-in Doubao cookie</string>
+    <string name="ai_reply_tts_backend">Voice backend</string>
+    <string name="ai_reply_tts_backend_breeze">Breeze Blue</string>
+    <string name="ai_reply_tts_breeze_key_hint">Created on the breezeblue.ai developer API keys page</string>
+    <string name="ai_reply_tts_breeze_unselected">No voice selected</string>
+    <string name="ai_reply_tts_breeze_model">Model</string>
+    <string name="ai_reply_tts_breeze_instructions">Instruction</string>
+    <string name="ai_reply_tts_breeze_instructions_hint">Describe in plain words how the text should be read</string>
     <string name="ai_reply_tts_api_key">Voice API key</string>
     <string name="ai_reply_tts_api_key_hint">Created in peiyinmofang.com API key management</string>
     <string name="ai_reply_tts_cookie">Doubao cookie</string>

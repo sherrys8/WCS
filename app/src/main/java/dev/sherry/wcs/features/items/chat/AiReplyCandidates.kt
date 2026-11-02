@@ -75,13 +75,13 @@ import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
 import dev.sherry.wcs.ui.content.m3.ExpressiveOptionDropdown
 import dev.sherry.wcs.ui.content.m3.IntNumberPickerWidget
-import dev.sherry.wcs.ui.content.m3.RadioButtonWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
 import dev.sherry.wcs.ui.content.m3.TextFieldDialogWidget
 import dev.sherry.wcs.ui.utils.ReplyIcon
 import dev.sherry.wcs.ui.utils.ShowComposeDialogScope
 import dev.sherry.wcs.ui.utils.showComposeDialog
+import dev.sherry.wcs.utils.BreezeTtsClient
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.showToast
 import kotlinx.coroutines.Dispatchers
@@ -148,7 +148,7 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
 
     // 语音回复只复用文字转语音的合成/发送/试听实现，凭据与音色设置各自独立一套键。
     private var ttsEnabled by prefOption("ai_reply_tts_enabled", false)
-    private var ttsBackend by prefOption("ai_reply_tts_backend", TextToSpeech.BACKEND_MOFA)
+    private var ttsBackend by prefOption("ai_reply_tts_backend", TextToSpeech.BACKEND_BREEZE)
     private var ttsApiKey by prefOption("ai_reply_tts_api_key", "")
     private var ttsDoubaoCookie by prefOption("ai_reply_tts_doubao_cookie", "")
     private var ttsVoiceId by prefOption("ai_reply_tts_voice_id", "")
@@ -156,23 +156,53 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
     private var ttsDoubaoSpeakerName by prefOption("ai_reply_tts_doubao_speaker_name", "")
     private var ttsEmotion by prefOption("ai_reply_tts_emotion", TextToSpeech.EMOTIONS.first().first)
 
-    private fun isDoubaoBackend(): Boolean = ttsBackend == TextToSpeech.BACKEND_DOUBAO
+    // Breeze 的凭据与音色同样是本功能独立一套，不回退到文字转语音那套
+    private var ttsBreezeKey by prefOption("ai_reply_tts_breeze_key", "")
+    private var ttsBreezeVoice by prefOption("ai_reply_tts_breeze_voice", "")
+    private var ttsBreezeVoiceName by prefOption("ai_reply_tts_breeze_voice_name", "")
+    private var ttsBreezeModel by prefOption("ai_reply_tts_breeze_model", BreezeTtsClient.DEFAULT_MODEL)
+    private var ttsBreezeInstructions by prefOption("ai_reply_tts_breeze_instructions", "")
 
-    private fun effectiveVoiceId(): String =
-        if (isDoubaoBackend()) ttsDoubaoSpeaker.ifBlank { TextToSpeech.DOUBAO_VOICES.first().id }
-        else ttsVoiceId.ifBlank { TextToSpeech.DEFAULT_VOICES.first().voiceId }
+    /** 后端展示顺序与文字转语音一致：Breeze → 豆包 → 魔方 */
+    private val TTS_BACKEND_ORDER = listOf(
+        TextToSpeech.BACKEND_BREEZE,
+        TextToSpeech.BACKEND_DOUBAO,
+        TextToSpeech.BACKEND_MOFA,
+    )
+
+    @androidx.annotation.StringRes
+    private fun backendLabelRes(mode: Int): Int = when (mode) {
+        TextToSpeech.BACKEND_BREEZE -> R.string.ai_reply_tts_backend_breeze
+        TextToSpeech.BACKEND_DOUBAO -> R.string.ai_reply_tts_backend_doubao
+        else -> R.string.ai_reply_tts_backend_mofang
+    }
+
+    private fun effectiveVoiceId(): String = when (ttsBackend) {
+        // Breeze 没有离线兜底表，没选过就是空，由 ttsCredentialsReady 拦下
+        TextToSpeech.BACKEND_BREEZE -> ttsBreezeVoice
+        TextToSpeech.BACKEND_DOUBAO ->
+            ttsDoubaoSpeaker.ifBlank { TextToSpeech.DOUBAO_VOICES.first().id }
+        else -> ttsVoiceId.ifBlank { TextToSpeech.DEFAULT_VOICES.first().voiceId }
+    }
 
     /** 联网音色只有 id，行里要显示名字；名字与所选 id 不匹配时退回内置表标签，再退回 id 本身。 */
     private fun doubaoSpeakerLabel(id: String): String =
         if (ttsDoubaoSpeakerName.isNotBlank() && ttsDoubaoSpeaker == id) ttsDoubaoSpeakerName
         else TextToSpeech.DOUBAO_VOICES.firstOrNull { it.id == id }?.label ?: id
 
+    /** Breeze 没有离线兜底表，没选过就显示调用方给的占位文案。 */
+    private fun breezeVoiceLabel(unselected: String): String =
+        ttsBreezeVoiceName.ifBlank { ttsBreezeVoice }.ifBlank { unselected }
+
     private fun emotionVector(): FloatArray =
         TextToSpeech.EMOTIONS.firstOrNull { it.first == ttsEmotion }?.second
             ?: TextToSpeech.EMOTIONS.first().second
 
-    private fun ttsCredentialsReady(): Boolean =
-        if (isDoubaoBackend()) ttsDoubaoCookie.isNotBlank() else ttsApiKey.isNotBlank()
+    private fun ttsCredentialsReady(): Boolean = when (ttsBackend) {
+        TextToSpeech.BACKEND_BREEZE -> ttsBreezeKey.isNotBlank() && ttsBreezeVoice.isNotBlank()
+        TextToSpeech.BACKEND_DOUBAO -> ttsDoubaoCookie.isNotBlank()
+        else -> ttsApiKey.isNotBlank()
+    }
 
     private fun defaultPromptFor(style: String): String =
         STYLES.firstOrNull { it.first == style }?.second ?: STYLES.first().second
@@ -353,10 +383,30 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                     error = failure
                 }
             }
-            if (isDoubaoBackend()) {
-                TextToSpeech.generateVoiceDoubao(text, effectiveVoiceId(), cookie = ttsDoubaoCookie, cb = callback)
-            } else {
-                TextToSpeech.generateVoice(text, effectiveVoiceId(), emotionVector(), key = ttsApiKey, cb = callback)
+            when (ttsBackend) {
+                TextToSpeech.BACKEND_BREEZE -> TextToSpeech.generateVoiceBreeze(
+                    text,
+                    effectiveVoiceId(),
+                    ttsBreezeInstructions,
+                    key = ttsBreezeKey,
+                    model = ttsBreezeModel,
+                    cb = callback,
+                )
+
+                TextToSpeech.BACKEND_DOUBAO -> TextToSpeech.generateVoiceDoubao(
+                    text,
+                    effectiveVoiceId(),
+                    cookie = ttsDoubaoCookie,
+                    cb = callback,
+                )
+
+                else -> TextToSpeech.generateVoice(
+                    text,
+                    effectiveVoiceId(),
+                    emotionVector(),
+                    key = ttsApiKey,
+                    cb = callback,
+                )
             }
         }
 
@@ -875,15 +925,21 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
         var ttsBackendState by remember { mutableStateOf(ttsBackend) }
         var ttsApiKeyState by remember { mutableStateOf(ttsApiKey) }
         var ttsCookieState by remember { mutableStateOf(ttsDoubaoCookie) }
+        var ttsBreezeKeyState by remember { mutableStateOf(ttsBreezeKey) }
+        var ttsBreezeVoiceState by remember { mutableStateOf(ttsBreezeVoice) }
+        var ttsBreezeLabelState by remember { mutableStateOf(ttsBreezeVoiceName) }
+        var ttsBreezeModelState by remember { mutableStateOf(ttsBreezeModel) }
+        var ttsBreezeInstrState by remember { mutableStateOf(ttsBreezeInstructions) }
         var ttsVoiceState by remember { mutableStateOf(effectiveVoiceId()) }
         var ttsEmotionState by remember { mutableStateOf(ttsEmotion) }
         var mofangVoices by remember { mutableStateOf(TextToSpeech.DEFAULT_VOICES) }
         var mofangCustomVoices by remember { mutableStateOf<List<TextToSpeech.TtsVoice>>(emptyList()) }
         val doubaoTts = ttsBackendState == TextToSpeech.BACKEND_DOUBAO
+        val breezeTts = ttsBackendState == TextToSpeech.BACKEND_BREEZE
 
         // 魔方音色要按这套独立凭据现拉；失败就保留内置列表，与文字转语音的降级一致
         LaunchedEffect(ttsOn, ttsBackendState, ttsApiKeyState) {
-            if (!ttsOn || doubaoTts || ttsApiKeyState.isBlank()) return@LaunchedEffect
+            if (!ttsOn || doubaoTts || breezeTts || ttsApiKeyState.isBlank()) return@LaunchedEffect
             val key = ttsApiKeyState
             val loaded = withContext(Dispatchers.IO) {
                 runCatching { TextToSpeech.fetchVoices(key) to TextToSpeech.fetchUserVoices(key) }.getOrNull()
@@ -897,6 +953,22 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
             DropdownOption(ttsVoiceState, ttsVoiceState)).distinctBy { it.value }
         val customVoiceOptions = mofangCustomVoices.map { DropdownOption(it.voiceId, it.label) }
         val emotionOptions = TextToSpeech.EMOTIONS.map { DropdownOption(it.first, it.first) }
+        // 模型列表跟文字转语音一样从 /v1/models 现拉，以后平台加模型不用改代码；
+        // 拉不到就只剩当前值这一项，DropDownMenuWidget 要求选中项必须在列表里。
+        var breezeModelOptions by remember {
+            mutableStateOf(listOf(DropdownOption(ttsBreezeModelState, ttsBreezeModelState)))
+        }
+        LaunchedEffect(ttsOn, breezeTts, ttsBreezeKeyState) {
+            if (!ttsOn || !breezeTts || ttsBreezeKeyState.isBlank()) return@LaunchedEffect
+            val key = ttsBreezeKeyState
+            val models = withContext(Dispatchers.IO) {
+                runCatching { BreezeTtsClient.models(key) }.getOrNull()
+            }.orEmpty()
+            if (models.isEmpty()) return@LaunchedEffect
+            val options = models.map { DropdownOption(it.id, it.name) }
+            breezeModelOptions = if (options.any { it.value == ttsBreezeModelState }) options
+            else listOf(DropdownOption(ttsBreezeModelState, ttsBreezeModelState)) + options
+        }
 
         AlertDialogContent(
             title = {
@@ -1006,119 +1078,194 @@ object AiReplyCandidates : ClickableFeature(), WeChatMessageContextMenuApi.IMenu
                             )
                         }
                         if (ttsOn) {
+                            // 后端：一行下拉，不传 description 才能显示当前选中的是谁
                             item {
-                                Column {
-                                    RadioButtonWidget(
-                                        title = stringResource(R.string.ai_reply_tts_backend_mofang),
-                                        description = stringResource(R.string.ai_reply_tts_backend_mofang_summary),
-                                        selected = !doubaoTts,
-                                        onSelect = {
-                                            ttsBackendState = TextToSpeech.BACKEND_MOFA
-                                            ttsBackend = TextToSpeech.BACKEND_MOFA
-                                            ttsVoiceState = effectiveVoiceId()
-                                        },
-                                    )
-                                    RadioButtonWidget(
-                                        title = stringResource(R.string.ai_reply_tts_backend_doubao),
-                                        description = stringResource(R.string.ai_reply_tts_backend_doubao_summary),
-                                        selected = doubaoTts,
-                                        onSelect = {
-                                            ttsBackendState = TextToSpeech.BACKEND_DOUBAO
-                                            ttsBackend = TextToSpeech.BACKEND_DOUBAO
-                                            ttsVoiceState = effectiveVoiceId()
-                                        },
-                                    )
-                                }
-                            }
-                            item {
-                                TextFieldDialogWidget(
-                                    title = stringResource(R.string.ai_reply_tts_api_key),
-                                    value = ttsApiKeyState,
-                                    onValueChange = {
-                                        ttsApiKeyState = it.trim()
-                                        ttsApiKey = ttsApiKeyState
+                                DropDownMenuWidget(
+                                    title = stringResource(R.string.ai_reply_tts_backend),
+                                    description = null,
+                                    value = ttsBackendState,
+                                    options = TTS_BACKEND_ORDER.map {
+                                        DropdownOption(it, stringResource(backendLabelRes(it)))
                                     },
-                                    dialogTitle = stringResource(R.string.ai_reply_tts_api_key),
-                                    confirmLabel = stringResource(R.string.dialog_confirm),
-                                    dismissLabel = stringResource(R.string.dialog_cancel),
-                                    valueHint = stringResource(R.string.ai_reply_tts_api_key_hint),
-                                    password = true,
+                                    onValueChange = {
+                                        ttsBackendState = it
+                                        ttsBackend = it
+                                        ttsVoiceState = effectiveVoiceId()
+                                    },
                                 )
                             }
-                            item {
-                                TextFieldDialogWidget(
-                                    title = stringResource(R.string.ai_reply_tts_cookie),
-                                    value = ttsCookieState,
-                                    onValueChange = {
-                                        ttsCookieState = it.trim()
-                                        ttsDoubaoCookie = ttsCookieState
-                                    },
-                                    dialogTitle = stringResource(R.string.ai_reply_tts_cookie),
-                                    confirmLabel = stringResource(R.string.dialog_confirm),
-                                    dismissLabel = stringResource(R.string.dialog_cancel),
-                                    valueHint = stringResource(R.string.ai_reply_tts_cookie_hint),
-                                    password = true,
-                                    enabled = doubaoTts,
-                                )
-                            }
+                            // 凭据：只留一行，标题与键随后端走；三套凭据各自独立、互不回退
                             item {
                                 if (doubaoTts) {
-                                    BaseWidget(
-                                        title = stringResource(R.string.ai_reply_tts_voice),
-                                        description = doubaoSpeakerLabel(ttsVoiceState),
-                                        onClick = {
-                                            showDoubaoVoicePicker(context, ttsVoiceState, ttsCookieState) { id, name ->
-                                                ttsVoiceState = id
-                                                ttsDoubaoSpeaker = id
-                                                ttsDoubaoSpeakerName = name
-                                            }
+                                    TextFieldDialogWidget(
+                                        title = stringResource(R.string.ai_reply_tts_cookie),
+                                        value = ttsCookieState,
+                                        onValueChange = {
+                                            ttsCookieState = it.trim()
+                                            ttsDoubaoCookie = ttsCookieState
                                         },
-                                        trailingContent = {
-                                            Icon(
-                                                imageVector = MaterialSymbols.Outlined.Chevron_right,
-                                                contentDescription = null,
-                                            )
-                                        },
+                                        dialogTitle = stringResource(R.string.ai_reply_tts_cookie),
+                                        confirmLabel = stringResource(R.string.dialog_confirm),
+                                        dismissLabel = stringResource(R.string.dialog_cancel),
+                                        valueHint = stringResource(R.string.ai_reply_tts_cookie_hint),
+                                        password = true,
                                     )
                                 } else {
-                                    DropDownMenuWidget(
-                                        title = stringResource(R.string.ai_reply_tts_voice),
-                                        description = null,
-                                        value = ttsVoiceState,
-                                        options = systemVoiceOptions,
+                                    TextFieldDialogWidget(
+                                        title = stringResource(R.string.ai_reply_tts_api_key),
+                                        value = if (breezeTts) ttsBreezeKeyState else ttsApiKeyState,
                                         onValueChange = {
-                                            ttsVoiceState = it
-                                            ttsVoiceId = it
+                                            if (breezeTts) {
+                                                ttsBreezeKeyState = it.trim()
+                                                ttsBreezeKey = ttsBreezeKeyState
+                                            } else {
+                                                ttsApiKeyState = it.trim()
+                                                ttsApiKey = ttsApiKeyState
+                                            }
+                                        },
+                                        dialogTitle = stringResource(R.string.ai_reply_tts_api_key),
+                                        confirmLabel = stringResource(R.string.dialog_confirm),
+                                        dismissLabel = stringResource(R.string.dialog_cancel),
+                                        valueHint = stringResource(
+                                            if (breezeTts) R.string.ai_reply_tts_breeze_key_hint
+                                            else R.string.ai_reply_tts_api_key_hint,
+                                        ),
+                                        password = true,
+                                    )
+                                }
+                            }
+                            // 音色：与文字转语音同构 —— 魔方是系统|自定义两列，Breeze 和豆包各占整行
+                            item {
+                                Row(Modifier.fillMaxWidth()) {
+                                    Box(Modifier.weight(1f)) {
+                                        when {
+                                            breezeTts -> BaseWidget(
+                                                title = stringResource(R.string.ai_reply_tts_voice),
+                                                description = breezeVoiceLabel(
+                                                    stringResource(R.string.ai_reply_tts_breeze_unselected),
+                                                ),
+                                                onClick = {
+                                                    showBreezeVoicePicker(
+                                                        context,
+                                                        ttsBreezeVoiceState,
+                                                        ttsBreezeKeyState,
+                                                    ) { id, name ->
+                                                        ttsBreezeVoiceState = id
+                                                        ttsBreezeVoice = id
+                                                        ttsBreezeVoiceName = name
+                                                        ttsBreezeLabelState = name.ifBlank { id }
+                                                    }
+                                                },
+                                                trailingContent = {
+                                                    Icon(
+                                                        imageVector = MaterialSymbols.Outlined.Chevron_right,
+                                                        contentDescription = null,
+                                                    )
+                                                },
+                                            )
+
+                                            doubaoTts -> BaseWidget(
+                                                title = stringResource(R.string.ai_reply_tts_voice),
+                                                description = doubaoSpeakerLabel(ttsVoiceState),
+                                                onClick = {
+                                                    showDoubaoVoicePicker(
+                                                        context,
+                                                        ttsVoiceState,
+                                                        ttsCookieState,
+                                                    ) { id, name ->
+                                                        ttsVoiceState = id
+                                                        ttsDoubaoSpeaker = id
+                                                        ttsDoubaoSpeakerName = name
+                                                    }
+                                                },
+                                                trailingContent = {
+                                                    Icon(
+                                                        imageVector = MaterialSymbols.Outlined.Chevron_right,
+                                                        contentDescription = null,
+                                                    )
+                                                },
+                                            )
+
+                                            else -> DropDownMenuWidget(
+                                                title = stringResource(R.string.ai_reply_tts_voice),
+                                                description = null,
+                                                value = ttsVoiceState,
+                                                options = systemVoiceOptions,
+                                                onValueChange = {
+                                                    ttsVoiceState = it
+                                                    ttsVoiceId = it
+                                                },
+                                            )
+                                        }
+                                    }
+                                    if (!doubaoTts && !breezeTts) {
+                                        Spacer(Modifier.width(8.dp))
+                                        Box(Modifier.weight(1f)) {
+                                            DropDownMenuWidget(
+                                                title = stringResource(R.string.ai_reply_tts_custom_voice),
+                                                description = null,
+                                                value = ttsVoiceState,
+                                                options = customVoiceOptions
+                                                    .plus(DropdownOption(ttsVoiceState, ttsVoiceState))
+                                                    .distinctBy { it.value },
+                                                onValueChange = {
+                                                    ttsVoiceState = it
+                                                    ttsVoiceId = it
+                                                },
+                                                enabled = customVoiceOptions.isNotEmpty(),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            // 模型：与文字转语音一致，整行下拉，选项现拉
+                            if (breezeTts) {
+                                item {
+                                    DropDownMenuWidget(
+                                        title = stringResource(R.string.ai_reply_tts_breeze_model),
+                                        description = null,
+                                        value = ttsBreezeModelState,
+                                        options = breezeModelOptions,
+                                        onValueChange = {
+                                            ttsBreezeModelState = it
+                                            ttsBreezeModel = it
                                         },
                                     )
                                 }
                             }
-                            item {
-                                DropDownMenuWidget(
-                                    title = stringResource(R.string.ai_reply_tts_custom_voice),
-                                    description = null,
-                                    value = ttsVoiceState,
-                                    options = (customVoiceOptions + DropdownOption(ttsVoiceState, ttsVoiceState))
-                                        .distinctBy { it.value },
-                                    onValueChange = {
-                                        ttsVoiceState = it
-                                        ttsVoiceId = it
-                                    },
-                                    enabled = !doubaoTts && customVoiceOptions.isNotEmpty(),
-                                )
-                            }
-                            item {
-                                DropDownMenuWidget(
-                                    title = stringResource(R.string.ai_reply_tts_emotion),
-                                    description = null,
-                                    value = ttsEmotionState,
-                                    options = emotionOptions,
-                                    onValueChange = {
-                                        ttsEmotionState = it
-                                        ttsEmotion = it
-                                    },
-                                    enabled = !doubaoTts,
-                                )
+                            // 语气 / 指令：豆包两样都没有，整行不出现（不再置灰）
+                            if (!doubaoTts) {
+                                item {
+                                    if (breezeTts) {
+                                        TextFieldDialogWidget(
+                                            title = stringResource(R.string.ai_reply_tts_breeze_instructions),
+                                            value = ttsBreezeInstrState,
+                                            onValueChange = {
+                                                ttsBreezeInstrState = it
+                                                ttsBreezeInstructions = it
+                                            },
+                                            dialogTitle = stringResource(R.string.ai_reply_tts_breeze_instructions),
+                                            confirmLabel = stringResource(R.string.dialog_confirm),
+                                            dismissLabel = stringResource(R.string.dialog_cancel),
+                                            valueHint = stringResource(
+                                                R.string.ai_reply_tts_breeze_instructions_hint,
+                                            ),
+                                            filter = { it.take(BreezeTtsClient.INSTRUCTION_MAX) },
+                                            singleLine = false,
+                                        )
+                                    } else {
+                                        DropDownMenuWidget(
+                                            title = stringResource(R.string.ai_reply_tts_emotion),
+                                            description = null,
+                                            value = ttsEmotionState,
+                                            options = emotionOptions,
+                                            onValueChange = {
+                                                ttsEmotionState = it
+                                                ttsEmotion = it
+                                            },
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

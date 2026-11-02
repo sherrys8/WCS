@@ -1922,9 +1922,14 @@
     <string name="ai_reply_tts_switch">开启语音回复</string>
     <string name="ai_reply_tts_switch_summary">在候选结果中生成并发送语音</string>
     <string name="ai_reply_tts_backend_mofang">魔方（配音魔方）</string>
-    <string name="ai_reply_tts_backend_mofang_summary">需要单独填写 API Key</string>
     <string name="ai_reply_tts_backend_doubao">豆包</string>
-    <string name="ai_reply_tts_backend_doubao_summary">需要已登录的豆包 Cookie</string>
+    <string name="ai_reply_tts_backend">语音合成后端</string>
+    <string name="ai_reply_tts_backend_breeze">Breeze</string>
+    <string name="ai_reply_tts_breeze_key_hint">未设置，在 breezeblue.ai 的 Developer → API Keys 创建</string>
+    <string name="ai_reply_tts_breeze_unselected">未选择</string>
+    <string name="ai_reply_tts_breeze_model">模型</string>
+    <string name="ai_reply_tts_breeze_instructions">指令</string>
+    <string name="ai_reply_tts_breeze_instructions_hint">未设置。用自然语言描述怎么念，例如：开心地说，带点惊喜的上扬</string>
     <string name="ai_reply_tts_api_key">语音 API Key</string>
     <string name="ai_reply_tts_api_key_hint">在 peiyinmofang.com 的「API Key 管理」中创建</string>
     <string name="ai_reply_tts_cookie">豆包 Cookie</string>

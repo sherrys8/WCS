@@ -125,6 +125,9 @@ private enum class DoubaoVoiceTab(val label: String) {
     ACCENT("口音"),
 }
 
+/** 豆包列表每页条数，与 Breeze 选择器一致 */
+private const val VOICE_PAGE_SIZE = 50
+
 /**
  * 两个入口（文字转语音、AI 语音回复）共用一份收藏。只存音色 id，不存试听地址——
  * 豆包的试听链接带签名、约一周失效，按 id 才能在刷新后继续用。
@@ -318,6 +321,7 @@ fun showDoubaoVoicePicker(
             mutableStateOf(if (all.any { !it.builtin }) DoubaoVoiceTab.RECOMMEND else DoubaoVoiceTab.BUILTIN)
         }
         var query by remember { mutableStateOf("") }
+        var page by remember { mutableStateOf(1) }
         var picked by remember { mutableStateOf(currentId) }
         // 偏好代理不会随写回重组，收藏态在调用点自己拿一份
         var favorites by remember { mutableStateOf(DoubaoVoiceFavorites.load()) }
@@ -392,6 +396,10 @@ fun showDoubaoVoicePicker(
             query.isBlank() || (voice.name + " " + voice.id + " " + voice.style + " " + voice.accent)
                 .contains(query, ignoreCase = true)
         }
+        // 每页 50 条，和 Breeze 那栏一个节奏；筛选变窄时页码自己收住
+        val pages = ((shown.size + VOICE_PAGE_SIZE - 1) / VOICE_PAGE_SIZE).coerceAtLeast(1)
+        val currentPage = page.coerceAtMost(pages)
+        val visible = shown.drop((currentPage - 1) * VOICE_PAGE_SIZE).take(VOICE_PAGE_SIZE)
 
         AlertDialogContent(
             title = { Text("选择音色") },
@@ -407,6 +415,7 @@ fun showDoubaoVoicePicker(
                                 onClick = {
                                     tab = entry
                                     query = ""
+                                    page = 1
                                 },
                                 label = { Text(entry.label) },
                             )
@@ -417,7 +426,10 @@ fun showDoubaoVoicePicker(
 
                     OutlinedTextField(
                         value = query,
-                        onValueChange = { query = it },
+                        onValueChange = {
+                            query = it
+                            page = 1
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         leadingIcon = { Icon(MaterialSymbols.Outlined.Search, contentDescription = null) },
@@ -458,7 +470,7 @@ fun showDoubaoVoicePicker(
                     Spacer(Modifier.height(4.dp))
 
                     LazyColumn(Modifier.fillMaxWidth().height(320.dp)) {
-                        items(shown, key = { it.id }) { voice ->
+                        items(visible, key = { it.id }) { voice ->
                             VoiceRow(
                                 voice = voice,
                                 selected = voice.id == picked,
@@ -495,6 +507,23 @@ fun showDoubaoVoicePicker(
                                 )
                             }
                         }
+                    }
+
+                    if (pages > 1) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(onClick = { page = currentPage - 1 }, enabled = currentPage > 1) {
+                                Text("上一页")
+                            }
+                            Text("第 $currentPage / $pages 页", style = MaterialTheme.typography.bodySmall)
+                            TextButton(onClick = { page = currentPage + 1 }, enabled = currentPage < pages) {
+                                Text("下一页")
+                            }
+                        }
+                        Spacer(Modifier.height(2.dp))
                     }
 
                     Spacer(Modifier.height(6.dp))
