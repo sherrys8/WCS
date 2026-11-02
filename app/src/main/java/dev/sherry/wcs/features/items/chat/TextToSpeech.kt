@@ -1001,8 +1001,8 @@ object TextToSpeech :
 
     /** 接口的重置时间是 UTC，按北京时间显示；解析不了就退回原文，不猜。 */
     private fun beijingTime(iso: String): String = runCatching {
-        OffsetDateTime.parse(iso)
-            .withZoneSameInstant(ZoneId.of("Asia/Shanghai"))
+        // android.jar 的 OffsetDateTime 没有 withZoneSameInstant，绕到 Instant 上换区
+        OffsetDateTime.parse(iso).toInstant().atZone(ZoneId.of("Asia/Shanghai"))
             .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
     }.getOrDefault(iso)
 
