@@ -209,7 +209,7 @@ fun showBreezeVoicePicker(
                 playing = null
                 showToast(
                     context,
-                    context.localizedChatString(R.string.tts_toast_preview_failed, it.message),
+                    context.localizedChatString(R.string.tts_toast_preview_failed, it.message.orEmpty()),
                 )
             }
         }
@@ -242,7 +242,9 @@ fun showBreezeVoicePicker(
                             officialSearch = search
                         },
                         onFailure = {
-                            status = context.localizedChatString(R.string.tts_breeze_load_failed, it.message)
+                            status = context.localizedChatString(
+                                R.string.tts_breeze_load_failed, it.message.orEmpty()
+                            )
                         },
                     )
                 }
@@ -265,7 +267,9 @@ fun showBreezeVoicePicker(
                     outcome.fold(
                         onSuccess = { mine = it },
                         onFailure = {
-                            status = context.localizedChatString(R.string.tts_breeze_load_failed, it.message)
+                            status = context.localizedChatString(
+                                R.string.tts_breeze_load_failed, it.message.orEmpty()
+                            )
                         },
                     )
                 }
@@ -672,7 +676,7 @@ private fun showBreezeCloneDialog(
                             onFailure = {
                                 sample = null
                                 status = context.localizedChatString(
-                                    R.string.tts_clone_err_unusable, it.message
+                                    R.string.tts_clone_err_unusable, it.message.orEmpty()
                                 )
                             },
                         )
@@ -698,7 +702,7 @@ private fun showBreezeCloneDialog(
                     busy = false
                     val path = outcome.getOrElse {
                         status = context.localizedChatString(
-                            R.string.tts_clone_err_no_preview, it.message
+                            R.string.tts_clone_err_no_preview, it.message.orEmpty()
                         )
                         return@post
                     }
@@ -718,7 +722,7 @@ private fun showBreezeCloneDialog(
                     }.onFailure {
                         playing = false
                         status = context.localizedChatString(
-                            R.string.tts_toast_preview_failed, it.message
+                            R.string.tts_toast_preview_failed, it.message.orEmpty()
                         )
                     }
                 }
@@ -754,7 +758,7 @@ private fun showBreezeCloneDialog(
                             }
                         },
                         onFailure = {
-                            status = context.localizedChatString(R.string.tts_clone_failed, it.message)
+                            status = context.localizedChatString(R.string.tts_clone_failed, it.message.orEmpty())
                         },
                     )
                 }
@@ -784,7 +788,7 @@ private fun showBreezeCloneDialog(
                         },
                         onFailure = {
                             status = context.localizedChatString(
-                                R.string.tts_clone_save_failed, it.message
+                                R.string.tts_clone_save_failed, it.message.orEmpty()
                             )
                         },
                     )

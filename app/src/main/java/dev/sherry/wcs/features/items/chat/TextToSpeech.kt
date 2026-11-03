@@ -855,7 +855,7 @@ object TextToSpeech :
                         creditsText = if (s == null) {
                             context.localizedChatString(
                                 R.string.tts_state_fetch_failed,
-                                outcome.exceptionOrNull()?.message,
+                                outcome.exceptionOrNull()?.message.orEmpty(),
                             )
                         } else {
                             val state = when {
@@ -892,7 +892,7 @@ object TextToSpeech :
                         val message = when {
                             c == null -> context.localizedChatString(
                                 R.string.tts_toast_claim_failed,
-                                outcome.exceptionOrNull()?.message,
+                                outcome.exceptionOrNull()?.message.orEmpty(),
                             )
                             c.claimed -> context.localizedChatString(
                                 R.string.tts_toast_claimed,

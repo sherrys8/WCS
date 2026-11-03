@@ -384,7 +384,7 @@ fun showDoubaoVoicePicker(
                 playing = null
                 showToast(
                     context,
-                    context.localizedChatString(R.string.tts_toast_preview_failed, it.message),
+                    context.localizedChatString(R.string.tts_toast_preview_failed, it.message.orEmpty()),
                 )
             }
         }
