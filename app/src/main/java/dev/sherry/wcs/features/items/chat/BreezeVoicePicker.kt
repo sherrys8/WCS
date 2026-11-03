@@ -6,6 +6,7 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -43,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
@@ -52,6 +54,7 @@ import com.composables.icons.materialsymbols.outlined.Pause
 import com.composables.icons.materialsymbols.outlined.Play_arrow
 import com.composables.icons.materialsymbols.outlined.Refresh
 import com.composables.icons.materialsymbols.outlined.Search
+import dev.sherry.wcs.R
 import dev.sherry.wcs.features.items.chat.panel.pickPanelFile
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.AlertDialogContent
@@ -97,10 +100,10 @@ object BreezeVoiceFavorites {
     }
 }
 
-private enum class BreezeVoiceTab(val label: String) {
-    OFFICIAL("官方"),
-    MINE("我的"),
-    FAVORITE("收藏"),
+private enum class BreezeVoiceTab(@StringRes val labelRes: Int) {
+    OFFICIAL(R.string.tts_tab_official),
+    MINE(R.string.tts_tab_mine),
+    FAVORITE(R.string.tts_tab_favorite),
 }
 
 /**
@@ -108,28 +111,28 @@ private enum class BreezeVoiceTab(val label: String) {
  * 每颗 chip 只动一个维度（性别 / 语言 / 内容分类），取值照 docs.breezeblue.ai 的 list-voices。
  */
 private enum class BreezeCategory(
-    val label: String,
+    @StringRes val labelRes: Int,
     val gender: String?,
     val language: String?,
     val category: String?,
 ) {
-    ALL("全部", null, null, null),
-    MALE("男性", "male", null, null),
-    FEMALE("女性", "female", null, null),
-    CHINESE("中文", null, "zh", null),
-    ENGLISH("英文", null, "en", null),
-    ANIMATION("动画", null, null, "animation"),
-    GAMING("游戏", null, null, "gaming"),
-    CINEMATIC("影视", null, null, "cinematic"),
-    STYLIZED("风格化", null, null, "stylized"),
-    NARRATION("旁白叙述", null, null, "narration"),
-    SOCIAL("社交媒体", null, null, "social-media"),
-    LEARNING("教育学习", null, null, "learning"),
-    WELLNESS("疗愈冥想", null, null, "wellness"),
-    ADS("广告与品牌", null, null, "ads-brand"),
-    PODCAST("播客与主持", null, null, "podcast"),
-    SUPPORT("客服与助理", null, null, "support-agents"),
-    ROLEPLAY("角色扮演与陪伴", null, null, "roleplay"),
+    ALL(R.string.tts_cat_all, null, null, null),
+    MALE(R.string.tts_cat_male, "male", null, null),
+    FEMALE(R.string.tts_cat_female, "female", null, null),
+    CHINESE(R.string.tts_cat_chinese, null, "zh", null),
+    ENGLISH(R.string.tts_cat_english, null, "en", null),
+    ANIMATION(R.string.tts_cat_animation, null, null, "animation"),
+    GAMING(R.string.tts_cat_gaming, null, null, "gaming"),
+    CINEMATIC(R.string.tts_cat_cinematic, null, null, "cinematic"),
+    STYLIZED(R.string.tts_cat_stylized, null, null, "stylized"),
+    NARRATION(R.string.tts_cat_narration, null, null, "narration"),
+    SOCIAL(R.string.tts_cat_social, null, null, "social-media"),
+    LEARNING(R.string.tts_cat_learning, null, null, "learning"),
+    WELLNESS(R.string.tts_cat_wellness, null, null, "wellness"),
+    ADS(R.string.tts_cat_ads, null, null, "ads-brand"),
+    PODCAST(R.string.tts_cat_podcast, null, null, "podcast"),
+    SUPPORT(R.string.tts_cat_support, null, null, "support-agents"),
+    ROLEPLAY(R.string.tts_cat_roleplay, null, null, "roleplay"),
 }
 
 private val breezeMainHandler = Handler(Looper.getMainLooper())
@@ -186,7 +189,7 @@ fun showBreezeVoicePicker(
         fun playUrl(url: String, tag: String) {
             stopPreview()
             if (url.isBlank()) {
-                showToast(context, "这个音色没有试听音频")
+                showToast(context, context.localizedChatString(R.string.tts_toast_no_preview_audio))
                 return
             }
             val next = MediaPlayer()
@@ -195,7 +198,7 @@ fun showBreezeVoicePicker(
             next.setOnPreparedListener { it.start() }
             next.setOnErrorListener { _, _, _ ->
                 playing = null
-                showToast(context, "试听失败，链接可能已过期")
+                showToast(context, context.localizedChatString(R.string.tts_toast_preview_expired))
                 true
             }
             next.setOnCompletionListener { playing = null }
@@ -204,14 +207,17 @@ fun showBreezeVoicePicker(
                 next.prepareAsync()
             }.onFailure {
                 playing = null
-                showToast(context, "试听失败：${it.message}")
+                showToast(
+                    context,
+                    context.localizedChatString(R.string.tts_toast_preview_failed, it.message),
+                )
             }
         }
 
         /** 换成第 [page] 页：翻页、首开都走这里，换关键词由调用方传 1。 */
         fun loadOfficial(search: String, page: Int) {
             if (apiKey.isBlank()) {
-                status = "先在文字转语音设置里填写 Breeze API Key"
+                status = context.localizedChatString(R.string.tts_breeze_status_need_key)
                 return
             }
             val gen = ++officialGen
@@ -235,7 +241,9 @@ fun showBreezeVoicePicker(
                             officialPage = page
                             officialSearch = search
                         },
-                        onFailure = { status = "拉取失败：${it.message}" },
+                        onFailure = {
+                            status = context.localizedChatString(R.string.tts_breeze_load_failed, it.message)
+                        },
                     )
                 }
             }.start()
@@ -243,7 +251,7 @@ fun showBreezeVoicePicker(
 
         fun loadMine() {
             if (apiKey.isBlank()) {
-                status = "先在文字转语音设置里填写 Breeze API Key"
+                status = context.localizedChatString(R.string.tts_breeze_status_need_key)
                 return
             }
             val gen = ++mineGen
@@ -256,7 +264,9 @@ fun showBreezeVoicePicker(
                     if (gen != mineGen) return@post
                     outcome.fold(
                         onSuccess = { mine = it },
-                        onFailure = { status = "拉取失败：${it.message}" },
+                        onFailure = {
+                            status = context.localizedChatString(R.string.tts_breeze_load_failed, it.message)
+                        },
                     )
                 }
             }.start()
@@ -277,7 +287,7 @@ fun showBreezeVoicePicker(
         // 打开就把两栏都拉了：官方只拉第一页，我的量小一次翻完，不用先点 ⟳
         LaunchedEffect(Unit) {
             if (apiKey.isBlank()) {
-                status = "先在文字转语音设置里填写 Breeze API Key"
+                status = context.localizedChatString(R.string.tts_breeze_status_need_key)
             } else {
                 if (official.isEmpty()) loadOfficial("", 1)
                 if (mine.isEmpty()) loadMine()
@@ -326,10 +336,10 @@ fun showBreezeVoicePicker(
 
         fun nameOf(id: String): String = loaded.firstOrNull { it.id == id }?.name
             ?: favorites[id]?.takeIf { it.isNotBlank() }
-            ?: id.ifBlank { "未选择" }
+            ?: id.ifBlank { context.localizedChatString(R.string.tts_not_selected) }
 
         AlertDialogContent(
-            title = { Text("选择 Breeze 音色") },
+            title = { Text(stringResource(R.string.tts_breeze_pick_title)) },
             text = {
                 Column {
                     Row(
@@ -343,14 +353,14 @@ fun showBreezeVoicePicker(
                                     tab = entry
                                     query = ""
                                 },
-                                label = { Text(entry.label) },
+                                label = { Text(stringResource(entry.labelRes)) },
                             )
                         }
                         if (tab == BreezeVoiceTab.MINE) {
                             FilterChip(
                                 selected = false,
                                 onClick = { showBreezeCloneDialog(context, apiKey) { loadMine() } },
-                                label = { Text("＋ 克隆音色") },
+                                label = { Text(stringResource(R.string.tts_breeze_clone_chip)) },
                             )
                         }
                         FilterChip(
@@ -359,7 +369,7 @@ fun showBreezeVoicePicker(
                             label = {
                                 Icon(
                                     MaterialSymbols.Outlined.Refresh,
-                                    contentDescription = "重新拉取",
+                                    contentDescription = stringResource(R.string.tts_cd_refresh),
                                     modifier = Modifier.size(16.dp),
                                 )
                             },
@@ -385,7 +395,7 @@ fun showBreezeVoicePicker(
                                             loadOfficial(officialSearch, 1)
                                         }
                                     },
-                                    label = { Text(entry.label) },
+                                    label = { Text(stringResource(entry.labelRes)) },
                                 )
                             }
                         }
@@ -399,7 +409,12 @@ fun showBreezeVoicePicker(
                         singleLine = true,
                         leadingIcon = { Icon(MaterialSymbols.Outlined.Search, contentDescription = null) },
                         placeholder = {
-                            Text(if (tab == BreezeVoiceTab.OFFICIAL) "搜索官方目录（名称或描述）" else "搜索名称、ID 或标签")
+                            Text(
+                                stringResource(
+                                    if (tab == BreezeVoiceTab.OFFICIAL) R.string.tts_breeze_search_official
+                                    else R.string.tts_search_generic
+                                )
+                            )
                         },
                     )
 
@@ -408,13 +423,19 @@ fun showBreezeVoicePicker(
                     Text(
                         when {
                             status.isNotBlank() -> status
-                            pending > 0 -> "正在拉取音色列表…"
-                            tab == BreezeVoiceTab.OFFICIAL -> "官方共 $officialTotal 个 · " +
-                                (if (category == BreezeCategory.ALL) "" else "${category.label} · ") +
-                                (if (officialSearch.isBlank()) "按创建时间倒序" else "搜索「$officialSearch」")
+                            pending > 0 -> stringResource(R.string.tts_breeze_loading)
+                            tab == BreezeVoiceTab.OFFICIAL -> stringResource(
+                                R.string.tts_breeze_total, officialTotal
+                            ) + " · " +
+                                (if (category == BreezeCategory.ALL) "" else
+                                    stringResource(category.labelRes) + " · ") +
+                                (if (officialSearch.isBlank()) stringResource(R.string.tts_sort_newest)
+                                else stringResource(R.string.tts_searching_for, officialSearch))
 
-                            tab == BreezeVoiceTab.MINE -> "我的音色 ${mine.size} 个"
-                            else -> "已收藏 ${favorites.size} 个"
+                            tab == BreezeVoiceTab.MINE ->
+                                stringResource(R.string.tts_mine_count, mine.size)
+
+                            else -> stringResource(R.string.tts_fav_count, favorites.size)
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -452,12 +473,12 @@ fun showBreezeVoicePicker(
                                 Text(
                                     when {
                                         tab == BreezeVoiceTab.FAVORITE && favorites.isEmpty() ->
-                                            "还没有收藏，点每个音色右侧的心形把它收进来"
+                                            stringResource(R.string.tts_empty_favorites)
 
                                         tab == BreezeVoiceTab.MINE ->
-                                            "还没有自建音色，点上面的「＋ 克隆音色」用一条参考音频克隆一个"
+                                            stringResource(R.string.tts_breeze_empty_mine)
 
-                                        else -> "没有匹配的音色，换个说法再试"
+                                        else -> stringResource(R.string.tts_empty_match)
                                     },
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
                                     style = MaterialTheme.typography.bodyMedium,
@@ -477,30 +498,30 @@ fun showBreezeVoicePicker(
                             TextButton(
                                 onClick = { loadOfficial(officialSearch, officialPage - 1) },
                                 enabled = officialPage > 1 && pending == 0,
-                            ) { Text("上一页") }
+                            ) { Text(stringResource(R.string.tts_btn_prev_page)) }
                             Text(
-                                "第 $officialPage / $officialPages 页",
+                                stringResource(R.string.tts_page_indicator, officialPage, officialPages),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             TextButton(
                                 onClick = { loadOfficial(officialSearch, officialPage + 1) },
                                 enabled = officialPage < officialPages && pending == 0,
-                            ) { Text("下一页") }
+                            ) { Text(stringResource(R.string.tts_btn_next_page)) }
                         }
                     }
 
                     Spacer(Modifier.height(6.dp))
-                    Text("当前选择：${nameOf(picked)}")
+                    Text(stringResource(R.string.tts_current_selection, nameOf(picked)))
                 }
             },
-            dismissButton = { TextButton(onDismiss) { Text("关闭") } },
+            dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.dialog_close)) } },
             confirmButton = {
                 Button(onClick = {
                     stopPreview()
                     onPicked(picked, nameOf(picked))
                     onDismiss()
-                }) { Text("确定") }
+                }) { Text(stringResource(R.string.dialog_confirm)) }
             },
         )
     }
@@ -547,20 +568,24 @@ private fun BreezeVoiceRow(
         if (selected) {
             Icon(
                 MaterialSymbols.Outlined.Check,
-                contentDescription = "已选择",
+                contentDescription = stringResource(R.string.tts_cd_selected),
                 tint = MaterialTheme.colorScheme.primary,
             )
         }
         IconButton(onClick = onPlay, enabled = voice.previewUrl.isNotBlank()) {
             Icon(
                 if (playing) MaterialSymbols.Outlined.Pause else MaterialSymbols.Outlined.Play_arrow,
-                contentDescription = if (playing) "停止试听" else "试听",
+                contentDescription = stringResource(
+                    if (playing) R.string.tts_cd_stop_preview else R.string.tts_btn_preview
+                ),
             )
         }
         IconButton(onClick = onFavorite) {
             Icon(
                 MaterialSymbols.Outlined.Favorite,
-                contentDescription = if (favorite) "取消收藏" else "收藏",
+                contentDescription = stringResource(
+                    if (favorite) R.string.tts_cd_unfavorite else R.string.tts_cd_favorite
+                ),
                 tint = if (favorite) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -607,22 +632,31 @@ private fun showBreezeCloneDialog(
         fun pickSample() {
             pickPanelFile(context, BREEZE_SAMPLE_MIME) { name, uri, activity ->
                 busy = true
-                status = "正在读取选中的音频…"
+                status = context.localizedChatString(R.string.tts_reading_audio)
                 Thread {
                     val outcome = runCatching {
                         val suffix = name.substringAfterLast('.', "wav").lowercase()
                         val dest = File(breezePreviewDir(), "sample-${System.currentTimeMillis()}.$suffix")
                         context.contentResolver.openInputStream(uri)?.use { input ->
                             dest.outputStream().use(input::copyTo)
-                        } ?: throw BreezeTtsClient.BreezeError("读不到选中的文件")
+                        } ?: throw BreezeTtsClient.BreezeError(
+                            context.localizedChatString(R.string.tts_clone_err_unreadable)
+                        )
                         val bytes = dest.length()
                         if (bytes > BreezeTtsClient.CLONE_MAX_BYTES) {
-                            throw BreezeTtsClient.BreezeError("样本超过 5 MB（当前 ${sizeText(bytes)}）")
+                            throw BreezeTtsClient.BreezeError(
+                                context.localizedChatString(
+                                    R.string.tts_clone_err_too_big, sizeText(bytes)
+                                )
+                            )
                         }
                         val durationMs = probeDurationMs(dest)
                         if (durationMs in 1 until BreezeTtsClient.CLONE_MIN_MS) {
                             throw BreezeTtsClient.BreezeError(
-                                "样本只有 ${secondText(durationMs)}，文档要求至少 3 秒"
+                                context.localizedChatString(
+                                    R.string.tts_clone_err_too_short,
+                                    secondText(context, durationMs),
+                                )
                             )
                         }
                         CloneSample(name, dest, bytes, durationMs)
@@ -637,7 +671,9 @@ private fun showBreezeCloneDialog(
                             },
                             onFailure = {
                                 sample = null
-                                status = "这条音频不能用：${it.message}"
+                                status = context.localizedChatString(
+                                    R.string.tts_clone_err_unusable, it.message
+                                )
                             },
                         )
                     }
@@ -651,7 +687,7 @@ private fun showBreezeCloneDialog(
                 return
             }
             busy = true
-            status = "正在取试听音频…"
+            status = context.localizedChatString(R.string.tts_fetching_preview)
             Thread {
                 val outcome = runCatching {
                     val file = File(breezePreviewDir(), "clone_${target.generatedId}.mp3")
@@ -661,7 +697,9 @@ private fun showBreezeCloneDialog(
                 breezeMainHandler.post {
                     busy = false
                     val path = outcome.getOrElse {
-                        status = "试听音频取不到：${it.message}"
+                        status = context.localizedChatString(
+                            R.string.tts_clone_err_no_preview, it.message
+                        )
                         return@post
                     }
                     val next = MediaPlayer()
@@ -669,7 +707,7 @@ private fun showBreezeCloneDialog(
                     playing = true
                     next.setOnErrorListener { _, _, _ ->
                         playing = false
-                        status = "试听失败"
+                        status = context.localizedChatString(R.string.tts_preview_failed)
                         true
                     }
                     next.setOnCompletionListener { playing = false }
@@ -679,7 +717,9 @@ private fun showBreezeCloneDialog(
                         next.start()
                     }.onFailure {
                         playing = false
-                        status = "试听失败：${it.message}"
+                        status = context.localizedChatString(
+                            R.string.tts_toast_preview_failed, it.message
+                        )
                     }
                 }
             }.start()
@@ -688,16 +728,16 @@ private fun showBreezeCloneDialog(
         fun clone() {
             val chosen = sample
             if (chosen == null) {
-                status = "先选一条参考音频"
+                status = context.localizedChatString(R.string.tts_clone_need_sample)
                 return
             }
             if (!consent) {
-                status = "先勾选声音授权确认"
+                status = context.localizedChatString(R.string.tts_clone_need_consent)
                 return
             }
             stop()
             busy = true
-            status = "正在克隆…（接口同步处理，可能要十几秒）"
+            status = context.localizedChatString(R.string.tts_clone_running)
             Thread {
                 val outcome = runCatching {
                     BreezeTtsClient.clonePreview(apiKey, chosen.file, voiceName.trim(), language, denoise)
@@ -708,12 +748,14 @@ private fun showBreezeCloneDialog(
                         onSuccess = {
                             preview = it
                             status = if (it.requiresVerification) {
-                                "预览已生成，但这个样本需要先在 breezeblue.ai 完成本人验证，否则保存会被拒"
+                                context.localizedChatString(R.string.tts_clone_preview_need_verify)
                             } else {
-                                "预览已生成，先试听再决定保存"
+                                context.localizedChatString(R.string.tts_clone_preview_ready)
                             }
                         },
-                        onFailure = { status = "克隆失败：${it.message}" },
+                        onFailure = {
+                            status = context.localizedChatString(R.string.tts_clone_failed, it.message)
+                        },
                     )
                 }
             }.start()
@@ -722,7 +764,7 @@ private fun showBreezeCloneDialog(
         fun save(target: BreezeTtsClient.ClonePreview) {
             stop()
             busy = true
-            status = "正在保存到账号…"
+            status = context.localizedChatString(R.string.tts_saving)
             val name = voiceName.trim().ifBlank { sample?.stem ?: "Cloned Voice" }
             Thread {
                 val outcome = runCatching {
@@ -732,12 +774,19 @@ private fun showBreezeCloneDialog(
                     busy = false
                     outcome.fold(
                         onSuccess = {
-                            showToast(context, "已保存音色「${it.name}」")
+                            showToast(
+                                context,
+                                context.localizedChatString(R.string.tts_clone_saved, it.name),
+                            )
                             WeLogger.i("BreezeClone", "saved voice ${it.id}")
                             onSaved()
                             onDismiss()
                         },
-                        onFailure = { status = "保存失败：${it.message}" },
+                        onFailure = {
+                            status = context.localizedChatString(
+                                R.string.tts_clone_save_failed, it.message
+                            )
+                        },
                     )
                 }
             }.start()
@@ -745,7 +794,14 @@ private fun showBreezeCloneDialog(
 
         val done = preview
         AlertDialogContent(
-            title = { Text(if (done == null) "克隆音色" else "克隆结果") },
+            title = {
+                Text(
+                    stringResource(
+                        if (done == null) R.string.tts_clone_title
+                        else R.string.tts_clone_result_title
+                    )
+                )
+            },
             text = {
                 Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                     if (done == null) {
@@ -754,38 +810,52 @@ private fun showBreezeCloneDialog(
                             onValueChange = { voiceName = it },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            label = { Text("音色名字") },
-                            placeholder = { Text("留空则用文件名，最长 80 字") },
+                            label = { Text(stringResource(R.string.tts_clone_name_label)) },
+                            placeholder = { Text(stringResource(R.string.tts_clone_name_hint)) },
                         )
                         Spacer(Modifier.height(10.dp))
                         DropDownMenuWidget(
-                            title = "参考语言",
-                            description = "文档只点名支持中文，其余交给服务端自动检测",
+                            title = stringResource(R.string.tts_clone_language),
+                            description = stringResource(R.string.tts_clone_language_hint),
                             value = language,
-                            options = BreezeTtsClient.CLONE_LANGUAGES.map { DropdownOption(it.first, it.second) },
+                            options = BreezeTtsClient.CLONE_LANGUAGES.map {
+                                DropdownOption(
+                                    it.first,
+                                    stringResource(
+                                        when (it.first) {
+                                            "zh" -> R.string.tts_clone_lang_zh
+                                            else -> R.string.tts_clone_lang_auto
+                                        }
+                                    ),
+                                )
+                            },
                             onValueChange = { language = it },
                         )
                         SwitchWidget(
                             iconPlaceholder = false,
-                            title = "先做降噪",
-                            description = "样本里有底噪时打开",
+                            title = stringResource(R.string.tts_clone_denoise),
+                            description = stringResource(R.string.tts_clone_denoise_hint),
                             checked = denoise,
                             onCheckedChange = { denoise = it },
                         )
 
                         Spacer(Modifier.height(10.dp))
-                        Text("参考音频", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "单人声、无背景音乐、3 秒以上 5 MB 以内。接口只分析前 60 秒，会自动截成不超过 30 秒的片段。",
+                            stringResource(R.string.tts_clone_sample),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            stringResource(R.string.tts_clone_sample_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         BaseWidget(
-                            title = "选择样本",
+                            title = stringResource(R.string.tts_clone_pick_sample),
                             description = sample?.let {
-                                val duration = if (it.durationMs > 0) secondText(it.durationMs) else "时长未识别"
+                                val duration = if (it.durationMs > 0) secondText(context, it.durationMs)
+                                else context.localizedChatString(R.string.tts_duration_unknown)
                                 "${it.name} · ${sizeText(it.bytes)} · $duration"
-                            } ?: "未选择，点击选择一条音频",
+                            } ?: stringResource(R.string.tts_clone_no_sample),
                             enabled = !busy,
                             onClick = { pickSample() },
                         )
@@ -798,7 +868,7 @@ private fun showBreezeCloneDialog(
                             Checkbox(checked = consent, onCheckedChange = { consent = it })
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                "我确认这段声音属于我自己，或已获得声音本人的明确同意用于克隆。",
+                                stringResource(R.string.tts_clone_consent),
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.weight(1f),
                             )
@@ -808,7 +878,7 @@ private fun showBreezeCloneDialog(
                             Column(Modifier.weight(1f)) {
                                 Text(voiceName.ifBlank { sample?.stem ?: "Cloned Voice" })
                                 Text(
-                                    "预览 ${done.generatedId} · 还没有占用音色槽位",
+                                    stringResource(R.string.tts_clone_preview_info, done.generatedId),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -817,25 +887,25 @@ private fun showBreezeCloneDialog(
                                 Icon(
                                     if (playing) MaterialSymbols.Outlined.Pause
                                         else MaterialSymbols.Outlined.Play_arrow,
-                                    contentDescription = "试听克隆预览",
+                                    contentDescription = stringResource(R.string.tts_cd_preview_clone),
                                 )
                             }
                         }
                         Text(
-                            "试听脚本由服务端自动生成，不由我们提供文本。",
+                            stringResource(R.string.tts_clone_preview_note),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         if (done.requiresVerification) {
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "需要本人验证：到 breezeblue.ai 完成后再回来保存。",
+                                stringResource(R.string.tts_clone_verify_note),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                             )
                             TextButton(onClick = {
                                 Uri.parse("https://breezeblue.ai").openInSystem(context)
-                            }) { Text("打开 breezeblue.ai") }
+                            }) { Text(stringResource(R.string.tts_clone_open_site)) }
                         }
                     }
 
@@ -849,13 +919,25 @@ private fun showBreezeCloneDialog(
                 TextButton(onClick = {
                     stop()
                     if (done == null) onDismiss() else preview = null
-                }) { Text(if (done == null) "取消" else "重新克隆") }
+                }) {
+                    Text(
+                        stringResource(
+                            if (done == null) R.string.dialog_cancel
+                            else R.string.tts_clone_again
+                        )
+                    )
+                }
             },
             confirmButton = {
                 if (done == null) {
-                    Button(onClick = { clone() }, enabled = !busy && consent && sample != null) { Text("开始克隆") }
+                    Button(
+                        onClick = { clone() },
+                        enabled = !busy && consent && sample != null,
+                    ) { Text(stringResource(R.string.tts_clone_start)) }
                 } else {
-                    Button(onClick = { save(done) }, enabled = !busy) { Text("保存到账号") }
+                    Button(onClick = { save(done) }, enabled = !busy) {
+                        Text(stringResource(R.string.tts_clone_save))
+                    }
                 }
             },
         )
@@ -889,4 +971,7 @@ private fun sizeText(bytes: Long): String = if (bytes >= 1024 * 1024) {
     "${bytes / 1024} KB"
 }
 
-private fun secondText(ms: Long): String = "${String.format(Locale.ROOT, "%.1f", ms / 1000.0)} 秒"
+private fun secondText(context: Context, ms: Long): String = context.localizedChatString(
+    R.string.tts_seconds,
+    String.format(Locale.ROOT, "%.1f", ms / 1000.0),
+)

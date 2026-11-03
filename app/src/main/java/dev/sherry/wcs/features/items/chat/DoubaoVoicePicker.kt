@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.MediaPlayer
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -39,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -53,6 +55,7 @@ import com.composables.icons.materialsymbols.outlined.Pause
 import com.composables.icons.materialsymbols.outlined.Play_arrow
 import com.composables.icons.materialsymbols.outlined.Refresh
 import com.composables.icons.materialsymbols.outlined.Search
+import dev.sherry.wcs.R
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.utils.showComposeDialog
@@ -114,15 +117,15 @@ data class DoubaoVoiceInfo(
     val icon: String = "",
 )
 
-private enum class DoubaoVoiceTab(val label: String) {
-    BUILTIN("内置"),
-    FAVORITE("收藏"),
-    RECOMMEND("推荐"),
-    FEMALE("女声"),
-    MALE("男声"),
-    ROLE("角色"),
-    ENGLISH("英语"),
-    ACCENT("口音"),
+private enum class DoubaoVoiceTab(@StringRes val labelRes: Int) {
+    BUILTIN(R.string.tts_tab_builtin),
+    FAVORITE(R.string.tts_tab_favorite),
+    RECOMMEND(R.string.tts_tab_recommend),
+    FEMALE(R.string.tts_tab_female),
+    MALE(R.string.tts_tab_male),
+    ROLE(R.string.tts_tab_role),
+    ENGLISH(R.string.tts_tab_english),
+    ACCENT(R.string.tts_tab_accent),
 }
 
 /** 豆包列表每页条数，与 Breeze 选择器一致 */
@@ -179,7 +182,7 @@ object DoubaoVoiceStore {
                 runCatching { cacheFile.writeText(DefaultJson.encodeToString(list)) }
                     .onFailure { WeLogger.e(TAG, "failed to write doubao voice cache", it) }
             } else if (error.isEmpty()) {
-                error = "没有取到音色"
+                error = localizedChatString(R.string.tts_doubao_no_voices)
             }
             val failure = error
             Handler(Looper.getMainLooper()).post { onDone(list, failure) }
@@ -198,10 +201,18 @@ object DoubaoVoiceStore {
                 .toString()
             val json = JSONObject(post(url(device), body, cookie))
             if (json.optInt("code") != 0) {
-                error("豆包接口返回 code=${json.optInt("code")} ${json.optString("msg")}")
+                error(
+                    localizedChatString(
+                        R.string.tts_doubao_api_code,
+                        json.optInt("code"),
+                        json.optString("msg"),
+                    )
+                )
             }
-            val data = json.optJSONObject("data") ?: error("豆包接口没有 data")
-            val items = data.optJSONArray("ugc_voice_list") ?: error("豆包接口没有音色列表")
+            val data = json.optJSONObject("data")
+                ?: error(localizedChatString(R.string.tts_doubao_no_data))
+            val items = data.optJSONArray("ugc_voice_list")
+                ?: error(localizedChatString(R.string.tts_doubao_no_list))
             for (i in 0 until items.length()) {
                 out += parse(items.getJSONObject(i), out.size)
             }
@@ -298,8 +309,8 @@ private fun matchesTab(
     DoubaoVoiceTab.ACCENT -> voice.accent.isNotBlank()
 }
 
-private fun voiceMeta(voice: DoubaoVoiceInfo): String =
-    listOf(voice.gender, voice.age, voice.accent, voice.style, if (voice.lang == "英语") "英语" else "")
+private fun voiceMeta(voice: DoubaoVoiceInfo, englishLabel: String): String =
+    listOf(voice.gender, voice.age, voice.accent, voice.style, if (voice.lang == "英语") englishLabel else "")
         .filter { it.isNotBlank() }
         .joinToString(" · ")
 
@@ -344,7 +355,7 @@ fun showDoubaoVoicePicker(
         fun playPreview(voice: DoubaoVoiceInfo) {
             stopPreview()
             if (voice.preview.isBlank()) {
-                showToast(context, "这个音色没有试听链接")
+                showToast(context, context.localizedChatString(R.string.tts_toast_no_preview_link))
                 return
             }
             busy = true
@@ -358,7 +369,10 @@ fun showDoubaoVoicePicker(
             next.setOnErrorListener { _, _, _ ->
                 busy = false
                 playing = null
-                showToast(context, "试听失败，链接可能已过期，可点右侧刷新")
+                showToast(
+                    context,
+                    context.localizedChatString(R.string.tts_toast_preview_expired_refresh),
+                )
                 true
             }
             next.setOnCompletionListener { playing = null }
@@ -368,26 +382,32 @@ fun showDoubaoVoicePicker(
             }.onFailure {
                 busy = false
                 playing = null
-                showToast(context, "试听失败：${it.message}")
+                showToast(
+                    context,
+                    context.localizedChatString(R.string.tts_toast_preview_failed, it.message),
+                )
             }
         }
 
         fun refresh() {
             if (cookie.isBlank()) {
-                status = "请先在设置里填写豆包 Cookie"
+                status = context.localizedChatString(R.string.tts_toast_need_doubao_cookie)
                 return
             }
             stopPreview()
             busy = true
-            status = "正在拉取豆包音色库…"
+            status = context.localizedChatString(R.string.tts_doubao_loading)
             DoubaoVoiceStore.refresh(cookie) { list, error ->
                 busy = false
                 if (list.isNotEmpty()) {
                     all = mergedVoices()
                     status = ""
-                    showToast(context, "已更新 ${list.size} 个音色")
+                    showToast(
+                        context,
+                        context.localizedChatString(R.string.tts_doubao_updated, list.size),
+                    )
                 } else {
-                    status = "刷新失败：$error"
+                    status = context.localizedChatString(R.string.tts_doubao_refresh_failed, error)
                 }
             }
         }
@@ -402,7 +422,7 @@ fun showDoubaoVoicePicker(
         val visible = shown.drop((currentPage - 1) * VOICE_PAGE_SIZE).take(VOICE_PAGE_SIZE)
 
         AlertDialogContent(
-            title = { Text("选择音色") },
+            title = { Text(stringResource(R.string.tts_doubao_pick_title)) },
             text = {
                 Column {
                     Row(
@@ -417,7 +437,7 @@ fun showDoubaoVoicePicker(
                                     query = ""
                                     page = 1
                                 },
-                                label = { Text(entry.label) },
+                                label = { Text(stringResource(entry.labelRes)) },
                             )
                         }
                     }
@@ -433,7 +453,7 @@ fun showDoubaoVoicePicker(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         leadingIcon = { Icon(MaterialSymbols.Outlined.Search, contentDescription = null) },
-                        placeholder = { Text("搜索名称、ID 或标签") },
+                        placeholder = { Text(stringResource(R.string.tts_search_generic)) },
                     )
 
                     Spacer(Modifier.height(6.dp))
@@ -445,25 +465,35 @@ fun showDoubaoVoicePicker(
                             // 内置页报总量，其余页随点随换成这一类自己的条数。
                             Text(
                                 if (tab == DoubaoVoiceTab.BUILTIN) {
-                                    "已加载 $onlineTotal 个在线音色"
+                                    stringResource(R.string.tts_doubao_loaded_online, onlineTotal)
                                 } else {
-                                    "已加载 ${all.count { matchesTab(it, tab, favorites) }} 个音色"
+                                    stringResource(
+                                        R.string.tts_doubao_loaded,
+                                        all.count { matchesTab(it, tab, favorites) },
+                                    )
                                 }
                             )
                             Text(
                                 when {
                                     status.isNotBlank() -> status
-                                    cachedAt == 0L -> "还没有缓存，点右侧按钮联网拉取"
-                                    else -> "最近缓存 " +
-                                        SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(cachedAt)) +
-                                        "，可点击刷新"
+                                    cachedAt == 0L ->
+                                        stringResource(R.string.tts_doubao_no_cache)
+
+                                    else -> stringResource(
+                                        R.string.tts_doubao_cache_recent,
+                                        SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+                                            .format(Date(cachedAt)),
+                                    )
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         IconButton(onClick = { refresh() }, enabled = !busy) {
-                            Icon(MaterialSymbols.Outlined.Refresh, contentDescription = "刷新音色库")
+                            Icon(
+                                MaterialSymbols.Outlined.Refresh,
+                                contentDescription = stringResource(R.string.tts_cd_refresh_library),
+                            )
                         }
                     }
 
@@ -495,11 +525,12 @@ fun showDoubaoVoicePicker(
                                 Text(
                                     when {
                                         tab == DoubaoVoiceTab.FAVORITE && favorites.isEmpty() && query.isBlank() ->
-                                            "还没有收藏，点每个音色右侧的心形把它收进来"
+                                            stringResource(R.string.tts_empty_favorites)
 
-                                        all.all { it.builtin } -> "这个分类还没有缓存，点上面的刷新按钮联网拉取"
+                                        all.all { it.builtin } ->
+                                            stringResource(R.string.tts_doubao_tab_no_cache)
 
-                                        else -> "没有匹配的音色"
+                                        else -> stringResource(R.string.tts_doubao_empty_match)
                                     },
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
                                     style = MaterialTheme.typography.bodyMedium,
@@ -516,27 +547,30 @@ fun showDoubaoVoicePicker(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             TextButton(onClick = { page = currentPage - 1 }, enabled = currentPage > 1) {
-                                Text("上一页")
+                                Text(stringResource(R.string.tts_btn_prev_page))
                             }
-                            Text("第 $currentPage / $pages 页", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                stringResource(R.string.tts_page_indicator, currentPage, pages),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                             TextButton(onClick = { page = currentPage + 1 }, enabled = currentPage < pages) {
-                                Text("下一页")
+                                Text(stringResource(R.string.tts_btn_next_page))
                             }
                         }
                         Spacer(Modifier.height(2.dp))
                     }
 
                     Spacer(Modifier.height(6.dp))
-                    Text("当前选择：" + doubaoVoiceLabel(picked))
+                    Text(stringResource(R.string.tts_current_selection, doubaoVoiceLabel(picked)))
                 }
             },
-            dismissButton = { TextButton(onDismiss) { Text("关闭") } },
+            dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.dialog_close)) } },
             confirmButton = {
                 Button(onClick = {
                     stopPreview()
                     onPicked(picked, doubaoVoiceLabel(picked))
                     onDismiss()
-                }) { Text("确定") }
+                }) { Text(stringResource(R.string.dialog_confirm)) }
             },
         )
     }
@@ -584,7 +618,7 @@ private fun VoiceRow(
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
-                voiceMeta(voice).ifBlank { voice.id },
+                voiceMeta(voice, stringResource(R.string.tts_tab_english)).ifBlank { voice.id },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
@@ -594,20 +628,24 @@ private fun VoiceRow(
         if (selected) {
             Icon(
                 MaterialSymbols.Outlined.Check,
-                contentDescription = "已选择",
+                contentDescription = stringResource(R.string.tts_cd_selected),
                 tint = MaterialTheme.colorScheme.primary,
             )
         }
         IconButton(onClick = onPlay, enabled = voice.preview.isNotBlank() && !busy) {
             Icon(
                 if (playing) MaterialSymbols.Outlined.Pause else MaterialSymbols.Outlined.Play_arrow,
-                contentDescription = if (playing) "停止试听" else "试听",
+                contentDescription = stringResource(
+                    if (playing) R.string.tts_cd_stop_preview else R.string.tts_btn_preview
+                ),
             )
         }
         IconButton(onClick = onFavorite) {
             Icon(
                 MaterialSymbols.Outlined.Favorite,
-                contentDescription = if (favorite) "取消收藏" else "收藏",
+                contentDescription = stringResource(
+                    if (favorite) R.string.tts_cd_unfavorite else R.string.tts_cd_favorite
+                ),
                 tint = if (favorite) {
                     MaterialTheme.colorScheme.error
                 } else {

@@ -113,16 +113,16 @@ object TextToSpeech :
 
     /** 后端顺序与文案：默认 Breeze，其次豆包，最后魔方。切换弹窗与设置弹窗都按这个排。 */
     private val BACKEND_LABELS = listOf(
-        BACKEND_BREEZE to "Breeze",
-        BACKEND_DOUBAO to "豆包",
-        BACKEND_MOFA to "魔方",
+        BACKEND_BREEZE to R.string.tts_backend_breeze,
+        BACKEND_DOUBAO to R.string.tts_backend_doubao,
+        BACKEND_MOFA to R.string.tts_backend_mofa,
     )
 
     /** 切换弹窗里每个后端的一行说明：要什么凭据、能做什么 */
     private val BACKEND_TIPS = mapOf(
-        BACKEND_MOFA to "API Key · 七种情绪预设",
-        BACKEND_DOUBAO to "登录 Cookie · 在线音色库",
-        BACKEND_BREEZE to "API Key · 可克隆音色，支持自然语言指令",
+        BACKEND_MOFA to R.string.tts_backend_tip_mofa,
+        BACKEND_DOUBAO to R.string.tts_backend_tip_doubao,
+        BACKEND_BREEZE to R.string.tts_backend_tip_breeze,
     )
 
     // 豆包网页端逆向协议: 鉴权在 WebSocket 握手阶段完成, 依赖登录态 Cookie
@@ -207,6 +207,17 @@ object TextToSpeech :
         "温柔" to floatArrayOf(0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f),
     )
 
+    /** 情绪的中文名既是存储键也是接口语义，展示名单独走资源，切英文才不会是中文。 */
+    private val EMOTION_LABELS = mapOf(
+        "平静" to R.string.tts_emotion_calm,
+        "开心" to R.string.tts_emotion_happy,
+        "悲伤" to R.string.tts_emotion_sad,
+        "愤怒" to R.string.tts_emotion_angry,
+        "惊讶" to R.string.tts_emotion_surprised,
+        "害怕" to R.string.tts_emotion_afraid,
+        "温柔" to R.string.tts_emotion_gentle,
+    )
+
     override fun onEnable() {
         WeChatMessageContextMenuApi.addProvider(this)
         WeChatInputBarMenuApi.addProvider(this)
@@ -236,7 +247,7 @@ object TextToSpeech :
                 onClick = { view, _, msgInfo ->
                     val text = msgInfo.humanReadableRepr.trim()
                     if (text.isEmpty()) {
-                        showToast(view.context, "该消息没有可转语音的文本")
+                        showToast(view.context, localizedChatString(R.string.tts_toast_no_text))
                         return@MenuItem
                     }
                     showMainDialog(view.context, msgInfo.talker, text)
@@ -366,7 +377,7 @@ object TextToSpeech :
             }
 
             AlertDialogContent(
-                title = { Text("文字转语音") },
+                title = { Text(stringResource(R.string.feature_text_to_speech_name)) },
                 text = {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         OutlinedTextField(
@@ -375,7 +386,7 @@ object TextToSpeech :
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 3,
                             maxLines = 6,
-                            placeholder = { Text("输入要转成语音的文本") },
+                            placeholder = { Text(stringResource(R.string.tts_input_placeholder)) },
                         )
 
                         Spacer(Modifier.height(8.dp))
@@ -383,12 +394,17 @@ object TextToSpeech :
                         val mainOptions = voices.map { DropdownOption(it.voiceId, it.label) }
                         val customOptions = customVoices.map { DropdownOption(it.voiceId, it.label) }
                         val customCurrent = customOptions.any { it.value == voiceId }
+                        val emotionOptions = remember(EMOTIONS) {
+                            EMOTIONS.map { (key, _) ->
+                                DropdownOption(key, context.localizedChatString(EMOTION_LABELS.getValue(key)))
+                            }
+                        }
 
                         if (isBreeze) {
                             // 整行单列：自建音色收在选择弹窗的「我的」页签里，不再单独占一列
                             BaseWidget(
-                                title = "Breeze 音色",
-                                description = breezeLabel.ifBlank { "未选择" },
+                                title = stringResource(R.string.tts_row_breeze_voice),
+                                description = breezeLabel.ifBlank { stringResource(R.string.tts_not_selected) },
                                 onClick = {
                                     showBreezeVoicePicker(context, voiceId, breezeKey) { id, name ->
                                         voiceId = id
@@ -407,7 +423,7 @@ object TextToSpeech :
                         } else if (isDoubao) {
                             // 豆包既不吃情绪向量，也没有魔方的自定义音色，整行只留音色
                             BaseWidget(
-                                title = "豆包音色",
+                                title = stringResource(R.string.tts_row_doubao_voice),
                                 description = doubaoLabel,
                                 onClick = {
                                     showDoubaoVoicePicker(context, voiceId, doubaoCookie) { id, name ->
@@ -428,7 +444,7 @@ object TextToSpeech :
                             Row(Modifier.fillMaxWidth()) {
                                 Box(Modifier.weight(1f)) {
                                     DropDownMenuWidget(
-                                        title = "系统音色",
+                                        title = stringResource(R.string.tts_row_system_voice),
                                         description = null,
                                         value = voiceId,
                                         options = if (mainOptions.any { it.value == voiceId }) mainOptions
@@ -442,8 +458,9 @@ object TextToSpeech :
                                 Spacer(Modifier.width(8.dp))
                                 Box(Modifier.weight(1f)) {
                                     DropDownMenuWidget(
-                                        title = "自定义音色",
-                                        description = if (customCurrent) null else "未选择",
+                                        title = stringResource(R.string.tts_row_custom_voice),
+                                        description = if (customCurrent) null
+                                        else stringResource(R.string.tts_not_selected),
                                         value = voiceId,
                                         options = if (customCurrent) customOptions
                                             else customOptions + DropdownOption(voiceId, ""),
@@ -460,25 +477,25 @@ object TextToSpeech :
                             if (isBreeze) {
                                 // Breeze 不吃情绪向量，样式全靠一句自然语言指令（文档：1000 字以内）
                                 TextFieldDialogWidget(
-                                    title = "指令",
+                                    title = stringResource(R.string.tts_row_instructions),
                                     value = instructions,
                                     onValueChange = {
                                         instructions = it
                                         breezeInstructions = it
                                     },
-                                    dialogTitle = "填写 Breeze 指令",
-                                    confirmLabel = "确认",
-                                    dismissLabel = "取消",
-                                    valueHint = "未设置。用自然语言描述怎么念，例如：开心地说，带点惊喜的上扬",
+                                    dialogTitle = stringResource(R.string.tts_dlg_instructions_title),
+                                    confirmLabel = stringResource(R.string.tts_confirm),
+                                    dismissLabel = stringResource(R.string.dialog_cancel),
+                                    valueHint = stringResource(R.string.tts_instructions_hint),
                                     filter = { it.take(BreezeTtsClient.INSTRUCTION_MAX) },
                                     singleLine = false,
                                 )
                             } else {
                                 DropDownMenuWidget(
-                                    title = "语气",
+                                    title = stringResource(R.string.tts_row_emotion),
                                     description = null,
                                     value = emotion,
-                                    options = EMOTIONS.map { DropdownOption(it.first, it.first) },
+                                    options = emotionOptions,
                                     onValueChange = { emotion = it; selectedEmotion = it },
                                 )
                             }
@@ -491,8 +508,8 @@ object TextToSpeech :
                             Spacer(Modifier.height(8.dp))
                         }
 
-                        // 三枚等分一行，默认的 24dp 横向内边距会把「发送语音」挤成竖排
-                        val footerPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                        // 三枚等分一行；内边距收到 6dp，喵化后「发送语音喵」才不会把这一行挤断
+                        val footerPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
                         Row(Modifier.fillMaxWidth()) {
                             // 试听放最左边，只在真拿到过音频后出现；平时这行还是生成/发送语音两枚
                             previewPath?.let { path ->
@@ -507,19 +524,25 @@ object TextToSpeech :
                                         modifier = Modifier.size(18.dp),
                                     )
                                     Spacer(Modifier.width(6.dp))
-                                    Text("试听", maxLines = 1)
+                                    Text(stringResource(R.string.tts_btn_preview), maxLines = 1)
                                 }
                                 Spacer(Modifier.width(8.dp))
                             }
                             Button(
                                 onClick = {
                                     if (inputText.trim().isEmpty()) {
-                                        showToast(context, "请输入文本")
+                                        showToast(
+                                            context,
+                                            context.localizedChatString(R.string.tts_toast_enter_text),
+                                        )
                                         return@Button
                                     }
                                     if (isDoubao) {
                                         if (doubaoCookie.isBlank()) {
-                                            showToast(context, "请先在设置中填写豆包 Cookie")
+                                            showToast(
+                                                context,
+                                                context.localizedChatString(R.string.tts_toast_need_doubao_cookie),
+                                            )
                                             showSettingsDialog(context)
                                             return@Button
                                         }
@@ -530,19 +553,31 @@ object TextToSpeech :
                                                 previewPath = path
                                                 showPreviewDialog(context, talker, path)
                                             } else {
-                                                showToast(context, "生成失败：$err")
+                                                showToast(
+                                                    context,
+                                                    context.localizedChatString(
+                                                        R.string.tts_toast_generate_failed,
+                                                        err,
+                                                    ),
+                                                )
                                             }
                                         }
                                         return@Button
                                     }
                                     if (isBreeze) {
                                         if (breezeKey.isBlank()) {
-                                            showToast(context, "请先在设置中填写 Breeze API Key")
+                                            showToast(
+                                                context,
+                                                context.localizedChatString(R.string.tts_toast_need_breeze_key),
+                                            )
                                             showSettingsDialog(context)
                                             return@Button
                                         }
                                         if (voiceId.isBlank()) {
-                                            showToast(context, "请先选择一个 Breeze 音色")
+                                            showToast(
+                                                context,
+                                                context.localizedChatString(R.string.tts_toast_need_breeze_voice),
+                                            )
                                             return@Button
                                         }
                                         generating = true
@@ -557,13 +592,22 @@ object TextToSpeech :
                                                 previewPath = path
                                                 showPreviewDialog(context, talker, path)
                                             } else {
-                                                showToast(context, "生成失败：$err")
+                                                showToast(
+                                                    context,
+                                                    context.localizedChatString(
+                                                        R.string.tts_toast_generate_failed,
+                                                        err,
+                                                    ),
+                                                )
                                             }
                                         }
                                         return@Button
                                     }
                                     if (apiKey.isBlank()) {
-                                        showToast(context, "请先在设置中填写 API Key")
+                                        showToast(
+                                            context,
+                                            context.localizedChatString(R.string.tts_toast_need_mofang_key),
+                                        )
                                         showSettingsDialog(context) { credentialsRevision++ }
                                         return@Button
                                     }
@@ -578,36 +622,51 @@ object TextToSpeech :
                                             previewPath = wavPath
                                             showPreviewDialog(context, talker, wavPath)
                                         } else {
-                                            showToast(context, "生成失败：$err")
+                                            showToast(
+                                                context,
+                                                context.localizedChatString(
+                                                    R.string.tts_toast_generate_failed,
+                                                    err,
+                                                ),
+                                            )
                                         }
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
                                 contentPadding = footerPadding,
                             ) {
-                                Text("生成", maxLines = 1)
+                                Text(stringResource(R.string.tts_btn_generate), maxLines = 1)
                             }
                             Spacer(Modifier.width(8.dp))
                             Button(
                                 onClick = {
                                     val wav = lastWavPath
                                     if (wav == null || !File(wav).exists()) {
-                                        showToast(context, "请先生成语音")
+                                        showToast(
+                                            context,
+                                            context.localizedChatString(R.string.tts_toast_need_audio),
+                                        )
                                         return@Button
                                     }
                                     sendVoiceTo(talker, wav) { ok ->
                                         if (ok) {
-                                            showToast(context, "语音已发送")
+                                            showToast(
+                                                context,
+                                                context.localizedChatString(R.string.tts_toast_voice_sent),
+                                            )
                                             onDismiss()
                                         } else {
-                                            showToast(context, "发送失败")
+                                            showToast(
+                                                context,
+                                                context.localizedChatString(R.string.tts_toast_send_failed),
+                                            )
                                         }
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
                                 contentPadding = footerPadding,
                             ) {
-                                Text("发送语音", maxLines = 1)
+                                Text(stringResource(R.string.tts_btn_send_voice), maxLines = 1)
                             }
                         }
 
@@ -644,24 +703,24 @@ object TextToSpeech :
                             }) {
                                 Icon(
                                     MaterialSymbols.Outlined.Compare_arrows,
-                                    contentDescription = "切换后端",
+                                    contentDescription = stringResource(R.string.tts_cd_switch_backend),
                                     modifier = Modifier.size(18.dp),
                                 )
                                 Spacer(Modifier.width(4.dp))
-                                Text(BACKEND_LABELS.first { it.first == backendMode }.second)
+                                Text(stringResource(BACKEND_LABELS.first { it.first == backendMode }.second))
                             }
                             Row {
                                 TextButton(onClick = { showSettingsDialog(context) { credentialsRevision++ } }) {
                                     Icon(
                                         MaterialSymbols.Outlined.Settings,
-                                        contentDescription = "设置",
+                                        contentDescription = stringResource(R.string.tts_cd_settings),
                                         modifier = Modifier.size(18.dp),
                                     )
                                     Spacer(Modifier.width(4.dp))
-                                    Text("打开设置")
+                                    Text(stringResource(R.string.tts_btn_open_settings))
                                 }
                                 TextButton(onClick = { onDismiss() }) {
-                                    Text("关闭")
+                                    Text(stringResource(R.string.dialog_close))
                                 }
                             }
                         }
@@ -685,17 +744,17 @@ object TextToSpeech :
     ) {
         showComposeDialog(context) {
             AlertDialogContent(
-                title = { Text("切换后端") },
+                title = { Text(stringResource(R.string.tts_dlg_switch_backend)) },
                 text = {
                     Column {
                         Text(
-                            "换后端时把当前选中的音色写回原来那一档，切回来还是原来那个。",
+                            stringResource(R.string.tts_switch_backend_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.height(10.dp))
-                        SegmentedColumn(title = "语音合成服务") {
-                            BACKEND_LABELS.forEach { (mode, label) ->
+                        SegmentedColumn(title = stringResource(R.string.tts_group_service)) {
+                            BACKEND_LABELS.forEach { (mode, labelRes) ->
                                 val ready = when (mode) {
                                     BACKEND_DOUBAO -> doubaoReady
                                     BACKEND_BREEZE -> breezeReady
@@ -703,9 +762,9 @@ object TextToSpeech :
                                 }
                                 item {
                                     RadioButtonWidget(
-                                        title = label,
-                                        description = BACKEND_TIPS.getValue(mode) +
-                                            if (ready) "" else " · 凭据还没填",
+                                        title = stringResource(labelRes),
+                                        description = stringResource(BACKEND_TIPS.getValue(mode)) +
+                                            if (ready) "" else " " + stringResource(R.string.tts_backend_not_ready),
                                         selected = mode == current,
                                         onSelect = {
                                             onPicked(mode)
@@ -717,7 +776,7 @@ object TextToSpeech :
                         }
                     }
                 },
-                dismissButton = { TextButton(onDismiss) { Text("取消") } },
+                dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.dialog_cancel)) } },
             )
         }
     }
@@ -732,23 +791,33 @@ object TextToSpeech :
             var modelOptions by remember {
                 mutableStateOf(listOf(DropdownOption(breezeModel, breezeModel)))
             }
-            var quotaText by remember { mutableStateOf("未获取") }
+            var quotaText by remember {
+                mutableStateOf(context.localizedChatString(R.string.tts_state_none))
+            }
 
             fun loadBreezeAccount() {
                 if (breezeKeyState.isBlank()) {
-                    quotaText = "未填写 API Key"
+                    quotaText = context.localizedChatString(R.string.tts_state_need_key)
                     return
                 }
-                quotaText = "拉取中…"
+                quotaText = context.localizedChatString(R.string.tts_state_loading)
                 Thread {
                     val quota = runCatching { BreezeTtsClient.quota(breezeKeyState) }.getOrNull()
                     val models = runCatching { BreezeTtsClient.models(breezeKeyState) }.getOrNull()
                     mh.post {
                         quotaText = quota?.let {
-                            "余额 ${it.balance} · 套餐 ${it.plan.ifBlank { "未知" }} · 每月 ${it.monthlyCredits}" +
-                                " · 自建上限 ${it.savedVoiceLimit} · " +
-                                if (it.commercialUseAllowed) "可商用" else "不可商用"
-                        } ?: "未获取"
+                            context.localizedChatString(
+                                R.string.tts_quota_summary,
+                                it.balance,
+                                it.plan.ifBlank { context.localizedChatString(R.string.tts_unknown) },
+                                it.monthlyCredits,
+                                it.savedVoiceLimit,
+                                context.localizedChatString(
+                                    if (it.commercialUseAllowed) R.string.tts_commercial_yes
+                                    else R.string.tts_commercial_no,
+                                ),
+                            )
+                        } ?: context.localizedChatString(R.string.tts_state_none)
                         if (!models.isNullOrEmpty()) {
                             val list = models.map { DropdownOption(it.id, it.name) }
                             modelOptions = if (list.any { it.value == breezeModelState }) list
@@ -764,29 +833,45 @@ object TextToSpeech :
 
             var breezeCookieState by remember { mutableStateOf(breezeCookie) }
             var creditsText by remember {
-                mutableStateOf(if (breezeCookie.isBlank()) "未填写登录 Cookie" else "未获取")
+                mutableStateOf(
+                    context.localizedChatString(
+                        if (breezeCookie.isBlank()) R.string.tts_state_need_cookie
+                        else R.string.tts_state_none,
+                    ),
+                )
             }
             var claiming by remember { mutableStateOf(false) }
 
             fun loadCredits() {
                 if (breezeCookieState.isBlank()) {
-                    creditsText = "未填写登录 Cookie"
+                    creditsText = context.localizedChatString(R.string.tts_state_need_cookie)
                     return
                 }
-                creditsText = "拉取中…"
+                creditsText = context.localizedChatString(R.string.tts_state_loading)
                 Thread {
                     val outcome = runCatching { BreezeCreditsClient.summary(breezeCookieState) }
                     mh.post {
                         val s = outcome.getOrNull()
                         creditsText = if (s == null) {
-                            "拉取失败：${outcome.exceptionOrNull()?.message}"
+                            context.localizedChatString(
+                                R.string.tts_state_fetch_failed,
+                                outcome.exceptionOrNull()?.message,
+                            )
                         } else {
                             val state = when {
-                                s.available -> "可领 +${s.amount.toInt()}"
-                                s.claimedToday -> "今日已领"
-                                else -> "暂不可领"
+                                s.available -> context.localizedChatString(
+                                    R.string.tts_credit_available,
+                                    s.amount.toInt(),
+                                )
+                                s.claimedToday -> context.localizedChatString(R.string.tts_credit_claimed_today)
+                                else -> context.localizedChatString(R.string.tts_credit_unavailable)
                             }
-                            "余额 ${s.balance.toInt()} · $state · 重置时间 ${beijingTime(s.nextResetAt)}"
+                            context.localizedChatString(
+                                R.string.tts_credit_summary,
+                                s.balance.toInt(),
+                                state,
+                                beijingTime(s.nextResetAt),
+                            )
                         }
                     }
                 }.start()
@@ -795,7 +880,7 @@ object TextToSpeech :
             fun claimCredits() {
                 if (claiming) return
                 if (breezeCookieState.isBlank()) {
-                    showToast(context, "请先填写 breezeblue.ai 登录 Cookie")
+                    showToast(context, context.localizedChatString(R.string.tts_toast_need_breeze_cookie))
                     return
                 }
                 claiming = true
@@ -804,12 +889,23 @@ object TextToSpeech :
                     mh.post {
                         claiming = false
                         val c = outcome.getOrNull()
-                        showToast(context, when {
-                            c == null -> "领取失败：${outcome.exceptionOrNull()?.message}"
-                            c.claimed -> "已领取 +${c.creditsIssued.toInt()} 积分，余额 ${c.balance.toInt()}"
-                            c.alreadyClaimed -> "今天已经领过了"
-                            else -> "未领取：档位 ${c.rewardTier.ifBlank { "未知" }}"
-                        })
+                        val message = when {
+                            c == null -> context.localizedChatString(
+                                R.string.tts_toast_claim_failed,
+                                outcome.exceptionOrNull()?.message,
+                            )
+                            c.claimed -> context.localizedChatString(
+                                R.string.tts_toast_claimed,
+                                c.creditsIssued.toInt(),
+                                c.balance.toInt(),
+                            )
+                            c.alreadyClaimed -> context.localizedChatString(R.string.tts_toast_already_claimed)
+                            else -> context.localizedChatString(
+                                R.string.tts_toast_not_claimed,
+                                c.rewardTier.ifBlank { context.localizedChatString(R.string.tts_unknown) },
+                            )
+                        }
+                        showToast(context, message)
                         loadCredits()
                     }
                 }.start()
@@ -819,7 +915,7 @@ object TextToSpeech :
                 if (breezeCookieState.isNotBlank()) loadCredits()
             }
             AlertDialogContent(
-                title = { Text("文字转语音设置") },
+                title = { Text(stringResource(R.string.tts_cfg_title)) },
                 text = {
                     Column(
                         modifier = Modifier
@@ -827,40 +923,40 @@ object TextToSpeech :
                             .heightIn(max = 420.dp)
                             .verticalScroll(rememberScrollState()),
                     ) {
-                        SegmentedColumn(title = "Breeze Blue") {
+                        SegmentedColumn(title = stringResource(R.string.tts_group_breeze)) {
                             item {
                                 TextFieldDialogWidget(
-                                    title = "API Key",
+                                    title = stringResource(R.string.tts_cfg_api_key),
                                     value = breezeKeyState,
                                     onValueChange = {
                                         breezeKeyState = it
                                         breezeKey = it
                                     },
-                                    dialogTitle = "设置 Breeze API Key",
-                                    confirmLabel = "确认",
-                                    dismissLabel = "取消",
-                                    valueHint = "未设置，在 breezeblue.ai 的 Developer → API Keys 创建",
+                                    dialogTitle = stringResource(R.string.tts_dlg_set_breeze_key),
+                                    confirmLabel = stringResource(R.string.tts_confirm),
+                                    dismissLabel = stringResource(R.string.dialog_cancel),
+                                    valueHint = stringResource(R.string.tts_breeze_key_hint),
                                     password = true,
                                 )
                             }
                             item {
                                 TextFieldDialogWidget(
-                                    title = "登录 Cookie",
+                                    title = stringResource(R.string.tts_cfg_login_cookie),
                                     value = breezeCookieState,
                                     onValueChange = {
                                         breezeCookieState = it
                                         breezeCookie = it
                                     },
-                                    dialogTitle = "设置 breezeblue.ai 登录 Cookie",
-                                    confirmLabel = "确认",
-                                    dismissLabel = "取消",
-                                    valueHint = "未设置，仅领取每日积分需要",
+                                    dialogTitle = stringResource(R.string.tts_dlg_set_breeze_cookie),
+                                    confirmLabel = stringResource(R.string.tts_confirm),
+                                    dismissLabel = stringResource(R.string.dialog_cancel),
+                                    valueHint = stringResource(R.string.tts_breeze_cookie_hint),
                                     password = true,
                                 )
                             }
                             item {
                                 DropDownMenuWidget(
-                                    title = "模型",
+                                    title = stringResource(R.string.tts_cfg_model),
                                     description = null,
                                     value = breezeModelState,
                                     options = modelOptions,
@@ -872,14 +968,14 @@ object TextToSpeech :
                             }
                             item {
                                 BaseWidget(
-                                    title = "余额",
+                                    title = stringResource(R.string.tts_cfg_balance),
                                     description = quotaText,
                                     onClick = { loadBreezeAccount() },
                                 )
                             }
                             item {
                                 BaseWidget(
-                                    title = "每日积分",
+                                    title = stringResource(R.string.tts_cfg_daily_credits),
                                     description = creditsText,
                                     enabled = !claiming,
                                     onClick = { claimCredits() },
@@ -887,34 +983,33 @@ object TextToSpeech :
                             }
                         }
                         Text(
-                            "API Key 管合成与音色；登录 Cookie 只用于领取每日积分，从已登录浏览器的开发者工具里复制整条。" +
-                                "点「每日积分」即领取，领过只会提示今天已经领过了。",
+                            stringResource(R.string.tts_breeze_note),
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        SegmentedColumn(title = "豆包") {
+                        SegmentedColumn(title = stringResource(R.string.tts_group_doubao)) {
                             item {
                                 TextFieldDialogWidget(
-                                    title = "Cookie",
+                                    title = stringResource(R.string.tts_cfg_cookie),
                                     value = cookieState,
                                     onValueChange = {
                                         cookieState = it
                                         doubaoCookie = it
                                     },
-                                    dialogTitle = "设置豆包 Cookie",
-                                    confirmLabel = "确认",
-                                    dismissLabel = "取消",
-                                    valueHint = "未设置，需包含 sessionid / sid_guard / uid_tt",
+                                    dialogTitle = stringResource(R.string.tts_dlg_set_doubao_cookie),
+                                    confirmLabel = stringResource(R.string.tts_confirm),
+                                    dismissLabel = stringResource(R.string.dialog_cancel),
+                                    valueHint = stringResource(R.string.tts_doubao_cookie_hint),
                                     password = true,
                                 )
                             }
                         }
                         Text(
-                            "在已登录的 doubao.com 开发者工具 (Application → Cookies) 中复制三个字段, 形如 sessionid=…; sid_guard=…; uid_tt=…, 有效期约 30 天",
+                            stringResource(R.string.tts_doubao_note),
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        SegmentedColumn(title = "配音魔方") {
+                        SegmentedColumn(title = stringResource(R.string.tts_group_mofang)) {
                             item {
                                 TextFieldDialogWidget(
                                     title = "API Key",
@@ -924,22 +1019,22 @@ object TextToSpeech :
                                         apiKey = it
                                         onApiKeySaved()
                                     },
-                                    dialogTitle = "设置 API Key",
-                                    confirmLabel = "确认",
-                                    dismissLabel = "取消",
-                                    valueHint = "未设置，请前往 peiyinmofang.com 获取",
+                                    dialogTitle = stringResource(R.string.tts_dlg_set_mofang_key),
+                                    confirmLabel = stringResource(R.string.tts_confirm),
+                                    dismissLabel = stringResource(R.string.dialog_cancel),
+                                    valueHint = stringResource(R.string.tts_mofang_key_hint),
                                     password = true,
                                 )
                             }
                         }
                         Text(
-                            "用于调用配音魔方 TTS 接口，在官网「API Key 管理」中创建",
+                            stringResource(R.string.tts_mofang_note),
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 },
-                confirmButton = { Button(onDismiss) { Text("完成") } }
+                confirmButton = { Button(onDismiss) { Text(stringResource(R.string.tts_btn_done)) } }
             )
         }
     }
@@ -973,7 +1068,7 @@ object TextToSpeech :
             }
 
             AlertDialogContent(
-                title = { Text("试听语音") },
+                title = { Text(stringResource(R.string.tts_preview_title)) },
                 text = {
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         Slider(
@@ -1004,7 +1099,8 @@ object TextToSpeech :
                         ) {
                             Icon(
                                 if (playing) MaterialSymbols.Outlined.Pause else MaterialSymbols.Outlined.Play_arrow,
-                                contentDescription = if (playing) "暂停" else "播放",
+                                contentDescription = if (playing) stringResource(R.string.tts_cd_pause)
+                                else stringResource(R.string.tts_cd_play),
                             )
                         }
                     }
@@ -1016,16 +1112,16 @@ object TextToSpeech :
                         player = null
                         sendVoiceTo(talker, wavPath) { ok ->
                             if (ok) {
-                                showToast(context, "语音已发送")
+                                showToast(context, context.localizedChatString(R.string.tts_toast_voice_sent))
                                 onDismiss()
                             } else {
-                                showToast(context, "发送失败")
+                                showToast(context, context.localizedChatString(R.string.tts_toast_send_failed))
                             }
                         }
-                    }) { Text("发送语音") }
+                    }) { Text(stringResource(R.string.tts_btn_send_voice)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { onDismiss() }) { Text("关闭") }
+                    TextButton(onClick = { onDismiss() }) { Text(stringResource(R.string.dialog_close)) }
                 }
             )
         }
@@ -1061,13 +1157,14 @@ object TextToSpeech :
                 }.toString()
                 val resp = httpPostJson("$API_BASE/api/open/v1/tts/simple-generate", body, key)
                 if (resp.isEmpty()) {
-                    error = "接口无响应 (HTTP 非 200 或网络异常)"
+                    error = localizedChatString(R.string.tts_err_no_response)
                 } else {
                     val root = JSONObject(resp)
                     val audioUrl = root.optJSONObject("data")?.optString("audio").orEmpty()
                     if (audioUrl.isEmpty()) {
                         val msg = root.optString("msg").ifEmpty { root.optString("message") }
-                        error = "code=${root.opt("code")} ${msg.ifEmpty { "未返回音频地址" }}"
+                        val noUrl = localizedChatString(R.string.tts_err_no_audio_url)
+                        error = "code=${root.opt("code")} ${msg.ifEmpty { noUrl }}"
                     } else {
                         val dir = File(KnownPaths.moduleCache.toFile(), "wcs_tts").apply { mkdirs() }
                         val dest = File(dir, "tts_${System.currentTimeMillis()}.wav")
@@ -1075,7 +1172,7 @@ object TextToSpeech :
                             wavPath = dest.absolutePath
                             lastWavPath = wavPath
                         } else {
-                            error = "音频下载失败"
+                            error = localizedChatString(R.string.tts_err_download_failed)
                         }
                     }
                 }
@@ -1169,7 +1266,7 @@ object TextToSpeech :
             val bytes = synchronized(audio) { audio.toByteArray() }
             var path: String? = null
             if (bytes.isEmpty()) {
-                if (error.isEmpty()) error = "未收到音频数据"
+                if (error.isEmpty()) error = localizedChatString(R.string.tts_err_no_audio_data)
             } else {
                 val dir = File(KnownPaths.moduleCache.toFile(), "wcs_tts").apply { mkdirs() }
                 val dest = File(dir, "doubao_${System.currentTimeMillis()}.aac")
