@@ -1040,7 +1040,7 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
      * （SnsCommentDetailUI.smali:23202），args[1] = CommentUserList、args[2] = LikeUserList，
      * 都是活引用。类锚用 adapter 各方法自带的 mark 字符串。
      */
-    val ctorSnsDetailCommentAdapter by dexConstructor(allowFailure = true) {
+    val ctorSnsDetailCommentAdapter by dexConstructor(throwOnFailure = false) {
         matcher {
             declaredClass {
                 usingEqStrings("com.tencent.mm.plugin.sns.ui.SnsCommentDetailUI\$CommentListAdapter")
@@ -1083,11 +1083,11 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
      * （字段 a=username、b=nickname）。探针：行一旦落在这个类上，说明渲染层数据没有走已被
      * 过滤的 ia5.j.d 出口，用来分辨「过滤没命中」和「另有数据源」。
      *
-     * 类名 w8 是混淆名、每版会漂，所以 allowFailure = true 且只做遥测，不承载隐藏逻辑。
+     * 类名 w8 是混淆名、每版会漂，所以 throwOnFailure = false 且只做遥测，不承载隐藏逻辑。
      */
-    val ctorRecentChatItemProbe by dexConstructor(allowFailure = true) {
+    val ctorRecentChatItemProbe by dexConstructor(throwOnFailure = false) {
         matcher {
-            declaredClass = "Lcom/tencent/mm/ui/contact/w8;"
+            declaredClass = "com.tencent.mm.ui.contact.w8"
         }
     }
 

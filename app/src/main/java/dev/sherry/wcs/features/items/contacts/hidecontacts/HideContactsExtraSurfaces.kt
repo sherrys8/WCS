@@ -162,7 +162,7 @@ private fun HideContacts.installRecentListAssembleHook() {
  * `ui.contact.w8` 构造器探针：MVVM 转发选择器「最近」页的行数据载体。
  *
  * 仅做遥测：每行构建都打一行（带隐藏命中高亮），用来分辨「渲染层根本没进 w8」和「进了但没匹配」。
- * 类名 w8 是混淆名、每版会漂，所以 allowFailure = true 且解析失败直接跳过。
+ * 类名 w8 是混淆名、每版会漂，所以 throwOnFailure = false 且解析失败直接跳过。
  */
 private fun HideContacts.installRecentChatItemProbe() {
     if (ctorRecentChatItemProbe.isPlaceholder) {
