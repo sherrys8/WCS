@@ -1017,6 +1017,96 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     }
 
     /**
+     * `SnsCommentDetailUI.Y7(List, boolean) boolean` — 朋友圈详情页「赞头像条」的装配入口
+     * （字符串锚 "setLikedHeader"）。详情页的数据不经过 D0/d1（feed 链），initView 直接从
+     * s5.f 新解析的 SnsObject 上把 `LikeUserList` 活引用传进来；全部 5 个调用点首参都是
+     * LikeUserList（SnsCommentDetailUI.smali:1254/23175/25548/30518 与 $$j.smali:290），
+     * 所以在参数上换成过滤后的副本即可覆盖整个详情页头部。
+     *
+     * 不能钩 s5.f/s5.e 的返回值：q2 会把 s5.f 的结果改写后持久化（q2.smali:3389），全局
+     * 换返回值会把过滤固件化、污染真实点赞/评论数据。见 hidecontacts/HideContactsMoments.kt。
+     */
+    val methodSnsDetailSetLikedHeader by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings("setLikedHeader", "com.tencent.mm.plugin.sns.ui.SnsCommentDetailUI")
+            paramCount = 2
+            returnType("boolean")
+        }
+    }
+
+    /**
+     * `SnsCommentDetailUI$CommentListAdapter.<init>(UI, LinkedList comments, LinkedList likes,
+     * Activity, String)` — 详情页评论/赞列表的唯一装配点：全 dex 只有 initView 一处调用
+     * （SnsCommentDetailUI.smali:23202），args[1] = CommentUserList、args[2] = LikeUserList，
+     * 都是活引用。类锚用 adapter 各方法自带的 mark 字符串。
+     */
+    val ctorSnsDetailCommentAdapter by dexConstructor(allowFailure = true) {
+        matcher {
+            declaredClass {
+                usingEqStrings("com.tencent.mm.plugin.sns.ui.SnsCommentDetailUI\$CommentListAdapter")
+            }
+            paramCount(5)
+        }
+    }
+
+    /**
+     * `SnsCommentDetailUI.W7(SnsObject, SnsInfo) void`（反射名 "setGroupIcon"）— 详情页分组
+     * 图标的唯一可见性入口：内部用 fb4.e1.e/c/g("checkEnableShowGroupIconBySnsObject" 家族)
+     * 判定后直接 setVisibility。与 feed 侧的 X0 不同，这里取消整个方法就是干净的视图层隐藏
+     * （图标默认 GONE），不涉及其它状态写入。
+     */
+    val methodSnsDetailSetGroupIcon by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings("checkEnableShowGroupIconBySnsObject", "com/tencent/mm/plugin/sns/ui/SnsCommentDetailUI")
+        }
+    }
+
+    /**
+     * `ae4.p.X0()` — `ImproveSnsInfo.getShowGroupEnable`，feed 徽标（分组可见图标）的判定谓词。
+     *
+     * 只对本人发出的动态生效，门控在 ExtFlag 位组合上（内部走 fb4.e1 "checkEnableShowGroup"
+     * 家族，读 ExtFlag&0x4/0x200 加 GroupUser/GroupContactTagIdList 非空）。stripSnsObject 只
+     * 清分组列表不清 ExtFlag —— 所以 8.0.76 真机上「列表清了徽标还在」。在此把 true 压成 false，
+     * 与视图层方案相比不碰渲染、只动一个布尔谓词。
+     */
+    val methodImproveSnsInfoShowGroupEnable by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings("getShowGroupEnable", "com.tencent.mm.plugin.sns.ui.improve.model.ImproveSnsInfo")
+            paramCount = 0
+            returnType("java.lang.Boolean")
+        }
+    }
+
+    /**
+     * `ui.contact.w8.<init>(String username, String nickname, Z, Z, Z, int, DefaultConstructorMarker)`
+     * — MVVM 转发选择器「最近」页行数据载体，仅由 recent/o（列表装配 lambda）与 p6 构建
+     * （字段 a=username、b=nickname）。探针：行一旦落在这个类上，说明渲染层数据没有走已被
+     * 过滤的 ia5.j.d 出口，用来分辨「过滤没命中」和「另有数据源」。
+     *
+     * 类名 w8 是混淆名、每版会漂，所以 allowFailure = true 且只做遥测，不承载隐藏逻辑。
+     */
+    val ctorRecentChatItemProbe by dexConstructor(allowFailure = true) {
+        matcher {
+            declaredClass = "Lcom/tencent/mm/ui/contact/w8;"
+        }
+    }
+
+    /**
+     * `ui.mvvm.uic.conversation.recent.o.invoke()` — MVVM 转发选择器「最近」页的列表装配体
+     * （RecentConversationForwardListUIC 的数据 lambda）。锚点对 "MicroMsg.RecentForwardListViewUIC"
+     * + "initDataList: contact == null" 全 dex 唯一落在这个方法里。
+     *
+     * 它把 k3.c()/b()/d() 逐条 new 成 v8/w8 塞进 t.d（ArrayList），结尾再 new 一个
+     * WxRecyclerAdapter 直接持有同一个 t.d 引用 —— 所以在出口对 t.d 原地剔除隐藏行，
+     * RecyclerView 首次绑定前就已经是干净的，不必碰视图层。
+     */
+    val methodRecentListAssembleInvoke by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings("MicroMsg.RecentForwardListViewUIC", "initDataList: contact == null")
+        }
+    }
+
+    /**
      * `static void c3.H(c3 netSceneSnsSync, SnsObject snsObject)` (8.0.76; the same method is
      * `c3.I` on 8.0.69) — `NetSceneSnsSync`'s inlined `updateSyncDataCache`, the single writer of
      * the 发现 tab's "N 位朋友的新动态" state. See hidecontacts/HideContactsMoments.kt.

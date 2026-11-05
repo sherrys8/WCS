@@ -7,6 +7,7 @@ import dev.ujhhgtg.reflekt.utils.makeAccessible
 import dev.sherry.wcs.features.items.contacts.HideContacts
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.reflection.BString
+import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.LinkedList
 
@@ -24,10 +25,20 @@ private var d0ProbeLogged = false
 /** Improve 路径入口探测只记一次，理由同 [d0ProbeLogged]。 */
 private var improveProbeLogged = false
 
+/** 详情页赞头像条（Y7）入口探测只记一次，理由同 [d0ProbeLogged]。 */
+private var detailHeaderProbed = false
+
+/** 详情页分组图标（W7）入口探测只记一次，理由同 [d0ProbeLogged]。 */
+private var detailGroupIconProbed = false
+
+/** feed 徽标谓词（X0）入口探测只记一次，理由同 [d0ProbeLogged]。 */
+private var showGroupEnableProbed = false
+
 /** Every Moments-side surface a hidden contact can leak through. */
 fun HideContacts.installMomentsHooks() {
     installMomentsRedDotHook()
     installMomentsInlineEntryHook()
+    installMomentsGroupBadgeHook()
 }
 
 /**
@@ -88,6 +99,88 @@ private fun HideContacts.installMomentsRedDotHook() {
 }
 
 /**
+ * 赞/评入口类（`a65.ha6` 族）的字段解析结果，feed 内联过滤与详情页过滤共用一份。
+ * 入口类的字段名每版漂移，所以只在安装期解析一次、之后全部走这里持有的 Field 引用。
+ */
+private class MomentsEntryContext(
+    val parseFrom: Method,
+    val usernameField: Field,
+    val replyUsernameField: Field,
+)
+
+private fun HideContacts.resolveMomentsEntryContext(): MomentsEntryContext? {
+    // `a65.ha6`'s own field names are obfuscated and drift across versions, and the class name
+    // itself isn't guaranteed either — so it is never referenced directly. Instead we borrow the
+    // same trick FakeMomentsLikes already uses: ha6 is also the return type of
+    // SnsCommentFooter.getCommentInfo(), and that method name is real (not obfuscated).
+    val entryClass = runCatching {
+        SnsCommentFooter::class.java.getMethod("getCommentInfo").returnType
+    }.getOrElse {
+        WeLogger.w(TAG, "failed to resolve the SNS like/comment entry class; moments hiding unavailable", it)
+        return null
+    }
+
+    // Declared String fields, in source order, are [Username, Nickname, Content, ReplyUsername,
+    // ...] — verified against a65/ha6.java (f9152d/f9153e/f9156h/f9160o) and cross-checked in
+    // com/tencent/mm/plugin/sns/ui/widget/t2.java, which reads the same four fields by their real
+    // names. Selecting by declared type + ordinal (mirrors SplitGroupCall's ILinkMember lookup and
+    // HideContactsVoip.readMultiTalkInvite) survives a field rename; hardcoding "f9152d" would not.
+    val stringFields = entryClass.reflekt().fields { type = BString }.map { it.self.makeAccessible() }
+    val usernameField = stringFields.getOrNull(0)
+    val replyUsernameField = stringFields.getOrNull(3)
+    if (usernameField == null || replyUsernameField == null) {
+        WeLogger.w(TAG, "failed to resolve username/replyUsername fields on the SNS entry class; moments hiding unavailable")
+        return null
+    }
+
+    // SnsObject (com.tencent.mm.protobuf.f) has no clone(); the only reliable way to duplicate one
+    // is a full serialize + reparse round trip through the protobuf codec it already implements.
+    // parseFrom() isn't declared on the SnsObject stub (only toByteArray()/the LikeUserList family
+    // are), so it is resolved reflectively once here, exactly as FakeMomentsLikes already does.
+    val parseFromMethod = runCatching {
+        SnsObject::class.reflekt().firstMethod { name = "parseFrom"; superclass() }.self
+    }.getOrElse {
+        WeLogger.w(TAG, "failed to resolve SnsObject.parseFrom; moments hiding unavailable", it)
+        return null
+    }
+
+    WeLogger.i(
+        TAG,
+        "moments entry context resolved: entry=${entryClass.name}, " +
+            "username=${usernameField.name}, replyUsername=${replyUsernameField.name}",
+    )
+    return MomentsEntryContext(parseFromMethod, usernameField, replyUsernameField)
+}
+
+private fun HideContacts.isEntryHidden(ctx: MomentsEntryContext, entry: Any): Boolean {
+    val username = ctx.usernameField.get(entry) as? String
+    if (username != null && isHiddenNow(username)) return true
+    // A reply that quotes a hidden contact's own comment ("回复 张三: ...") still names them,
+    // even when the reply's own author isn't hidden — so it must be stripped too.
+    val replyUsername = ctx.replyUsernameField.get(entry) as? String
+    return replyUsername != null && isHiddenNow(replyUsername)
+}
+
+/**
+ * 从 [list] 里剔除隐藏联系人条目，返回（过滤后的 LinkedList 副本, 剔除数）；
+ * 没有可剔除内容时返回 null（调用方保持原值不动）。
+ */
+private fun HideContacts.filteredEntryCopy(list: List<*>, ctx: MomentsEntryContext): Pair<LinkedList<Any>, Int>? {
+    var dropped = 0
+    val kept = LinkedList<Any>()
+    for (entry in list) {
+        if (entry == null) continue
+        if (isEntryHidden(ctx, entry)) {
+            dropped++
+            continue
+        }
+        kept.add(entry)
+    }
+    if (dropped == 0) return null
+    return kept to dropped
+}
+
+/**
  * Hides a hidden contact's likes/comments that surface inline under a *mutual friend's* Moments
  * post.
  *
@@ -107,57 +200,12 @@ private fun HideContacts.installMomentsRedDotHook() {
  * 没有任何写路径经过它 —— 替换返回值不会污染缓存原对象，也不会影响之后的点赞/评论写回。
  */
 private fun HideContacts.installMomentsInlineEntryHook() {
-    // `a65.ha6`'s own field names are obfuscated and drift across versions, and the class name
-    // itself isn't guaranteed either — so it is never referenced directly. Instead we borrow the
-    // same trick FakeMomentsLikes already uses: ha6 is also the return type of
-    // SnsCommentFooter.getCommentInfo(), and that method name is real (not obfuscated).
-    val entryClass = runCatching {
-        SnsCommentFooter::class.java.getMethod("getCommentInfo").returnType
-    }.getOrElse {
-        WeLogger.w(TAG, "failed to resolve the SNS like/comment entry class; moments inline hiding unavailable", it)
-        return
-    }
-
-    // Declared String fields, in source order, are [Username, Nickname, Content, ReplyUsername,
-    // ...] — verified against a65/ha6.java (f9152d/f9153e/f9156h/f9160o) and cross-checked in
-    // com/tencent/mm/plugin/sns/ui/widget/t2.java, which reads the same four fields by their real
-    // names. Selecting by declared type + ordinal (mirrors SplitGroupCall's ILinkMember lookup and
-    // HideContactsVoip.readMultiTalkInvite) survives a field rename; hardcoding "f9152d" would not.
-    val stringFields = entryClass.reflekt().fields { type = BString }.map { it.self.makeAccessible() }
-    val usernameField = stringFields.getOrNull(0)
-    val replyUsernameField = stringFields.getOrNull(3)
-    if (usernameField == null || replyUsernameField == null) {
-        WeLogger.w(TAG, "failed to resolve username/replyUsername fields on the SNS entry class; moments inline hiding unavailable")
-        return
-    }
-    // 一次性确认两处反射都落到了预期位置：INLINE/GROUP_ICON 共用这个安装器，任何一处
-    // runCatching 失败都会整个静默不装，光看设备表现分不出「钩子没装上」和「钩子装了没命中」。
+    val ctx = resolveMomentsEntryContext() ?: return
     WeLogger.i(
         TAG,
         "moments inline hook installed: struct=${methodSnsInfoToSnsStruct.method.declaringClass.name}." +
-            "${methodSnsInfoToSnsStruct.method.name}, entry=${entryClass.name}, " +
-            "username=${usernameField.name}, replyUsername=${replyUsernameField.name}",
+            "${methodSnsInfoToSnsStruct.method.name}",
     )
-
-    // SnsObject (com.tencent.mm.protobuf.f) has no clone(); the only reliable way to duplicate one
-    // is a full serialize + reparse round trip through the protobuf codec it already implements.
-    // parseFrom() isn't declared on the SnsObject stub (only toByteArray()/the LikeUserList family
-    // are), so it is resolved reflectively once here, exactly as FakeMomentsLikes already does.
-    val parseFromMethod = runCatching {
-        SnsObject::class.reflekt().firstMethod { name = "parseFrom"; superclass() }.self
-    }.getOrElse {
-        WeLogger.w(TAG, "failed to resolve SnsObject.parseFrom; moments inline hiding unavailable", it)
-        return
-    }
-
-    fun isEntryHidden(entry: Any): Boolean {
-        val username = usernameField.get(entry) as? String
-        if (username != null && isHiddenNow(username)) return true
-        // A reply that quotes a hidden contact's own comment ("回复 张三: ...") still names them,
-        // even when the reply's own author isn't hidden — so it must be stripped too.
-        val replyUsername = replyUsernameField.get(entry) as? String
-        return replyUsername != null && isHiddenNow(replyUsername)
-    }
 
     methodSnsInfoToSnsStruct.hookBefore {
         if (!d0ProbeLogged) {
@@ -173,7 +221,7 @@ private fun HideContacts.installMomentsInlineEntryHook() {
         if (!inlineOn && !iconOn) return@hookBefore
 
         val original = args.getOrNull(1) as? SnsObject ?: return@hookBefore
-        val stripped = stripSnsObject(original, parseFromMethod, inlineOn, iconOn, ::isEntryHidden) ?: return@hookBefore
+        val stripped = stripSnsObject(original, ctx, inlineOn, iconOn) ?: return@hookBefore
         args[1] = stripped
     }
 
@@ -199,29 +247,32 @@ private fun HideContacts.installMomentsInlineEntryHook() {
         if (!inlineOn && !iconOn) return@hookAfter
 
         val original = result as? SnsObject ?: return@hookAfter
-        val stripped = stripSnsObject(original, parseFromMethod, inlineOn, iconOn, ::isEntryHidden) ?: return@hookAfter
+        val stripped = stripSnsObject(original, ctx, inlineOn, iconOn) ?: return@hookAfter
         result = stripped
     }
+
+    // 详情页：数据不经过 D0/d1，initView 直接把 SnsObject 的 LikeUserList/CommentUserList 活引用
+    // 塞进 Y7（赞头像条）和 CommentListAdapter（评论/赞列表）。在这两个入口把参数换成过滤后的
+    // 副本即可，不动 SnsObject 本身 —— s5.f 的缓存原对象保持完整，q2 写回安全。
+    installMomentsDetailHook(ctx)
 }
 
 /**
  * D0 钩子与 Improve d1 钩子共用的过滤体：把 [original] 过滤成一份干净的克隆，
  * 没有可过滤内容时返回 null（调用方保持原值不动）。
  *
- * 赞/评过滤由 [inlineOn] 门控，分组标记由 [iconOn] 门控；[isEntryHidden] 是
- * 已解析好的入口字段闭包（两条链共用同一入口类）。
+ * 赞/评过滤由 [inlineOn] 门控，分组标记由 [iconOn] 门控；[ctx] 持有已解析好的入口字段。
  */
-private fun stripSnsObject(
+private fun HideContacts.stripSnsObject(
     original: SnsObject,
-    parseFromMethod: Method,
+    ctx: MomentsEntryContext,
     inlineOn: Boolean,
     iconOn: Boolean,
-    isEntryHidden: (Any) -> Boolean,
 ): SnsObject? {
     val likeList = original.LikeUserList as? List<*>
     val commentList = original.CommentUserList as? List<*>
-    val hasHiddenLike = inlineOn && likeList?.any { it != null && isEntryHidden(it) } == true
-    val hasHiddenComment = inlineOn && commentList?.any { it != null && isEntryHidden(it) } == true
+    val hasHiddenLike = inlineOn && likeList?.any { it != null && isEntryHidden(ctx, it) } == true
+    val hasHiddenComment = inlineOn && commentList?.any { it != null && isEntryHidden(ctx, it) } == true
 
     // 分组可见标记。SnsObject 的分组字段每版重命名，所以按「名字里含 group」探测，不钉名字。
     val groupFields = if (iconOn) {
@@ -259,16 +310,16 @@ private fun stripSnsObject(
     // permanently truncate the cached object; the next time anyone (dis)likes or comments and
     // this object is re-serialized back into SnsInfo.attrBuf, the entries we removed here would
     // be gone from what gets persisted, not just from what gets displayed.
-    val clone = SnsObject().also { parseFromMethod.invoke(it, original.toByteArray()) }
+    val clone = SnsObject().also { ctx.parseFrom.invoke(it, original.toByteArray()) }
 
     if (hasHiddenLike) {
-        val filtered = LinkedList((clone.LikeUserList as List<*>).filterNotNull().filterNot(isEntryHidden))
+        val filtered = LinkedList((clone.LikeUserList as List<*>).filterNotNull().filterNot { isEntryHidden(ctx, it) })
         clone.LikeUserList = filtered
         clone.LikeUserListCount = filtered.size
         clone.LikeCount = filtered.size
     }
     if (hasHiddenComment) {
-        val filtered = LinkedList((clone.CommentUserList as List<*>).filterNotNull().filterNot(isEntryHidden))
+        val filtered = LinkedList((clone.CommentUserList as List<*>).filterNotNull().filterNot { isEntryHidden(ctx, it) })
         clone.CommentUserList = filtered
         clone.CommentUserListCount = filtered.size
         clone.CommentCount = filtered.size
@@ -293,4 +344,117 @@ private fun stripSnsObject(
         WeLogger.d(TAG, "stripped a moments post's group-visibility marker")
     }
     return clone
+}
+
+/**
+ * Feed 侧的分组图标谓词：`ae4.p.X0()`（`ImproveSnsInfo.getShowGroupEnable`）。
+ *
+ * 8.0.76 真机显示：stripSnsObject 已经把 GroupList/GroupUser/GroupContactTagIdList 全部清空，
+ * 但徽标仍在 —— 因为 X0 真正的判定走的是 ExtFlag 位组合（0x3/0x5/0x401/0x201/0x1001），
+ * 列表清了 ExtFlag 没清。stripSnsObject 不能动 ExtFlag（否则会影响其它消费者），所以直接在
+ * 谓词出口把 true 压成 false，视图层不碰、谓词层拦截，与浮云那套 OnGlobalLayoutListener 方案
+ * 相比更干净。
+ */
+private fun HideContacts.installMomentsGroupBadgeHook() {
+    if (methodImproveSnsInfoShowGroupEnable.isPlaceholder) {
+        WeLogger.w(TAG, "improve showGroupEnable wasn't resolved; feed group badge stays unfiltered")
+        return
+    }
+    WeLogger.i(
+        TAG,
+        "improve showGroupEnable resolved: ${methodImproveSnsInfoShowGroupEnable.method.declaringClass.name}." +
+            "${methodImproveSnsInfoShowGroupEnable.method.name}",
+    )
+    methodImproveSnsInfoShowGroupEnable.hookAfter {
+        if (!showGroupEnableProbed) {
+            showGroupEnableProbed = true
+            WeLogger.i(TAG, "showGroupEnable first call, result=${result?.javaClass?.name ?: "null"}")
+        }
+        if (isShowingAll) return@hookAfter
+        if (!surfaceOn(HideSurface.GROUP_ICON)) return@hookAfter
+        if (result != true) return@hookAfter
+        result = false
+    }
+
+    // 详情页的分组图标：W7（"setGroupIcon"）内部走 fb4.e1.e/c/g 判定后 setVisibility。
+    // 详情页的 SnsObject 来自 s5.f 的新解析、与 feed 缓存不是同一份，stripSnsObject 清不到它。
+    // 直接取消整个 W7 调用 —— 图标默认 GONE，取消后保持隐藏，与视图层隐藏等价。
+    if (methodSnsDetailSetGroupIcon.isPlaceholder) {
+        WeLogger.w(TAG, "detail setGroupIcon wasn't resolved; detail group badge stays unfiltered")
+        return
+    }
+    WeLogger.i(
+        TAG,
+        "detail setGroupIcon resolved: ${methodSnsDetailSetGroupIcon.method.declaringClass.name}." +
+            "${methodSnsDetailSetGroupIcon.method.name}",
+    )
+    methodSnsDetailSetGroupIcon.hookBefore {
+        if (!detailGroupIconProbed) {
+            detailGroupIconProbed = true
+            WeLogger.i(TAG, "detail setGroupIcon first call")
+        }
+        if (isShowingAll) return@hookBefore
+        if (!surfaceOn(HideSurface.GROUP_ICON)) return@hookBefore
+        result = null
+    }
+}
+
+/**
+ * 详情页赞/评过滤：Y7（赞头像条）+ CommentListAdapter（评论/赞列表）。
+ *
+ * 详情页的数据不经过 D0/d1，initView 直接把 s5.f 新解析的 SnsObject 上的 LikeUserList/
+ * CommentUserList 活引用传进来。Y7 的 5 个调用点首参都是 LikeUserList；adapter 构造器
+ * args[1]=comments、args[2]=likes。在这两个入口把参数换成过滤后的副本即可，不动 SnsObject
+ * 本身 —— s5.f 的缓存原对象保持完整，q2 写回安全。
+ */
+private fun HideContacts.installMomentsDetailHook(ctx: MomentsEntryContext) {
+    if (methodSnsDetailSetLikedHeader.isPlaceholder) {
+        WeLogger.w(TAG, "detail setLikedHeader wasn't resolved; detail likes header stays unfiltered")
+    } else {
+        WeLogger.i(
+            TAG,
+            "detail setLikedHeader resolved: ${methodSnsDetailSetLikedHeader.method.declaringClass.name}." +
+                "${methodSnsDetailSetLikedHeader.method.name}",
+        )
+        methodSnsDetailSetLikedHeader.hookBefore {
+            if (!detailHeaderProbed) {
+                detailHeaderProbed = true
+                WeLogger.i(TAG, "detail setLikedHeader first call, args0=${args.getOrNull(0)?.javaClass?.name ?: "null"}")
+            }
+            if (isShowingAll) return@hookBefore
+            if (!surfaceOn(HideSurface.MOMENTS_INLINE) || hiddenContacts.isEmpty()) return@hookBefore
+            val likes = args.getOrNull(0) as? List<*> ?: return@hookBefore
+            val (copy, dropped) = filteredEntryCopy(likes, ctx) ?: return@hookBefore
+            WeLogger.i(TAG, "hid $dropped hidden like(s) in the moments detail header")
+            args[0] = copy
+        }
+    }
+
+    if (ctorSnsDetailCommentAdapter.isPlaceholder) {
+        WeLogger.w(TAG, "detail comment adapter ctor wasn't resolved; detail list stays unfiltered")
+        return
+    }
+    WeLogger.i(
+        TAG,
+        "detail comment adapter ctor resolved: ${ctorSnsDetailCommentAdapter.constructor.declaringClass.name}." +
+            "${ctorSnsDetailCommentAdapter.constructor.name}",
+    )
+    ctorSnsDetailCommentAdapter.hookBefore {
+        if (isShowingAll) return@hookBefore
+        if (!surfaceOn(HideSurface.MOMENTS_INLINE) || hiddenContacts.isEmpty()) return@hookBefore
+        val comments = args.getOrNull(1) as? List<*>
+        if (comments != null) {
+            filteredEntryCopy(comments, ctx)?.let { (copy, dropped) ->
+                WeLogger.i(TAG, "hid $dropped hidden comment(s) in the moments detail list")
+                args[1] = copy
+            }
+        }
+        val likes = args.getOrNull(2) as? List<*>
+        if (likes != null) {
+            filteredEntryCopy(likes, ctx)?.let { (copy, dropped) ->
+                WeLogger.i(TAG, "hid $dropped hidden like(s) in the moments detail list")
+                args[2] = copy
+            }
+        }
+    }
 }

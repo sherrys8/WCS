@@ -35,6 +35,8 @@ private val cursorHookProbed = mutableSetOf<String>()
 fun HideContacts.installExtraSurfaceHooks() {
     installRecentForwardHook()
     installRecentConversationCursorHook()
+    installRecentListAssembleHook()
+    installRecentChatItemProbe()
     installStorageManageHook()
     installStatusHook()
 }
@@ -74,8 +76,111 @@ private fun HideContacts.installRecentForwardHook() {
         val kept = targets.filterNot { it is String && isHiddenNow(it) }
         if (kept.size == targets.size) return@hookAfter
 
-        WeLogger.i(TAG, "filtered ${targets.size - kept.size} hidden target(s) from 最近转发")
+        val dropped = targets.size - kept.size
+        val droppedIds = targets.filterIsInstance<String>().filter { isHiddenNow(it) }.take(5).joinToString()
+        WeLogger.i(TAG, "filtered $dropped hidden target(s) from 最近转发 (ids=$droppedIds, kept=${kept.size})")
         result = ArrayList(kept)
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 最近聊天（MVVM 转发选择器渲染层）
+// ---------------------------------------------------------------------------------------------
+
+/** 一次性遥测：w8 构造器第一次被调用时打一行，用来分辨「渲染层根本没进」和「进了但没匹配」。 */
+private var w8ProbeLogged = false
+
+/** 一次性遥测：o.invoke 出口过滤第一次进入时打一行。 */
+private var recentAssembleProbeLogged = false
+
+/**
+ * MVVM 转发选择器「最近」页的列表装配体 `recent/o.invoke()` 出口过滤。
+ *
+ * 装配体把 k3.c()/b()/d() 三条名单（都已经过 ia5.j.d 的名单过滤）逐条 new 成 v8/w8 塞进
+ * t.d（ArrayList），结尾 new 一个 WxRecyclerAdapter 直接持有同一个 t.d 引用。所以在这里对 t.d
+ * 原地剔除隐藏行，RecyclerView 首次绑定前就已经是干净的 —— 视图层不碰、数据层兜底。
+ *
+ * 锚点字符串对 "MicroMsg.RecentForwardListViewUIC" + "initDataList: contact == null" 全 dex
+ * 唯一落在这个方法里。allowFailure = true：MVVM 装配体每版可能漂移，解析失败只让这一路静默
+ * 缺失，不拖垮其它隐藏面。
+ */
+private fun HideContacts.installRecentListAssembleHook() {
+    if (methodRecentListAssembleInvoke.isPlaceholder) {
+        WeLogger.w(TAG, "MVVM recent list assemble wasn't resolved; that page stays unfiltered at render layer")
+        return
+    }
+    WeLogger.i(
+        TAG,
+        "MVVM recent list assemble resolved: ${methodRecentListAssembleInvoke.method.declaringClass.name}." +
+            "${methodRecentListAssembleInvoke.method.name}",
+    )
+    methodRecentListAssembleInvoke.hookAfter {
+        if (!recentAssembleProbeLogged) {
+            recentAssembleProbeLogged = true
+            WeLogger.i(TAG, "recent list assemble first exit, thiz=${thisObject?.javaClass?.name ?: "null"}")
+        }
+        if (isShowingAll) return@hookAfter
+        if (!surfaceOn(HideSurface.RECENT_FORWARD)) return@hookAfter
+        if (hiddenContacts.isEmpty()) return@hookAfter
+
+        // thisObject = o 实例；o.d = t（RecentForwardListViewUIC 字段）；t.d = ArrayList<v8>。
+        val outer = thisObject ?: return@hookAfter
+        val outerClass = outer.javaClass
+        val tField = runCatching { outerClass.reflekt().fields { name = "d" }.first().self }.getOrNull()
+            ?: return@hookAfter
+        tField.isAccessible = true
+        val t = tField.get(outer) ?: return@hookAfter
+        val tClass = t.javaClass
+        val listField = runCatching { tClass.reflekt().fields { name = "d" }.first().self }.getOrNull()
+            ?: return@hookAfter
+        listField.isAccessible = true
+        val list = listField.get(t) as? MutableList<*> ?: return@hookAfter
+
+        var dropped = 0
+        val droppedIds = mutableListOf<String>()
+        list.removeAll { item ->
+            if (item == null) return@removeAll false
+            val username = runCatching {
+                val v8D = item.javaClass.reflekt().fields { name = "d" }.first().self.apply { isAccessible = true }
+                val w8 = v8D.get(item) ?: return@runCatching null
+                val w8A = w8.javaClass.reflekt().fields { name = "a" }.first().self.apply { isAccessible = true }
+                w8A.get(w8) as? String
+            }.getOrNull()
+            if (username != null && isHiddenNow(username)) {
+                dropped++
+                if (droppedIds.size < 5) droppedIds.add(username)
+                true
+            } else false
+        }
+        if (dropped > 0) {
+            WeLogger.i(TAG, "dropped $dropped hidden row(s) from MVVM recent list (ids=${droppedIds.joinToString()}, kept=${list.size})")
+        }
+    }
+}
+
+/**
+ * `ui.contact.w8` 构造器探针：MVVM 转发选择器「最近」页的行数据载体。
+ *
+ * 仅做遥测：每行构建都打一行（带隐藏命中高亮），用来分辨「渲染层根本没进 w8」和「进了但没匹配」。
+ * 类名 w8 是混淆名、每版会漂，所以 allowFailure = true 且解析失败直接跳过。
+ */
+private fun HideContacts.installRecentChatItemProbe() {
+    if (ctorRecentChatItemProbe.isPlaceholder) {
+        WeLogger.w(TAG, "recent chat item (w8) ctor wasn't resolved; render-layer probe unavailable")
+        return
+    }
+    WeLogger.i(
+        TAG,
+        "recent chat item probe installed: ${ctorRecentChatItemProbe.constructor.declaringClass.name}",
+    )
+    ctorRecentChatItemProbe.hookBefore {
+        val username = args.getOrNull(0) as? String
+        val nickname = args.getOrNull(1) as? String
+        val hidden = username != null && isHiddenNow(username)
+        if (!w8ProbeLogged || hidden) {
+            if (!w8ProbeLogged) w8ProbeLogged = true
+            WeLogger.i(TAG, "w8 row built: username=$username, nickname=$nickname, hidden=$hidden")
+        }
     }
 }
 
