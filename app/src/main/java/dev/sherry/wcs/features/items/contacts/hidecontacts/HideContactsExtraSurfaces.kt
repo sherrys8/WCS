@@ -126,12 +126,12 @@ private fun HideContacts.installRecentListAssembleHook() {
         // thisObject = o 实例；o.d = t（RecentForwardListViewUIC 字段）；t.d = ArrayList<v8>。
         val outer = thisObject ?: return@hookAfter
         val outerClass = outer.javaClass
-        val tField = runCatching { outerClass.reflekt().fields { }.filter { it.name == "d" }.first().self }.getOrNull()
+        val tField = runCatching { outerClass.reflekt().fields { name { it == "d" } }.first().self }.getOrNull()
             ?: return@hookAfter
         tField.isAccessible = true
         val t = tField.get(outer) ?: return@hookAfter
         val tClass = t.javaClass
-        val listField = runCatching { tClass.reflekt().fields { }.filter { it.name == "d" }.first().self }.getOrNull()
+        val listField = runCatching { tClass.reflekt().fields { name { it == "d" } }.first().self }.getOrNull()
             ?: return@hookAfter
         listField.isAccessible = true
         val list = listField.get(t) as? MutableList<*> ?: return@hookAfter
@@ -141,9 +141,9 @@ private fun HideContacts.installRecentListAssembleHook() {
         list.removeAll { item ->
             if (item == null) return@removeAll false
             val username = runCatching {
-                val v8D = item.javaClass.reflekt().fields { }.filter { it.name == "d" }.first().self.apply { isAccessible = true }
+                val v8D = item.javaClass.reflekt().fields { name { it == "d" } }.first().self.apply { isAccessible = true }
                 val w8 = v8D.get(item) ?: return@runCatching null
-                val w8A = w8.javaClass.reflekt().fields { }.filter { it.name == "a" }.first().self.apply { isAccessible = true }
+                val w8A = w8.javaClass.reflekt().fields { name { it == "a" } }.first().self.apply { isAccessible = true }
                 w8A.get(w8) as? String
             }.getOrNull()
             if (username != null && isHiddenNow(username)) {
