@@ -75,6 +75,7 @@ private val ACCESS_SURFACES = listOf(
     HideSurface.BLOCK_PROFILE,
     HideSurface.PROFILE_STRANGER,
     HideSurface.BLOCK_FRIEND_REQUEST,
+    HideSurface.PROFILE_MOMENTS_ENTRY,
 )
 
 /**

@@ -48,10 +48,18 @@ private val FRIEND_ONLY_PROFILE_KEYS = listOf(
     "contact_profile_label",
     "contact_profile_phone",
     "contact_profile_desc",
-    // 资料页的朋友圈入口。两个 key 各属一代资料页：`contact_info_sns` 是旧
-    // ContactInfoUI.onPreferenceTreeClick 的 key（8.0.76 :8400），`contact_profile_sns` 是
-    // `use_new_profile=true`（默认开）时新资料页控制器 profile/e0.K5 用的 key —— 上一版只带了旧
-    // key，新页其它行都藏了、唯独朋友圈入口留在屏上（2026-11-05 真机第 4 条反馈）。
+)
+
+/**
+ * 资料页的朋友圈入口。两个 key 各属一代资料页：`contact_info_sns` 是旧 ContactInfoUI.
+ * onPreferenceTreeClick 的 key（8.0.76 :8400），`contact_profile_sns` 是 `use_new_profile=true`
+ * （默认开）时新资料页控制器 profile/e0.K5 用的 key —— 上一版只带了旧 key，新页其它行都藏了、
+ * 唯独朋友圈入口留在屏上（2026-11-05 真机第 4 条反馈）。
+ *
+ * 单独成组、由 [HideSurface.PROFILE_MOMENTS_ENTRY] 门控，不再跟着「资料模拟非好友」走：用户要的是
+ * 一个能独立打开的开关，只藏这一行、不动其它好友专属入口。
+ */
+private val MOMENTS_ENTRY_KEYS = listOf(
     "contact_info_sns",
     "contact_profile_sns",
 )
@@ -87,23 +95,31 @@ fun HideContacts.uninstallProfileHooks() {
 }
 
 /**
- * Whether [activity] is a hidden contact's profile that should be presented as a stranger.
+ * Whether [activity] is a hidden contact's profile that the given [surface] should act on.
  *
  * `ContactInfoUI` only: [WeContactPrefsScreenApi] calls its providers for `ChatroomInfoUI` as well, and
  * a group's own profile must keep its rows even when the group itself is hidden.
  */
-private fun isSimulatedStranger(activity: Activity): Boolean {
+private fun hiddenContactProfile(activity: Activity, surface: HideSurface): Boolean {
     // The provider is registered with another feature's API, so it is not covered by unhookAll():
     // stay inert when this feature is off instead of simulating profiles behind a disabled switch.
     if (!HideContacts.isActive) return false
     // Compared by name rather than with `is ContactInfoUI`: the stub has no superclass, so an `is`
     // check here is provably true at compile time and rejected by the compiler.
     if (activity.javaClass.name != CONTACT_INFO_UI) return false
-    if (!HideContacts.surfaceOn(HideSurface.PROFILE_STRANGER)) return false
+    if (!HideContacts.surfaceOn(surface)) return false
 
     val wxId = activity.currentWxId ?: return false
     return HideContacts.isHiddenNow(wxId)
 }
+
+/** 资料模拟非好友是否作用在这个资料页上。 */
+private fun isSimulatedStranger(activity: Activity): Boolean =
+    hiddenContactProfile(activity, HideSurface.PROFILE_STRANGER)
+
+/** 「隐藏资料页朋友圈入口」是否作用在这个资料页上——独立于模拟非好友。 */
+private fun isMomentsEntryHidden(activity: Activity): Boolean =
+    hiddenContactProfile(activity, HideSurface.PROFILE_MOMENTS_ENTRY)
 
 /**
  * Hides the friend-only rows of a simulated profile and reveals the host's own add-contact row.
@@ -123,7 +139,9 @@ private fun HideContacts.hookSimulatedProfileRows() {
         name = "initView"
     }.hookAfter {
         val activity = thisObject as Activity
-        if (!isSimulatedStranger(activity)) return@hookAfter
+        val stranger = isSimulatedStranger(activity)
+        val momentsEntry = isMomentsEntryHidden(activity)
+        if (!stranger && !momentsEntry) return@hookAfter
 
         val screen = activity.reflekt()
             .firstMethod {
@@ -146,8 +164,13 @@ private fun HideContacts.hookSimulatedProfileRows() {
         }
 
         WeLogger.d(TAG, "row switch is ${screen.javaClass.name}.${hidePreference.name}")
-        FRIEND_ONLY_PROFILE_KEYS.forEach { hidePreference.invoke(screen, it, true) }
-        hidePreference.invoke(screen, ADD_CONTACT_KEY, false)
+        if (stranger) {
+            FRIEND_ONLY_PROFILE_KEYS.forEach { hidePreference.invoke(screen, it, true) }
+            hidePreference.invoke(screen, ADD_CONTACT_KEY, false)
+        }
+        if (momentsEntry) {
+            MOMENTS_ENTRY_KEYS.forEach { hidePreference.invoke(screen, it, true) }
+        }
         (screen as BaseAdapter).notifyDataSetChanged()
     }
 }
@@ -207,8 +230,14 @@ private object SimulatedStrangerProvider : WeContactPrefsScreenApi.IContactInfoP
         emptyList()
 
     override fun onItemClick(activity: Activity, key: String): Boolean {
-        if (!isSimulatedStranger(activity)) return false
-        if (key !in FRIEND_ONLY_PROFILE_KEYS) return false
+        // The row switch normally removes these rows; this only covers the case it could not be
+        // resolved, so a surviving row must not open a chat, start a call or show their Moments.
+        val swallow = when {
+            key in MOMENTS_ENTRY_KEYS -> isMomentsEntryHidden(activity)
+            key in FRIEND_ONLY_PROFILE_KEYS -> isSimulatedStranger(activity)
+            else -> false
+        }
+        if (!swallow) return false
 
         showToast(activity, localizedContactsString(R.string.contacts_hide_not_a_friend))
         return true

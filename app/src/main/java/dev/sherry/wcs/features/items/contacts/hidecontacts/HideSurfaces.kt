@@ -182,6 +182,12 @@ enum class HideSurface(
         R.string.contacts_hide_surface_block_friend_request_desc,
         false,
     ),
+    PROFILE_MOMENTS_ENTRY(
+        "hide_surface_profile_moments_entry",
+        R.string.contacts_hide_surface_profile_moments_entry,
+        R.string.contacts_hide_surface_profile_moments_entry_desc,
+        false,
+    ),
 }
 
 /**

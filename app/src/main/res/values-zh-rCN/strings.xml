@@ -3320,6 +3320,8 @@
     <string name="contacts_hide_surface_profile_stranger_desc">隐藏联系人的资料页显示为未添加：好友专属入口全部隐藏，改为提供「添加到通讯录」。需同时打开「模拟非好友」才生效。</string>
     <string name="contacts_hide_surface_block_friend_request">拦截提交加好友</string>
     <string name="contacts_hide_surface_block_friend_request_desc">从被模拟的资料页提交好友申请时只在本地模拟成功，实际不会发出。需同时打开「模拟非好友」才生效。</string>
+    <string name="contacts_hide_surface_profile_moments_entry">隐藏资料页朋友圈入口</string>
+    <string name="contacts_hide_surface_profile_moments_entry_desc">隐藏联系人的资料页不再显示「朋友圈」入口，新旧两代资料页都覆盖。独立生效，无需打开「模拟非好友」。</string>
     <string name="contacts_hide_not_a_friend">当前联系人未添加到通讯录</string>
     <string name="contacts_hide_request_sent">已发送</string>
     <string name="contacts_hide_group_general">隐藏名单</string>

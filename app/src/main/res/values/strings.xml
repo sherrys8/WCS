@@ -3277,6 +3277,8 @@ Time: {time}</string>
     <string name="contacts_hide_surface_profile_stranger_desc">Profiles of hidden contacts look like those of people you have not added: friend-only rows disappear and Add to Contacts appears instead. Has no effect unless simulated non-friend is on.</string>
     <string name="contacts_hide_surface_block_friend_request">Intercept friend requests</string>
     <string name="contacts_hide_surface_block_friend_request_desc">A request submitted from a simulated profile is acknowledged locally and never sent. Takes effect only when simulated non-friend is also on.</string>
+    <string name="contacts_hide_surface_profile_moments_entry">Hide Moments entry on profiles</string>
+    <string name="contacts_hide_surface_profile_moments_entry_desc">Removes the Moments row from the profile page of a hidden contact, covering both the old and the new profile layout. Works on its own and does not require simulated non-friend.</string>
     <string name="contacts_hide_not_a_friend">This contact is not in your contacts</string>
     <string name="contacts_hide_request_sent">Sent</string>
     <string name="contacts_hide_group_general">Hidden list</string>
