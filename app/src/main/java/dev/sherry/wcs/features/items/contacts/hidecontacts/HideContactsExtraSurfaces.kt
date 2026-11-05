@@ -126,14 +126,12 @@ private fun HideContacts.installRecentListAssembleHook() {
         // thisObject = o 实例；o.d = t（RecentForwardListViewUIC 字段）；t.d = ArrayList<v8>。
         val outer = thisObject ?: return@hookAfter
         val outerClass = outer.javaClass
-        val tField = runCatching { outerClass.reflekt().fields { name { it == "d" } }.first().self }.getOrNull()
+        val tField = runCatching { outerClass.reflekt().fields { name { it == "d" } }.first().self.makeAccessible() }.getOrNull()
             ?: return@hookAfter
-        tField.isAccessible = true
         val t = tField.get(outer) ?: return@hookAfter
         val tClass = t.javaClass
-        val listField = runCatching { tClass.reflekt().fields { name { it == "d" } }.first().self }.getOrNull()
+        val listField = runCatching { tClass.reflekt().fields { name { it == "d" } }.first().self.makeAccessible() }.getOrNull()
             ?: return@hookAfter
-        listField.isAccessible = true
         val list = listField.get(t) as? MutableList<*> ?: return@hookAfter
 
         var dropped = 0
