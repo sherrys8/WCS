@@ -451,7 +451,8 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         }
     }
 
-    override fun onQuery(sql: String): String? = rewriteMomentsFeedSql(sql) ?: rewriteFtsSql(sql)
+    override fun onQuery(sql: String): String? =
+        rewriteMomentsFeedSql(sql) ?: rewriteMomentsCommentsSql(sql) ?: rewriteFtsSql(sql)
 
     // The parentRef marker older versions wrote via WeConversationApi.setConversationsVisibility to
     // hide a chat. WeChat's native list filter (m4.O) hides rows whose parentRef isn't null/empty.
@@ -516,6 +517,12 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     /** 息屏时进入隐藏态，解锁不恢复。 */
     var hideOnLock by prefOption("hide_on_lock", false)
 
+    /** 长按主页标题恢复显示的总闸；时长由 [longPressMs] 控制。 */
+    var gestureLongPressEnabled by prefOption("hide_gesture_long_press", false)
+
+    /** 三击主页标题恢复显示的总闸；间隔由 [tripleTapMs] 控制。 */
+    var gestureTripleTapEnabled by prefOption("hide_gesture_triple_tap", false)
+
     /** 长按主页标题恢复显示：按住达到该时长（毫秒）即触发。 */
     var longPressMs by prefOption("hide_long_press_ms", 500)
 
@@ -564,15 +571,16 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
                 MotionEvent.ACTION_DOWN -> downTime = event.eventTime
 
                 MotionEvent.ACTION_UP -> {
-                    // A press held for longPressMs is a long press; anything shorter joins the
-                    // triple-tap count, measured against tripleTapMs. Both are read here rather
-                    // than captured at install time, so changing them in settings applies from
-                    // the next touch without restarting WeChat.
+                    // Each gesture has its own switch (they can be on together or alone); both the
+                    // switches and the durations are read here rather than captured at install
+                    // time, so changing them applies from the next touch without restarting WeChat.
+                    val heldMs = event.eventTime - downTime
                     when {
-                        event.eventTime - downTime >= longPressMs -> {
+                        heldMs >= longPressMs -> {
                             tapCount = 0
-                            showTemporarily(context)
+                            if (gestureLongPressEnabled) showTemporarily(context)
                         }
+                        !gestureTripleTapEnabled -> {}
                         else -> {
                             tapCount = if (event.eventTime - lastTapTime > tripleTapMs) 1 else tapCount + 1
                             lastTapTime = event.eventTime

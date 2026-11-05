@@ -48,6 +48,9 @@ private val FRIEND_ONLY_PROFILE_KEYS = listOf(
     "contact_profile_label",
     "contact_profile_phone",
     "contact_profile_desc",
+    // 资料页的朋友圈入口（ContactInfoUI.onPreferenceTreeClick，8.0.76 :8400）。它同样只在
+    // 好友的资料页上出现，隐藏它就挡住了从资料页进入对方朋友圈的通路。
+    "contact_info_sns",
 )
 
 /**

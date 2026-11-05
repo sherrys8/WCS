@@ -51,6 +51,13 @@ private fun HideContacts.installRecentForwardHook() {
         WeLogger.w(TAG, "最近转发 query wasn't resolved; that list stays unfiltered")
         return
     }
+    // 一次性确认解析落点：真机上「功能失效」既可能是过滤没命中，也可能是这条解析就没成功，
+    // 光看有没有 filtered 日志分不出来（2026-11-05 现场结论：静态链路全部核实无误）。
+    WeLogger.i(
+        TAG,
+        "最近转发 query resolved: " +
+            "${methodRecentForwardList.method.declaringClass.name}.${methodRecentForwardList.method.name}",
+    )
 
     methodRecentForwardList.hookAfter {
         if (isShowingAll) return@hookAfter
@@ -61,7 +68,7 @@ private fun HideContacts.installRecentForwardHook() {
         val kept = targets.filterNot { it is String && isHiddenNow(it) }
         if (kept.size == targets.size) return@hookAfter
 
-        WeLogger.d(TAG, "filtered ${targets.size - kept.size} hidden target(s) from 最近转发")
+        WeLogger.i(TAG, "filtered ${targets.size - kept.size} hidden target(s) from 最近转发")
         result = ArrayList(kept)
     }
 }

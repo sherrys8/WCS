@@ -101,6 +101,8 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                 var autoRejectInput by remember { mutableStateOf(autoRejectVoip) }
                 var hideOnLeaveInput by remember { mutableStateOf(hideOnLeave) }
                 var hideOnLockInput by remember { mutableStateOf(hideOnLock) }
+                var gestureLongPressInput by remember { mutableStateOf(gestureLongPressEnabled) }
+                var gestureTripleTapInput by remember { mutableStateOf(gestureTripleTapEnabled) }
                 var longPressMsInput by remember { mutableIntStateOf(longPressMs) }
                 var tripleTapMsInput by remember { mutableIntStateOf(tripleTapMs) }
 
@@ -140,18 +142,6 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                },
-                            )
-                        }
-                        item(key = "auto-reject") {
-                            SwitchWidget(
-                                iconPlaceholder = false,
-                                title = stringResource(R.string.contacts_hide_auto_reject),
-                                description = stringResource(R.string.contacts_hide_auto_reject_description),
-                                checked = autoRejectInput,
-                                onCheckedChange = {
-                                    autoRejectInput = it
-                                    autoRejectVoip = it
                                 },
                             )
                         }
@@ -197,6 +187,30 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                                 onCheckedChange = {
                                     hideOnLockInput = it
                                     hideOnLock = it
+                                },
+                            )
+                        }
+                        item(key = "gesture-long-press") {
+                            SwitchWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(R.string.contacts_hide_gesture_long_press),
+                                description = stringResource(R.string.contacts_hide_gesture_long_press_description),
+                                checked = gestureLongPressInput,
+                                onCheckedChange = {
+                                    gestureLongPressInput = it
+                                    gestureLongPressEnabled = it
+                                },
+                            )
+                        }
+                        item(key = "gesture-triple-tap") {
+                            SwitchWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(R.string.contacts_hide_gesture_triple_tap),
+                                description = stringResource(R.string.contacts_hide_gesture_triple_tap_description),
+                                checked = gestureTripleTapInput,
+                                onCheckedChange = {
+                                    gestureTripleTapInput = it
+                                    gestureTripleTapEnabled = it
                                 },
                             )
                         }
@@ -272,13 +286,37 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                         setSurfaceOn(surface, enabled)
                     }
 
-                    SurfaceGroup(
-                        stringResource(R.string.contacts_hide_group_calls),
-                        listOf(HideSurface.VOIP),
-                        surfaces,
-                    ) { surface, enabled ->
-                        surfaces = surfaces + (surface to enabled)
-                        setSurfaceOn(surface, enabled)
+                    // 通话 is a custom group rather than a SurfaceGroup: 自动拒绝 is a plain pref
+                    // (no HideSurface), but the two switches belong together because neither does
+                    // anything without the other.
+                    SegmentedColumn(
+                        title = stringResource(R.string.contacts_hide_group_calls),
+                        contentPadding = PaddingValues(0.dp),
+                    ) {
+                        item(key = HideSurface.VOIP.name) {
+                            SwitchWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(HideSurface.VOIP.titleRes),
+                                description = stringResource(HideSurface.VOIP.descRes),
+                                checked = surfaces.getValue(HideSurface.VOIP),
+                                onCheckedChange = {
+                                    surfaces = surfaces + (HideSurface.VOIP to it)
+                                    setSurfaceOn(HideSurface.VOIP, it)
+                                },
+                            )
+                        }
+                        item(key = "auto-reject") {
+                            SwitchWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(R.string.contacts_hide_auto_reject),
+                                description = stringResource(R.string.contacts_hide_auto_reject_description),
+                                checked = autoRejectInput,
+                                onCheckedChange = {
+                                    autoRejectInput = it
+                                    autoRejectVoip = it
+                                },
+                            )
+                        }
                     }
 
                     SurfaceGroup(

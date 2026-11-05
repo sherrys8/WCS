@@ -116,6 +116,14 @@ private fun HideContacts.installMomentsInlineEntryHook() {
         WeLogger.w(TAG, "failed to resolve username/replyUsername fields on the SNS entry class; moments inline hiding unavailable")
         return
     }
+    // 一次性确认两处反射都落到了预期位置：INLINE/GROUP_ICON 共用这个安装器，任何一处
+    // runCatching 失败都会整个静默不装，光看设备表现分不出「钩子没装上」和「钩子装了没命中」。
+    WeLogger.i(
+        TAG,
+        "moments inline hook installed: struct=${methodSnsInfoToSnsStruct.method.declaringClass.name}." +
+            "${methodSnsInfoToSnsStruct.method.name}, entry=${entryClass.name}, " +
+            "username=${usernameField.name}, replyUsername=${replyUsernameField.name}",
+    )
 
     // SnsObject (com.tencent.mm.protobuf.f) has no clone(); the only reliable way to duplicate one
     // is a full serialize + reparse round trip through the protobuf codec it already implements.

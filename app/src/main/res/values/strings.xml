@@ -3219,7 +3219,7 @@ Time: {time}</string>
     <string name="contacts_hide_configure">Configure hidden list</string>
     <string name="contacts_hide_configure_description">Tap to configure the contacts to hide</string>
     <string name="contacts_hide_auto_reject">Automatically reject audio and video calls</string>
-    <string name="contacts_hide_auto_reject_description">When off, incoming calls are hidden but ring for the caller until timeout; when on, rejection is sent immediately</string>
+    <string name="contacts_hide_auto_reject_description">Sends an immediate rejection instead of just hiding the call. Takes effect only together with the audio and video calls switch above; when that is off, nothing is hidden and calls behave normally.</string>
     <string name="contacts_hide_schedule">Scheduled show/hide</string>
     <string name="contacts_hide_schedule_description">Temporarily show or hide contacts on schedule without changing the hidden list</string>
     <string name="contacts_hide_surface_conversations">Conversations list</string>
@@ -3259,7 +3259,7 @@ Time: {time}</string>
     <string name="contacts_hide_surface_discover">Discover tab badge</string>
     <string name="contacts_hide_surface_discover_desc">Exclude new Moments from hidden contacts when computing the Discover tab red dot</string>
     <string name="contacts_hide_surface_voip">Audio and video calls</string>
-    <string name="contacts_hide_surface_voip_desc">Do not show incoming calls, call records or call banners from hidden contacts</string>
+    <string name="contacts_hide_surface_voip_desc">Do not show incoming calls, call records or call banners from hidden contacts. To also reject the call automatically, turn on Automatically reject audio and video calls as well — with that switch off the call is hidden only and keeps ringing on the caller side until timeout.</string>
     <string name="contacts_hide_surface_notifications">Message notifications</string>
     <string name="contacts_hide_surface_notifications_desc">Do not post system notifications for messages from hidden contacts</string>
     <string name="contacts_hide_surface_pat">Pats</string>
@@ -3274,9 +3274,9 @@ Time: {time}</string>
     <string name="contacts_hide_surface_block_profile">Block viewing profiles</string>
     <string name="contacts_hide_surface_block_profile_desc">Profile pages of hidden contacts close as soon as they open</string>
     <string name="contacts_hide_surface_profile_stranger">Simulate a stranger profile</string>
-    <string name="contacts_hide_surface_profile_stranger_desc">Profiles of hidden contacts look like those of people you have not added: friend-only rows disappear and Add to Contacts appears instead</string>
+    <string name="contacts_hide_surface_profile_stranger_desc">Profiles of hidden contacts look like those of people you have not added: friend-only rows disappear and Add to Contacts appears instead. Has no effect unless simulated non-friend is on.</string>
     <string name="contacts_hide_surface_block_friend_request">Intercept friend requests</string>
-    <string name="contacts_hide_surface_block_friend_request_desc">A request submitted from a simulated profile is acknowledged locally and never sent</string>
+    <string name="contacts_hide_surface_block_friend_request_desc">A request submitted from a simulated profile is acknowledged locally and never sent. Takes effect only when simulated non-friend is also on.</string>
     <string name="contacts_hide_not_a_friend">This contact is not in your contacts</string>
     <string name="contacts_hide_request_sent">Sent</string>
     <string name="contacts_hide_group_general">Hidden list</string>
@@ -3285,6 +3285,10 @@ Time: {time}</string>
     <string name="contacts_hide_on_leave_description">Switching to another app or pressing Home takes the hidden contacts out of the conversation list, so the recents card shows nothing. They stay hidden after you come back — long-press or triple-tap the home-screen title, send #show, or turn the feature off to show them again.</string>
     <string name="contacts_hide_on_lock">Hide when the screen turns off</string>
     <string name="contacts_hide_on_lock_description">Turning the screen off hides them and they stay hidden after unlock — long-press or triple-tap the home-screen title, send #show, or turn the feature off to show them again.</string>
+    <string name="contacts_hide_gesture_long_press">Long-press to reveal</string>
+    <string name="contacts_hide_gesture_long_press_description">Press and hold the home-screen title to show the hidden contacts again</string>
+    <string name="contacts_hide_gesture_triple_tap">Triple-tap to reveal</string>
+    <string name="contacts_hide_gesture_triple_tap_description">Tap the home-screen title three times quickly to show the hidden contacts again</string>
     <string name="contacts_hide_long_press_ms">Long-press duration</string>
     <string name="contacts_hide_long_press_ms_description">How long the title must be held to trigger the reveal</string>
     <string name="contacts_hide_triple_click_ms">Triple-tap interval</string>

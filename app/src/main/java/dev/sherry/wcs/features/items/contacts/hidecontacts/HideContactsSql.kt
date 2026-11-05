@@ -543,3 +543,34 @@ fun rewriteMomentsFeedSql(sql: String): String? {
     WeLogger.i(TAG, "hid ${hidden.size} contacts from moments feed: ${sql.take(80)}")
     return rewritten
 }
+
+/**
+ * 朋友圈 -> 消息列表（SnsMsgUI 的赞/评论互动记录）。
+ *
+ * 这条查询**不走** [WRAPPER_RULES] 覆盖的那套 wrapper：SnsMsgUI（`sns/ui/rm`）把
+ * `select *, rowid from SnsComment where isSend = 0 order by createTime desc LIMIT n` 交给
+ * SnsCommentStorage（`sns/storage/w1`），后者的 `s85.k0` 是 sns 专用装饰器 `sns/storage/p2`，
+ * `p2.B` 直接委托底层 `k0.B` —— 朋友圈库是 compat 通路（`ka5/z.B` 直连
+ * `wcdb.compat.SQLiteDatabase`），从不经过 `ka5.b0.g`。所以 [WRAPPER_RULES] 里的
+ * moments-comments 规则在这套库上永远不命中，消息列表一直不隐藏；真正每条都会路过、且两套
+ * 通路都覆盖的入口只有 [WeDatabaseListenerApi] 的 onQuery，因此挂在这里。
+ *
+ * 单行定位（`where talker = ?`，`sns/ui/xr`）跳过：那是宿主按人取记录，补 NOT IN 会把结果
+ * 读成空，不是显示列表。wrapper 规则先改写过的语句（`talker not in` 已在文本里）也放行，
+ * 避免同一查询被注入两次。
+ */
+fun rewriteMomentsCommentsSql(sql: String): String? {
+    if (HideContacts.isShowingAll) return null
+    if (!HideContacts.surfaceOn(HideSurface.MOMENTS)) return null
+
+    val hidden = HideContacts.hiddenContacts
+    if (hidden.isEmpty()) return null
+
+    val lower = sql.lowercase()
+    if (!lower.contains("from snscomment")) return null
+    if (lower.contains("talker not in")) return null
+    if (Regex("""talker\s*=\s*[?']""").containsMatchIn(lower)) return null
+
+    WeLogger.i(TAG, "hid ${hidden.size} contacts from moments messages: ${sql.take(80)}")
+    return injectCondition(sql, "talker NOT IN (${hidden.toSqlList()})")
+}
