@@ -21,6 +21,7 @@ import dev.ujhhgtg.reflekt.utils.isSubclassOf
 import dev.sherry.wcs.dexkit.abc.IResolveDex
 import dev.sherry.wcs.dexkit.dsl.data
 import dev.sherry.wcs.dexkit.dsl.dexClass
+import dev.sherry.wcs.dexkit.dsl.dexConstructor
 import dev.sherry.wcs.dexkit.dsl.dexMethod
 import dev.sherry.wcs.features.api.core.WeConversationApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
