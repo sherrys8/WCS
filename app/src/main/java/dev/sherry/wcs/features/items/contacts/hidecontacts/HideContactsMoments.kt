@@ -262,13 +262,13 @@ private fun stripSnsObject(
     val clone = SnsObject().also { parseFromMethod.invoke(it, original.toByteArray()) }
 
     if (hasHiddenLike) {
-        val filtered = LinkedList((clone.LikeUserList as List<*>).filterNotNull().filterNot(::isEntryHidden))
+        val filtered = LinkedList((clone.LikeUserList as List<*>).filterNotNull().filterNot(isEntryHidden))
         clone.LikeUserList = filtered
         clone.LikeUserListCount = filtered.size
         clone.LikeCount = filtered.size
     }
     if (hasHiddenComment) {
-        val filtered = LinkedList((clone.CommentUserList as List<*>).filterNotNull().filterNot(::isEntryHidden))
+        val filtered = LinkedList((clone.CommentUserList as List<*>).filterNotNull().filterNot(isEntryHidden))
         clone.CommentUserList = filtered
         clone.CommentUserListCount = filtered.size
         clone.CommentCount = filtered.size
