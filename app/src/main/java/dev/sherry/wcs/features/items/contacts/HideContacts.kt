@@ -1051,6 +1051,23 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     }
 
     /**
+     * `SnsCommentDetailUI.onSceneEnd(int, int, String, m1)` — 详情页数据就绪回调，网络/本地读取
+     * 完成后把 `s5.f(...)` 新解析的 `SnsObject.CommentUserList`/`LikeUserList` 重新赋给 adapter 的
+     * `f197164d`/`f197165e`（mark 串 "setListInfo"）。构造器只在一处 initView 调用，这层赋值会
+     * **覆盖**构造器入口的过滤 —— 这就是详情页评论过滤命中却仍可见的真因。在它之后补一层过滤，
+     * 与构造器入口共用同一个过滤体，两处赋值点都被堵住。
+     *
+     * 匹配：`setListInfo` + `onScene objectDetail type:%s, isRequestDetail:%s` 两个 mark 串的
+     * 交集全 dex 只落在 onSceneEnd。allowFailure = true：详情页评论是 opt-in 面，解析失败只让
+     * 这一层缺失、构造器那层兜底仍在。
+     */
+    val methodSnsDetailOnSceneEnd by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings("setListInfo", "onScene objectDetail type:%s, isRequestDetail:%s")
+        }
+    }
+
+    /**
      * `SnsCommentDetailUI.W7(SnsObject, SnsInfo) void`（反射名 "setGroupIcon"）— 详情页分组
      * 图标的唯一可见性入口：内部用 fb4.e1.e/c/g("checkEnableShowGroupIconBySnsObject" 家族)
      * 判定后直接 setVisibility。与 feed 侧的 X0 不同，这里取消整个方法就是干净的视图层隐藏

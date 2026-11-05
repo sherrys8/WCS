@@ -376,9 +376,11 @@ private fun HideContacts.installMomentsGroupBadgeHook() {
         result = false
     }
 
-    // 详情页的分组图标：W7（"setGroupIcon"）内部走 fb4.e1.e/c/g 判定后 setVisibility。
-    // 详情页的 SnsObject 来自 s5.f 的新解析、与 feed 缓存不是同一份，stripSnsObject 清不到它。
-    // 直接取消整个 W7 调用 —— 图标默认 GONE，取消后保持隐藏，与视图层隐藏等价。
+    // 详情页的分组图标：W7（"setGroupIcon"）内部判定「当前用户是作者 && 分组可见」才
+    // setVisibility(0)+setOnClickListener，否则 setVisibility(8)。取消整个调用会让图标停在
+    // 布局默认态（可见），且没注册点击 —— 用户看到的就是「图标可见但点不动」。所以这里改成
+    // 把 args[0]（SnsObject）换成 Username 清空的克隆，让 W7 自己走到 else 分支 setVisibility(8)，
+    // 图标真正 GONE，且不动 s5.f 的缓存原对象。
     if (methodSnsDetailSetGroupIcon.isPlaceholder) {
         WeLogger.w(TAG, "detail setGroupIcon wasn't resolved; detail group badge stays unfiltered")
         return
@@ -388,6 +390,7 @@ private fun HideContacts.installMomentsGroupBadgeHook() {
         "detail setGroupIcon resolved: ${methodSnsDetailSetGroupIcon.method.declaringClass.name}." +
             "${methodSnsDetailSetGroupIcon.method.name}",
     )
+    val groupCtx = resolveMomentsEntryContext()
     methodSnsDetailSetGroupIcon.hookBefore {
         if (!detailGroupIconProbed) {
             detailGroupIconProbed = true
@@ -395,7 +398,13 @@ private fun HideContacts.installMomentsGroupBadgeHook() {
         }
         if (isShowingAll) return@hookBefore
         if (!surfaceOn(HideSurface.GROUP_ICON)) return@hookBefore
-        result = null
+        val sns = args.getOrNull(0) as? SnsObject ?: return@hookBefore
+        if (sns.Username == null) return@hookBefore
+        val parseFrom = groupCtx?.parseFrom ?: return@hookBefore
+        val clone = runCatching { SnsObject().also { c -> parseFrom.invoke(c, sns.toByteArray()) } }.getOrNull()
+            ?: return@hookBefore
+        clone.Username = null
+        args[0] = clone
     }
 }
 
@@ -454,6 +463,56 @@ private fun HideContacts.installMomentsDetailHook(ctx: MomentsEntryContext) {
             filteredEntryCopy(likes, ctx)?.let { (copy, dropped) ->
                 WeLogger.i(TAG, "hid $dropped hidden like(s) in the moments detail list")
                 args[2] = copy
+            }
+        }
+    }
+
+    // 详情页数据就绪回调 onSceneEnd 会在构造器之后，把 s5.f 新解析 SnsObject 的 CommentUserList/
+    // LikeUserList 重新赋给 adapter 的 f197164d/f197165e（mark "setListInfo"），覆盖构造器入口的
+    // 过滤 —— 这是评论过滤命中却仍可见的真因。在这里 hookAfter 再补一层：把 adapter 的两个列表
+    // 字段换成过滤后的副本（只换引用、不动 s5.f 缓存原列表，q2 写回安全）。
+    if (methodSnsDetailOnSceneEnd.isPlaceholder) {
+        WeLogger.w(TAG, "detail onSceneEnd wasn't resolved; comment list re-filter unavailable (ctor filter still applies)")
+        return
+    }
+    WeLogger.i(
+        TAG,
+        "detail onSceneEnd resolved: ${methodSnsDetailOnSceneEnd.method.declaringClass.name}." +
+            "${methodSnsDetailOnSceneEnd.method.name}",
+    )
+    methodSnsDetailOnSceneEnd.hookAfter {
+        if (isShowingAll) return@hookAfter
+        if (!surfaceOn(HideSurface.MOMENTS_INLINE) || hiddenContacts.isEmpty()) return@hookAfter
+        val ui = thisObject ?: return@hookAfter
+        // SnsCommentDetailUI.f196992v 是 CommentListAdapter 实例；字段名混淆每版漂，按「值类型名
+        // 含 CommentListAdapter」认字段（该内部类名在 plugin.sns.ui 包是保留的、不混淆），不钉名字。
+        // adapter 上的两个 LinkedList 字段按声明序是 [comments, likes]（构造器
+        // <init>(UI, comments, likes, Activity, String) 的顺序）。
+        val adapter = runCatching {
+            ui.javaClass.reflekt().fields { type { it.name.contains("CommentListAdapter") } }
+                .map { it.self.makeAccessible() }
+                .firstOrNull()?.get(ui)
+        }.getOrNull() ?: return@hookAfter
+        val listFields = runCatching {
+            adapter.javaClass.reflekt().fields { type = LinkedList::class.java }
+                .map { it.self.makeAccessible() }
+        }.getOrNull() ?: return@hookAfter
+        val commentsField = listFields.getOrNull(0) ?: return@hookAfter
+        val likesField = listFields.getOrNull(1)
+        val comments = runCatching { commentsField.get(adapter) as? List<*> }.getOrNull()
+        if (comments != null) {
+            filteredEntryCopy(comments, ctx)?.let { (copy, dropped) ->
+                WeLogger.i(TAG, "hid $dropped hidden comment(s) in the moments detail list (onSceneEnd)")
+                commentsField.set(adapter, copy)
+            }
+        }
+        if (likesField != null) {
+            val likes = runCatching { likesField.get(adapter) as? List<*> }.getOrNull()
+            if (likes != null) {
+                filteredEntryCopy(likes, ctx)?.let { (copy, dropped) ->
+                    WeLogger.i(TAG, "hid $dropped hidden like(s) in the moments detail list (onSceneEnd)")
+                    likesField.set(adapter, copy)
+                }
             }
         }
     }
