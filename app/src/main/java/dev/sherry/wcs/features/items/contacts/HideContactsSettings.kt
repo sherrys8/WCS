@@ -202,22 +202,24 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                                 },
                             )
                         }
-                        item(key = "long-press-ms") {
-                            BaseItemContainer {
-                                IntNumberPickerWidget(
-                                    title = stringResource(R.string.contacts_hide_long_press_ms),
-                                    description = stringResource(R.string.contacts_hide_long_press_ms_description),
-                                    enabled = gestureLongPressInput,
-                                    value = longPressMsInput,
-                                    startInt = 200,
-                                    endInt = 2000,
-                                    stepSize = 50,
-                                    valueSuffix = "ms",
-                                    onValueChange = {
-                                        longPressMsInput = it
-                                        longPressMs = it
-                                    },
-                                )
+                        // 时长条跟着各自的手势开关显隐（用户定：关闭开关 = 整行不显示，不是置灰）。
+                        if (gestureLongPressInput) {
+                            item(key = "long-press-ms") {
+                                BaseItemContainer {
+                                    IntNumberPickerWidget(
+                                        title = stringResource(R.string.contacts_hide_long_press_ms),
+                                        description = stringResource(R.string.contacts_hide_long_press_ms_description),
+                                        value = longPressMsInput,
+                                        startInt = 200,
+                                        endInt = 2000,
+                                        stepSize = 50,
+                                        valueSuffix = "ms",
+                                        onValueChange = {
+                                            longPressMsInput = it
+                                            longPressMs = it
+                                        },
+                                    )
+                                }
                             }
                         }
                         item(key = "gesture-triple-tap") {
@@ -232,22 +234,23 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                                 },
                             )
                         }
-                        item(key = "triple-tap-ms") {
-                            BaseItemContainer {
-                                IntNumberPickerWidget(
-                                    title = stringResource(R.string.contacts_hide_triple_click_ms),
-                                    description = stringResource(R.string.contacts_hide_triple_click_ms_description),
-                                    enabled = gestureTripleTapInput,
-                                    value = tripleTapMsInput,
-                                    startInt = 200,
-                                    endInt = 1500,
-                                    stepSize = 50,
-                                    valueSuffix = "ms",
-                                    onValueChange = {
-                                        tripleTapMsInput = it
-                                        tripleTapMs = it
-                                    },
-                                )
+                        if (gestureTripleTapInput) {
+                            item(key = "triple-tap-ms") {
+                                BaseItemContainer {
+                                    IntNumberPickerWidget(
+                                        title = stringResource(R.string.contacts_hide_triple_click_ms),
+                                        description = stringResource(R.string.contacts_hide_triple_click_ms_description),
+                                        value = tripleTapMsInput,
+                                        startInt = 200,
+                                        endInt = 1500,
+                                        stepSize = 50,
+                                        valueSuffix = "ms",
+                                        onValueChange = {
+                                            tripleTapMsInput = it
+                                            tripleTapMs = it
+                                        },
+                                    )
+                                }
                             }
                         }
                     }

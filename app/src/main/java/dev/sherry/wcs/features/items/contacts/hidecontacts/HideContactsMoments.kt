@@ -7,6 +7,7 @@ import dev.ujhhgtg.reflekt.utils.makeAccessible
 import dev.sherry.wcs.features.items.contacts.HideContacts
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.reflection.BString
+import java.lang.reflect.Method
 import java.util.LinkedList
 
 private const val TAG = "HideContacts.Moments"
@@ -19,6 +20,9 @@ private var groupProbeLogged = false
  * 「钩子没挂上」。这句打在所有门禁之前，下一轮真机日志一看便知（2026-11-05 现场遗留）。
  */
 private var d0ProbeLogged = false
+
+/** Improve 路径入口探测只记一次，理由同 [d0ProbeLogged]。 */
+private var improveProbeLogged = false
 
 /** Every Moments-side surface a hidden contact can leak through. */
 fun HideContacts.installMomentsHooks() {
@@ -92,11 +96,15 @@ private fun HideContacts.installMomentsRedDotHook() {
  * them. WeChat instead serializes them straight into the post's own protobuf blob:
  * `SnsInfo.attrBuf` -> `SnsObject.LikeUserList` / `CommentUserList` (`a65.ha6` entries).
  *
- * `fb4.z0.D0` ("SnsUtil.snsInfoToSnsStruct") is the single chokepoint that turns that raw
- * `SnsObject` into the UI-facing `dt` struct, for both Moments renderers that exist in 8.0.76 (the
- * classic feed item and the "improve" recycler feed — see the two call sites, `vc4/g0.java:76` and
- * `.../ui/improve/component/f2.java:765`). Filtering there means every renderer downstream already
- * gets a clean object.
+ * `fb4.z0.D0` ("SnsUtil.snsInfoToSnsStruct") 是经典渲染链把原始 `SnsObject` 转成 UI 结构 `dt`
+ * 的唯一汇点。但 2026-11-05 真机探测显示这条链在用户的机器上零命中 —— 实际渲染走的是 Improve
+ * 链：`f2.getItem -> ImproveDataUIC.d7 -> ce4.b.n()` 拿到 `ImproveSnsInfo`，各渲染组件（赞/评
+ * 的 `ImproveInteractionLayout` 等）经 `ImproveSnsInfo.d1()`（"getSnsObject"）直接读缓存的
+ * `SnsObject`。所以两条链都要堵：D0 在入口前换参，d1 在出口后换返回值，共用下面的
+ * [stripSnsObject]。
+ *
+ * d1 的 6 个调用方全部是 UI 读侧（ae4/b、ae4/d、ImproveRecyclerView、wd4 的 measure/build 等），
+ * 没有任何写路径经过它 —— 替换返回值不会污染缓存原对象，也不会影响之后的点赞/评论写回。
  */
 private fun HideContacts.installMomentsInlineEntryHook() {
     // `a65.ha6`'s own field names are obfuscated and drift across versions, and the class name
@@ -165,77 +173,124 @@ private fun HideContacts.installMomentsInlineEntryHook() {
         if (!inlineOn && !iconOn) return@hookBefore
 
         val original = args.getOrNull(1) as? SnsObject ?: return@hookBefore
-
-        val likeList = original.LikeUserList as? List<*>
-        val commentList = original.CommentUserList as? List<*>
-        val hasHiddenLike = inlineOn && likeList?.any { it != null && isEntryHidden(it) } == true
-        val hasHiddenComment = inlineOn && commentList?.any { it != null && isEntryHidden(it) } == true
-
-        // 分组可见标记。SnsObject 的分组字段每版重命名，所以按「名字里含 group」探测，不钉名字。
-        val groupFields = if (iconOn) {
-            original.reflekt().fields { name { it.contains("group", ignoreCase = true) } }
-                .map { it.self.makeAccessible() }
-        } else {
-            emptyList()
-        }
-        // 探测结果只报一次：这一句跑在每条动态的渲染上，但「一个字段都没搜到」和「搜到了却没标记」
-        // 是两种完全不同的修法，光看有没有 stripped 日志分不出来。
-        if (iconOn && !groupProbeLogged) {
-            groupProbeLogged = true
-            WeLogger.i(
-                TAG,
-                "group field probe on ${original.javaClass.name}: " +
-                    (if (groupFields.isEmpty()) "none" else groupFields.joinToString { "${it.name}:${it.type.simpleName}" }),
-            )
-        }
-        val hasGroupMark = groupFields.any { field ->
-            when (val value = runCatching { field.get(original) }.getOrNull()) {
-                null -> false
-                is String -> value.isNotEmpty()
-                is Number -> value.toInt() != 0
-                else -> false
-            }
-        }
-        if (!hasHiddenLike && !hasHiddenComment && !hasGroupMark) return@hookBefore
-
-        // MUST operate on a clone, never on `original` directly: SnsInfoStorageLogic.e (s5.e in
-        // the decompile) caches the parsed SnsObject keyed by a content hash and hands back that
-        // SAME instance on every later render of this post. Stripping entries in place would
-        // permanently truncate the cached object; the next time anyone (dis)likes or comments and
-        // this object is re-serialized back into SnsInfo.attrBuf, the entries we removed here would
-        // be gone from what gets persisted, not just from what gets displayed.
-        val clone = SnsObject().also { parseFromMethod.invoke(it, original.toByteArray()) }
-
-        if (hasHiddenLike) {
-            val filtered = LinkedList((clone.LikeUserList as List<*>).filterNotNull().filterNot(::isEntryHidden))
-            clone.LikeUserList = filtered
-            clone.LikeUserListCount = filtered.size
-            clone.LikeCount = filtered.size
-        }
-        if (hasHiddenComment) {
-            val filtered = LinkedList((clone.CommentUserList as List<*>).filterNotNull().filterNot(::isEntryHidden))
-            clone.CommentUserList = filtered
-            clone.CommentUserListCount = filtered.size
-            clone.CommentCount = filtered.size
-        }
-        if (hasHiddenLike || hasHiddenComment) {
-            WeLogger.d(
-                TAG,
-                "hid hidden-contact entries under a moments post (likes ${likeList?.size ?: 0}->${clone.LikeUserList?.size ?: 0}, " +
-                    "comments ${commentList?.size ?: 0}->${clone.CommentUserList?.size ?: 0})",
-            )
-        }
-        if (hasGroupMark) {
-            // 只抹本机渲染出来的这一份克隆：服务端的可见范围完全不动，刷新/别人看还是原样。
-            groupFields.forEach { field ->
-                when (field.type) {
-                    BString -> field.set(clone, "")
-                    Int::class.javaPrimitiveType, Int::class.java -> field.setInt(clone, 0)
-                    else -> {}
-                }
-            }
-        }
-        if (hasGroupMark) WeLogger.d(TAG, "stripped a moments post's group-visibility marker")
-        args[1] = clone
+        val stripped = stripSnsObject(original, parseFromMethod, inlineOn, iconOn, ::isEntryHidden) ?: return@hookBefore
+        args[1] = stripped
     }
+
+    // Improve 渲染链（8.0.76 实测主路径）：ImproveSnsInfo.d1() 是 UI 读侧拿 SnsObject 的汇点，
+    // 在返回值上换过滤后的克隆，门禁与 D0 钩子完全一致。
+    if (methodImproveSnsInfoGetSnsObject.isPlaceholder) {
+        WeLogger.w(TAG, "improve getSnsObject wasn't resolved; improve feed stays unfiltered")
+        return
+    }
+    WeLogger.i(
+        TAG,
+        "improve getSnsObject resolved: ${methodImproveSnsInfoGetSnsObject.method.declaringClass.name}." +
+            "${methodImproveSnsInfoGetSnsObject.method.name}",
+    )
+    methodImproveSnsInfoGetSnsObject.hookAfter {
+        if (!improveProbeLogged) {
+            improveProbeLogged = true
+            WeLogger.i(TAG, "improve getSnsObject first call, result=${result?.javaClass?.name ?: "null"}")
+        }
+        if (isShowingAll) return@hookAfter
+        val inlineOn = surfaceOn(HideSurface.MOMENTS_INLINE) && hiddenContacts.isNotEmpty()
+        val iconOn = surfaceOn(HideSurface.GROUP_ICON)
+        if (!inlineOn && !iconOn) return@hookAfter
+
+        val original = result as? SnsObject ?: return@hookAfter
+        val stripped = stripSnsObject(original, parseFromMethod, inlineOn, iconOn, ::isEntryHidden) ?: return@hookAfter
+        result = stripped
+    }
+}
+
+/**
+ * D0 钩子与 Improve d1 钩子共用的过滤体：把 [original] 过滤成一份干净的克隆，
+ * 没有可过滤内容时返回 null（调用方保持原值不动）。
+ *
+ * 赞/评过滤由 [inlineOn] 门控，分组标记由 [iconOn] 门控；[isEntryHidden] 是
+ * 已解析好的入口字段闭包（两条链共用同一入口类）。
+ */
+private fun stripSnsObject(
+    original: SnsObject,
+    parseFromMethod: Method,
+    inlineOn: Boolean,
+    iconOn: Boolean,
+    isEntryHidden: (Any) -> Boolean,
+): SnsObject? {
+    val likeList = original.LikeUserList as? List<*>
+    val commentList = original.CommentUserList as? List<*>
+    val hasHiddenLike = inlineOn && likeList?.any { it != null && isEntryHidden(it) } == true
+    val hasHiddenComment = inlineOn && commentList?.any { it != null && isEntryHidden(it) } == true
+
+    // 分组可见标记。SnsObject 的分组字段每版重命名，所以按「名字里含 group」探测，不钉名字。
+    val groupFields = if (iconOn) {
+        original.reflekt().fields { name { it.contains("group", ignoreCase = true) } }
+            .map { it.self.makeAccessible() }
+    } else {
+        emptyList()
+    }
+    // 探测结果只报一次：这一句跑在每条动态的渲染上，但「一个字段都没搜到」和「搜到了却没标记」
+    // 是两种完全不同的修法，光看有没有 stripped 日志分不出来。
+    if (iconOn && !groupProbeLogged) {
+        groupProbeLogged = true
+        WeLogger.i(
+            TAG,
+            "group field probe on ${original.javaClass.name}: " +
+                (if (groupFields.isEmpty()) "none" else groupFields.joinToString { "${it.name}:${it.type.simpleName}" }),
+        )
+    }
+    val hasGroupMark = groupFields.any { field ->
+        when (val value = runCatching { field.get(original) }.getOrNull()) {
+            null -> false
+            is String -> value.isNotEmpty()
+            is Number -> value.toInt() != 0
+            // GroupList/GroupUser/GroupContactTagIdList 是 LinkedList：非空即有分组标记，
+            // 上一轮只查了 String/Int，列表型字段全部漏判 —— 这是分组图标一直显示的原因之一。
+            is Collection<*> -> value.isNotEmpty()
+            else -> false
+        }
+    }
+    if (!hasHiddenLike && !hasHiddenComment && !hasGroupMark) return null
+
+    // MUST operate on a clone, never on `original` directly: SnsInfoStorageLogic.e (s5.e in
+    // the decompile) caches the parsed SnsObject keyed by a content hash and hands back that
+    // SAME instance on every later render of this post. Stripping entries in place would
+    // permanently truncate the cached object; the next time anyone (dis)likes or comments and
+    // this object is re-serialized back into SnsInfo.attrBuf, the entries we removed here would
+    // be gone from what gets persisted, not just from what gets displayed.
+    val clone = SnsObject().also { parseFromMethod.invoke(it, original.toByteArray()) }
+
+    if (hasHiddenLike) {
+        val filtered = LinkedList((clone.LikeUserList as List<*>).filterNotNull().filterNot(::isEntryHidden))
+        clone.LikeUserList = filtered
+        clone.LikeUserListCount = filtered.size
+        clone.LikeCount = filtered.size
+    }
+    if (hasHiddenComment) {
+        val filtered = LinkedList((clone.CommentUserList as List<*>).filterNotNull().filterNot(::isEntryHidden))
+        clone.CommentUserList = filtered
+        clone.CommentUserListCount = filtered.size
+        clone.CommentCount = filtered.size
+    }
+    if (hasHiddenLike || hasHiddenComment) {
+        WeLogger.d(
+            TAG,
+            "hid hidden-contact entries under a moments post (likes ${likeList?.size ?: 0}->${clone.LikeUserList?.size ?: 0}, " +
+                "comments ${commentList?.size ?: 0}->${clone.CommentUserList?.size ?: 0})",
+        )
+    }
+    if (hasGroupMark) {
+        // 只抹本机渲染出来的这一份克隆：服务端的可见范围完全不动，刷新/别人看还是原样。
+        groupFields.forEach { field ->
+            when (field.type) {
+                BString -> field.set(clone, "")
+                Int::class.javaPrimitiveType, Int::class.java -> field.setInt(clone, 0)
+                // LinkedList 等集合型分组字段：清空列表即可抹掉标记。
+                else -> (field.get(clone) as? MutableCollection<*>)?.clear()
+            }
+        }
+        WeLogger.d(TAG, "stripped a moments post's group-visibility marker")
+    }
+    return clone
 }

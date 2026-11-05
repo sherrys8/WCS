@@ -992,6 +992,31 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     }
 
     /**
+     * `ae4.p.d1()` — `ImproveSnsInfo.getSnsObject`（8.0.76 上的实名 `d1`，懒加载包装）。
+     *
+     * 8.0.76 的 Improve 朋友圈渲染链不走 [methodSnsInfoToSnsStruct]（真机探测零命中），而是
+     * `f2.getItem -> ImproveDataUIC.d7 -> ce4.b.n()` 取出 `ImproveSnsInfo` 后，各渲染组件经
+     * 它的 `d1()` 直接读缓存的 `SnsObject`（`SnsInfoStorageLogic.getMergeSnsObject` 合并结果）。
+     * 该方法只有 6 个调用方、全部是 UI 读侧，没有写路径经过它 —— 在这里替换成过滤后的克隆，
+     * 与 D0 钩子的「只改本机渲染、不动服务端」是同一个安全边界。见 hidecontacts/HideContactsMoments.kt。
+     *
+     * 匹配：两个 mark 字符串的交集只有这一个方法（`s5.e` 只有 getMergeSnsObject 没有
+     * getSnsObject），再加返回类型与零参兜底。`allowFailure = true`：这是新上的 opt-in 面，
+     * 解析失败只该让这一面静默缺失，不该拖垮整个特性。
+     */
+    val methodImproveSnsInfoGetSnsObject by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings(
+                "getSnsObject",
+                "getMergeSnsObject",
+                "com.tencent.mm.plugin.sns.ui.improve.model.ImproveSnsInfo",
+            )
+            paramCount = 0
+            returnType("com.tencent.mm.protocal.protobuf.SnsObject")
+        }
+    }
+
+    /**
      * `static void c3.H(c3 netSceneSnsSync, SnsObject snsObject)` (8.0.76; the same method is
      * `c3.I` on 8.0.69) — `NetSceneSnsSync`'s inlined `updateSyncDataCache`, the single writer of
      * the 发现 tab's "N 位朋友的新动态" state. See hidecontacts/HideContactsMoments.kt.

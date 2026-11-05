@@ -10,6 +10,9 @@ import dev.sherry.wcs.utils.WeLogger
 
 private const val TAG = "HideContacts.Extra"
 
+/** 每条游标查询的钩体只报一次现场（列名/行数/游标类），用于分辨「钩体没进」和「进了没删成」。 */
+private val cursorHookProbed = mutableSetOf<String>()
+
 /**
  * The three hiding surfaces that neither SQL nor an adapter-input filter can reach.
  *
@@ -112,7 +115,7 @@ private fun HideContacts.installRecentConversationCursorHook() {
         },
     )
 
-    hooks.forEach { (_, delegate) ->
+    hooks.forEach { (label, delegate) ->
         delegate.hookAfter {
             if (isShowingAll) return@hookAfter
             if (!surfaceOn(HideSurface.RECENT_FORWARD)) return@hookAfter
@@ -120,6 +123,16 @@ private fun HideContacts.installRecentConversationCursorHook() {
 
             val cursor = result as? Cursor ?: return@hookAfter
             val usernameIdx = cursor.getColumnIndex("username")
+            // 2026-11-05 第五轮：两条游标钩都解析成功、门禁也过（同进程里名单过滤在打日志），
+            // 但整个测试期零 dropped 而「最近聊天」仍漏 —— 用一次性现场分辨三种情况：
+            // 钩体没进（这句缺失）/ username 列没拿到（usernameIdx=-1）/ 进了但没匹配上（看列名）。
+            if (cursorHookProbed.add(label)) {
+                WeLogger.i(
+                    TAG,
+                    "recent-conversation cursor first body ($label): cursor=${cursor.javaClass.name}, " +
+                        "rows=${cursor.count}, usernameIdx=$usernameIdx, columns=[${cursor.columnNames.joinToString()}]",
+                )
+            }
             if (usernameIdx < 0) return@hookAfter
 
             val names = cursor.columnNames
