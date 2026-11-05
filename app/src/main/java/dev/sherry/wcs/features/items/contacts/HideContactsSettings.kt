@@ -11,7 +11,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -29,9 +28,7 @@ import dev.sherry.wcs.features.items.contacts.hidecontacts.surfaceOn
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.ContactsSelector
 import dev.sherry.wcs.ui.content.TextButton
-import dev.sherry.wcs.ui.content.m3.BaseItemContainer
 import dev.sherry.wcs.ui.content.m3.BaseWidget
-import dev.sherry.wcs.ui.content.m3.IntNumberPickerWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
 import dev.sherry.wcs.ui.utils.showComposeDialog
@@ -99,10 +96,8 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
             text = {
                 var surfaces by remember { mutableStateOf(HideSurface.entries.associateWith { surfaceOn(it) }) }
                 var autoRejectInput by remember { mutableStateOf(autoRejectVoip) }
-                var longPressInput by remember { mutableStateOf(longPressTitle) }
-                var longPressMsInput by remember { mutableIntStateOf(longPressMs) }
-                var tripleClickInput by remember { mutableStateOf(tripleClickTitle) }
-                var tripleTapMsInput by remember { mutableIntStateOf(tripleTapMs) }
+                var hideOnLeaveInput by remember { mutableStateOf(hideOnLeave) }
+                var hideOnLockInput by remember { mutableStateOf(hideOnLock) }
 
                 Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
                     SegmentedColumn(
@@ -173,66 +168,32 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                     }
 
                     SegmentedColumn(
-                        title = stringResource(R.string.contacts_hide_group_gestures),
+                        title = stringResource(R.string.contacts_hide_group_timing),
                         contentPadding = PaddingValues(0.dp),
                     ) {
-                        item(key = "long-press") {
+                        item(key = "hide-on-leave") {
                             SwitchWidget(
                                 iconPlaceholder = false,
-                                title = stringResource(R.string.contacts_hide_long_press),
-                                description = stringResource(R.string.contacts_hide_long_press_description),
-                                checked = longPressInput,
+                                title = stringResource(R.string.contacts_hide_on_leave),
+                                description = stringResource(R.string.contacts_hide_on_leave_description),
+                                checked = hideOnLeaveInput,
                                 onCheckedChange = {
-                                    longPressInput = it
-                                    longPressTitle = it
+                                    hideOnLeaveInput = it
+                                    hideOnLeave = it
                                 },
                             )
                         }
-                        item(key = "long-press-ms", animatedVisibility = longPressInput) {
-                            BaseItemContainer {
-                                IntNumberPickerWidget(
-                                    title = stringResource(R.string.contacts_hide_long_press_ms),
-                                    description = stringResource(R.string.contacts_hide_long_press_ms_description),
-                                    value = longPressMsInput,
-                                    startInt = 200,
-                                    endInt = 2000,
-                                    stepSize = 50,
-                                    valueSuffix = "ms",
-                                    onValueChange = {
-                                        longPressMsInput = it
-                                        longPressMs = it
-                                    },
-                                )
-                            }
-                        }
-                        item(key = "triple-tap") {
+                        item(key = "hide-on-lock") {
                             SwitchWidget(
                                 iconPlaceholder = false,
-                                title = stringResource(R.string.contacts_hide_triple_click),
-                                description = stringResource(R.string.contacts_hide_triple_click_description),
-                                checked = tripleClickInput,
+                                title = stringResource(R.string.contacts_hide_on_lock),
+                                description = stringResource(R.string.contacts_hide_on_lock_description),
+                                checked = hideOnLockInput,
                                 onCheckedChange = {
-                                    tripleClickInput = it
-                                    tripleClickTitle = it
+                                    hideOnLockInput = it
+                                    hideOnLock = it
                                 },
                             )
-                        }
-                        item(key = "triple-tap-ms", animatedVisibility = tripleClickInput) {
-                            BaseItemContainer {
-                                IntNumberPickerWidget(
-                                    title = stringResource(R.string.contacts_hide_triple_click_ms),
-                                    description = stringResource(R.string.contacts_hide_triple_click_ms_description),
-                                    value = tripleTapMsInput,
-                                    startInt = 200,
-                                    endInt = 1500,
-                                    stepSize = 50,
-                                    valueSuffix = "ms",
-                                    onValueChange = {
-                                        tripleTapMsInput = it
-                                        tripleTapMs = it
-                                    },
-                                )
-                            }
                         }
                     }
 

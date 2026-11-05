@@ -217,7 +217,7 @@ private fun logUnmatchedContactQuery(sql: String) {
 
 /** Returns the rewritten SQL, or null to leave the query untouched. */
 private fun rewriteWrapperSql(sql: String): String? {
-    if (HideContacts.isTemporarilyShown) return null
+    if (HideContacts.isShowingAll) return null
     val hidden = HideContacts.hiddenContacts
     if (hidden.isEmpty()) return null
 
@@ -417,7 +417,7 @@ private const val CHATROOM_MEMBERS_CROSS_JOIN = "FROM FTS5ChatRoomMembers, "
  * 和 `installLabelMemberHooks`。下面这些规则留着覆盖的是「改写本身无害」的那几类只读投影。
  */
 fun rewriteFtsSql(sql: String): String? {
-    if (HideContacts.isTemporarilyShown) return null
+    if (HideContacts.isShowingAll) return null
     if (!HideContacts.surfaceOn(HideSurface.SEARCH)) return null
 
     // An empty set would render `aux_index NOT IN ()` — a SQLite syntax error that breaks ALL
@@ -502,7 +502,7 @@ private val ALREADY_INJECTED_SNS =
 
 /** Called from `HideContacts.onQuery`; returns null to leave the query untouched. */
 fun rewriteMomentsFeedSql(sql: String): String? {
-    if (HideContacts.isTemporarilyShown) return null
+    if (HideContacts.isShowingAll) return null
     if (!HideContacts.surfaceOn(HideSurface.MOMENTS)) return null
 
     val hidden = HideContacts.hiddenContacts

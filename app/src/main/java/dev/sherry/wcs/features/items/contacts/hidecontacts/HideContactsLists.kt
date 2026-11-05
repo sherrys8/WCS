@@ -111,7 +111,7 @@ private fun HideContacts.hookMvvmListPreprocess(
     }
 
     target.hookBefore {
-        if (isTemporarilyShown) return@hookBefore
+        if (isShowingAll) return@hookBefore
         if (!surfaceOn(surface)) return@hookBefore
 
         val contacts = args[0] as? List<*> ?: return@hookBefore
@@ -189,7 +189,7 @@ private fun HideContacts.installContactCountHook() {
     }
 
     methodNormalContactCount.hookAfter {
-        if (isTemporarilyShown) return@hookAfter
+        if (isShowingAll) return@hookAfter
         if (!surfaceOn(HideSurface.CONTACTS)) return@hookAfter
         val total = result as? Int ?: return@hookAfter
 
@@ -310,7 +310,7 @@ private fun HideContacts.installGroupMemberHooks() {
         WeLogger.w(TAG, "SeeRoomMemberUI adapter setter wasn't resolved; 查看全部群成员 stays unfiltered")
     } else {
         methodSeeRoomMemberSetMemberList.hookBefore {
-            if (isTemporarilyShown) return@hookBefore
+            if (isShowingAll) return@hookBefore
             if (!surfaceOn(HideSurface.GROUP_MEMBERS)) return@hookBefore
             val members = args[0] as? List<*> ?: return@hookBefore
             val filtered = filterHiddenUsernames(members) ?: return@hookBefore
@@ -325,7 +325,7 @@ private fun HideContacts.installGroupMemberHooks() {
     }
 
     methodSelectMemberUiGetMemberList.hookAfter {
-        if (isTemporarilyShown) return@hookAfter
+        if (isShowingAll) return@hookAfter
         if (!surfaceOn(HideSurface.GROUP_MEMBERS)) return@hookAfter
         val members = result as? List<*> ?: return@hookAfter
         val filtered = filterHiddenUsernames(members) ?: return@hookAfter
@@ -370,7 +370,7 @@ private fun HideContacts.installFavoriteHooks() {
     }
 
     methodFavoriteAdapterSetDataList.hookBefore {
-        if (isTemporarilyShown) return@hookBefore
+        if (isShowingAll) return@hookBefore
         if (!surfaceOn(HideSurface.FAVORITES)) return@hookBefore
 
         // `r(null)` is a real call shape (FavApiLogic returns null when the storage is missing),
@@ -445,7 +445,7 @@ private fun HideContacts.installFinderLikeHooks() {
         WeLogger.w(TAG, "Finder like-drawer refresh callback wasn't resolved; 视频号点赞列表 stays unfiltered")
     } else {
         methodFinderLikeDrawerRefresh.hookBefore {
-            if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookBefore
+            if (isShowingAll || hiddenContacts.isEmpty()) return@hookBefore
             if (!surfaceOn(HideSurface.FINDER_LIKE)) return@hookBefore
 
             val data = args[0] ?: return@hookBefore
@@ -466,7 +466,7 @@ private fun HideContacts.installFinderLikeHooks() {
     }
 
     methodFinderLikeDrawerLoadMore.hookBefore {
-        if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookBefore
+        if (isShowingAll || hiddenContacts.isEmpty()) return@hookBefore
         if (!surfaceOn(HideSurface.FINDER_LIKE)) return@hookBefore
 
         val likes = args[0] as? List<*> ?: return@hookBefore
@@ -540,7 +540,7 @@ private fun HideContacts.installLabelMemberHooks() {
     }
 
     methodLabelUserNamesById.hookAfter {
-        if (isTemporarilyShown) return@hookAfter
+        if (isShowingAll) return@hookAfter
         if (!surfaceOn(HideSurface.CONTACT_LABEL)) return@hookAfter
 
         val members = result as? List<*> ?: return@hookAfter
@@ -704,7 +704,7 @@ private fun HideContacts.installFtsSearchResultHook() {
     )
 
     methodFtsResultSectionReceive.hookBefore {
-        if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookBefore
+        if (isShowingAll || hiddenContacts.isEmpty()) return@hookBefore
         if (!surfaceOn(HideSurface.SEARCH)) return@hookBefore
 
         // 虚方法的 hook，thisObject 就是这个段本身，不会是 null
@@ -735,7 +735,7 @@ private fun HideContacts.installFtsSearchResultHook() {
 
     // 渲染读的是这一段，所以真正决定"看不看得见"的是这里。
     methodFtsResultSectionReceive.hookAfter {
-        if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookAfter
+        if (isShowingAll || hiddenContacts.isEmpty()) return@hookAfter
         if (!surfaceOn(HideSurface.SEARCH)) return@hookAfter
 
         val section = thisObject as Any
@@ -798,7 +798,7 @@ private fun HideContacts.installSearchResultRowHooks() {
         WeLogger.i(TAG, "hiding 主页搜索 rows at ${getView.declaringClass.name}.${getView.name}")
 
         getView.hookAfter {
-            if (isTemporarilyShown || hiddenContacts.isEmpty()) return@hookAfter
+            if (isShowingAll || hiddenContacts.isEmpty()) return@hookAfter
             if (!surfaceOn(HideSurface.SEARCH)) return@hookAfter
 
             val view = result as? View ?: return@hookAfter

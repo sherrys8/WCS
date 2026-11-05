@@ -110,7 +110,7 @@ object WeAgentOverlayController {
     }
 
     private fun wireForegroundTracker() {
-        WeChatForegroundTracker.onChanged = { reconcile() }
+        WeChatForegroundTracker.addOnChanged { reconcile() }
         WeChatForegroundTracker.ensureRegistered()
     }
 

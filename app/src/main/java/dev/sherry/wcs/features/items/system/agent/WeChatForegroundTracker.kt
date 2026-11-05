@@ -11,8 +11,8 @@ import dev.sherry.wcs.utils.android.getTopMostActivity
  * [Application.ActivityLifecycleCallbacks] (there is no such global signal elsewhere in the app).
  *
  * "Foreground" = at least one host Activity is started (between onStart and onStop). The started
- * count is the standard, orientation-change-safe way to detect this. A single listener is enough
- * for our needs ([WeAgentOverlayController]); transitions are only reported when the boolean flips.
+ * count is the standard, orientation-change-safe way to detect this. Transitions are only reported
+ * when the boolean flips, and any number of features can subscribe with [addOnChanged].
  */
 object WeChatForegroundTracker {
 
@@ -21,7 +21,7 @@ object WeChatForegroundTracker {
         private set
 
     /** Invoked on every foreground ↔ background transition with the new state. */
-    var onChanged: ((Boolean) -> Unit)? = null
+    private val listeners = java.util.concurrent.CopyOnWriteArrayList<(Boolean) -> Unit>()
 
     private var startedCount = 0
     private var registered = false
@@ -54,9 +54,23 @@ object WeChatForegroundTracker {
         HostInfo.application.registerActivityLifecycleCallbacks(callbacks)
     }
 
+    /**
+     * Subscribes to foreground transitions. Listeners are never called back synchronously with the
+     * current state — read [isForeground] if you need that. Adding the same instance twice is a
+     * no-op, so a feature that re-runs this on every Activity create stays at one subscription.
+     */
+    fun addOnChanged(listener: (Boolean) -> Unit) {
+        listeners -= listener
+        listeners += listener
+    }
+
+    fun removeOnChanged(listener: (Boolean) -> Unit) {
+        listeners -= listener
+    }
+
     private fun update(foreground: Boolean) {
         if (isForeground == foreground) return
         isForeground = foreground
-        onChanged?.invoke(foreground)
+        listeners.forEach { it(foreground) }
     }
 }

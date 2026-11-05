@@ -49,7 +49,7 @@ private fun HideContacts.installChatroomMemberSearchHook() {
     }
 
     methodFtsSearchChatroomMemberTask.hookAfter {
-        if (isTemporarilyShown) return@hookAfter
+        if (isShowingAll) return@hookAfter
         if (!surfaceOn(HideSurface.SEARCH)) return@hookAfter
         if (hiddenContacts.isEmpty()) return@hookAfter
 
@@ -83,7 +83,7 @@ private fun HideContacts.installCommonChatroomUserSearchHook() {
     }
 
     methodFtsSearchCommonChatroomUserTask.hookAfter {
-        if (isTemporarilyShown) return@hookAfter
+        if (isShowingAll) return@hookAfter
         if (!surfaceOn(HideSurface.SEARCH)) return@hookAfter
         if (hiddenContacts.isEmpty()) return@hookAfter
 

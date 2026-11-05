@@ -138,7 +138,7 @@ private fun HideContacts.installMomentsInlineEntryHook() {
     }
 
     methodSnsInfoToSnsStruct.hookBefore {
-        if (isTemporarilyShown) return@hookBefore
+        if (isShowingAll) return@hookBefore
         val inlineOn = surfaceOn(HideSurface.MOMENTS_INLINE) && hiddenContacts.isNotEmpty()
         val iconOn = surfaceOn(HideSurface.GROUP_ICON)
         if (!inlineOn && !iconOn) return@hookBefore

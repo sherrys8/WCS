@@ -53,7 +53,7 @@ private fun HideContacts.installRecentForwardHook() {
     }
 
     methodRecentForwardList.hookAfter {
-        if (isTemporarilyShown) return@hookAfter
+        if (isShowingAll) return@hookAfter
         if (!surfaceOn(HideSurface.RECENT_FORWARD)) return@hookAfter
         if (hiddenContacts.isEmpty()) return@hookAfter
 
@@ -113,7 +113,7 @@ private fun HideContacts.installStorageManageHook() {
         // Cheapest check first: this hook sits on the framework method every adapter in the process
         // calls, so the branch that does not apply to us must not touch MMKV.
         if (!adapterClass.isInstance(thisObject)) return@hookBefore
-        if (isTemporarilyShown) return@hookBefore
+        if (isShowingAll) return@hookBefore
         if (!surfaceOn(HideSurface.STORAGE_MANAGE)) return@hookBefore
         if (hiddenContacts.isEmpty()) return@hookBefore
 
@@ -157,7 +157,7 @@ private fun HideContacts.installStatusHook() {
     }
 
     methodStatusGroupLayout.hookBefore {
-        if (isTemporarilyShown) return@hookBefore
+        if (isShowingAll) return@hookBefore
         if (!surfaceOn(HideSurface.STATUS)) return@hookBefore
         if (hiddenContacts.isEmpty()) return@hookBefore
 

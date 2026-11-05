@@ -9,8 +9,8 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.widget.TextView
 import android.view.MotionEvent
+import android.widget.TextView
 import androidx.activity.ComponentActivity
 import dev.sherry.wcs.R
 import com.tencent.mm.pluginsdk.ui.chat.ChatFooter
@@ -45,6 +45,7 @@ import dev.sherry.wcs.features.items.contacts.hidecontacts.surfaceOn
 import dev.sherry.wcs.features.items.contacts.hidecontacts.uninstallBlockHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.uninstallProfileHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.uninstallSchedules
+import dev.sherry.wcs.features.items.system.agent.WeChatForegroundTracker
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.utils.HostInfo
@@ -66,6 +67,10 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     override val descriptionRes = R.string.feature_hide_contacts_description
 
     private const val TAG = "HideContacts"
+
+    /** Long-press / consecutive-tap thresholds, in milliseconds (see [installTitleGestures]). */
+    private const val TITLE_LONG_PRESS_MS = 500L
+    private const val TITLE_TRIPLE_TAP_MS = 500L
 
     private const val KEY_CONTACTS = "hidden_contacts"
 
@@ -93,13 +98,18 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
     private object ScreenOffReceiver : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent?) {
-            if (intent?.action != Intent.ACTION_SCREEN_OFF) return
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    if (hideOnLock) enterAwayHidden()
 
-            val chattingUi = chattingUi?.get() ?: return
-            val wxId = chattingUi.intent.getStringExtra("Chat_User")
-            if (temporarilyShown || wxId !in hiddenContacts) return
+                    // 退出隐藏聊天是这功能原有的行为，不受新开关影响
+                    val chattingUi = chattingUi?.get() ?: return
+                    val wxId = chattingUi.intent.getStringExtra("Chat_User")
+                    if (temporarilyShown || wxId !in hiddenContacts) return
 
-            exitToMainActivity()
+                    exitToMainActivity()
+                }
+            }
         }
     }
 
@@ -114,7 +124,7 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
     private fun registerScreenOffReceiver() {
         if (screenOffReceiverRegistered) return
-        // ACTION_USER_PRESENT used to be in this filter but onReceive never handled it.
+        // 息屏是受保护的系统广播，运行时注册不用 RECEIVER_EXPORTED/NOT_EXPORTED 标记。
         val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
         HostInfo.application.registerReceiver(ScreenOffReceiver, filter)
         screenOffReceiverRegistered = true
@@ -215,6 +225,11 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
             registerScreenOffReceiver()
 
             installTitleGestures(context)
+
+            // 离开微信检测走 ActivityLifecycleCallbacks：比钩 onUserLeaveHint 稳（微信内部页面跳转
+            // 时 startedCount 不会归零，不会误判成离开），ensureRegistered 与 addOnChanged 都幂等。
+            WeChatForegroundTracker.ensureRegistered()
+            WeChatForegroundTracker.addOnChanged(foregroundListener)
         }
 
         // --- shake to leave ---
@@ -329,22 +344,55 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         chattingUi = null
         WeChatInputBarApi.removeListener(this)
         WeDatabaseListenerApi.removeListener(this)
+        WeChatForegroundTracker.removeOnChanged(foregroundListener)
         temporarilyShown = false
+        awayHidden = false
         WeConversationApi.reloadConversations()
     }
 
     /**
-     * Toggles the temporary-show state. Mirrors the `#show` / `#hide` input-bar commands for
-     * use by gesture-based triggers (e.g. triple-clicking the main-screen title).
+     * Enters the persistent hidden state — the trigger side of away-hiding, and the only way
+     * hiding starts.
+     *
+     * 隐藏一经触发就一直保持：回到前台、解锁都不恢复，只有长按/三击标题、`#show`、定时显示或
+     * 关闭功能才解除。所以进隐藏时要先清掉上一次手动显示的覆盖，否则 `#show` 之后再离开微信，
+     * 这一次隐藏会静默失效。
+     *
+     * Repaints through `WeConversationApi.reloadConversations()` rather than just flipping the flag:
+     * the recents card and the lock-screen view are captured right around this callback, so the list
+     * has to be rebuilt before the system takes that picture.
      */
-    fun toggleTemporarilyShown(context: Context) {
-        if (temporarilyShown) {
-            temporarilyShown = false
-            showToast(context, context.localizedContactsString(R.string.contacts_hide_restored))
-        } else {
-            temporarilyShown = true
-            showToast(context, context.localizedContactsString(R.string.contacts_hide_temporarily_shown))
+    fun enterAwayHidden() {
+        val wasShown = temporarilyShown
+        temporarilyShown = false
+        if (awayHidden) {
+            // 已经处于隐藏态但覆盖还开着：状态位没翻，可列表此刻正显示着覆盖前的内容，
+            // 不重绘的话这次离开就静默失效了。
+            if (wasShown) WeConversationApi.reloadConversations()
+            return
         }
+        awayHidden = true
+        WeConversationApi.reloadConversations()
+    }
+
+    /**
+     * The 手动恢复 entry shared by the title gestures (long press / triple tap) and by nothing else —
+     * `#show` keeps its own toast wording. Only meaningful while away-hiding is active; afterwards
+     * the next leave / screen-off clears the override again (see [enterAwayHidden]).
+     */
+    fun showTemporarily(context: Context) {
+        if (temporarilyShown) {
+            showToast(
+                context,
+                context.localizedContactsString(R.string.contacts_hide_already_shown),
+            )
+            return
+        }
+        temporarilyShown = true
+        showToast(
+            context,
+            context.localizedContactsString(R.string.contacts_hide_shown_command_hint),
+        )
         WeConversationApi.reloadConversations()
     }
 
@@ -353,8 +401,8 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
      * 定时显示/隐藏 scheduler, whose startup catch-up runs at process attach where no Activity (and
      * therefore no Toast) exists.
      *
-     * Goes through the same refresh path as [toggleTemporarilyShown] and the `#show` / `#hide`
-     * commands: `WeConversationApi.reloadConversations()` is what makes the query-time SQL filter
+     * Goes through the same refresh path as the `#show` / `#hide` commands:
+     * `WeConversationApi.reloadConversations()` is what makes the query-time SQL filter
      * re-run, so skipping it would leave the list showing the previous state until the next full
      * re-query. It does **not** lock the flag — a manual toggle afterwards wins until the next
      * scheduled fire time.
@@ -442,45 +490,49 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
     private var temporarilyShown = false
 
-    /**
-     * The predicate every hook should use: a contact counts as hidden only while the temporary-show
-     * escape hatch (`#show` / triple-tap title) is off.
-     */
-    fun isHiddenNow(wxId: String): Boolean = !temporarilyShown && wxId in hiddenContacts
+    /** 离开微信或息屏时置位（[enterAwayHidden]），此后一直保持到手动恢复或功能关闭。 */
+    @Volatile
+    private var awayHidden = false
 
-    /** For SQL rewriters, which bail wholesale rather than testing individual wxids. */
-    val isTemporarilyShown: Boolean get() = temporarilyShown
+    /**
+     * The predicate every hook should use: a contact counts as hidden only while the app is in the
+     * away-hidden state (entered by leaving WeChat / screen off) and the `#show` / scheduled reveal
+     * is off.
+     */
+    val isHidingActive: Boolean get() = awayHidden && !temporarilyShown
+
+    fun isHiddenNow(wxId: String): Boolean = isHidingActive && wxId in hiddenContacts
+
+    /** 隐藏没生效时所有闸口整体放行，SQL 改写器也按这个整条跳过。 */
+    val isShowingAll: Boolean get() = !isHidingActive
 
     val autoRejectVoipEnabled: Boolean get() = autoRejectVoip
 
     var autoRejectVoip by prefOption("hide_auto_reject", false)
 
-    /** Long-press the home-screen title for [longPressMs] to toggle the temporary reveal. */
-    var longPressTitle by prefOption("hide_long_press_title", false)
+    /** 切到后台（按 HOME、切到别的应用）时进入隐藏态，回前台不恢复。 */
+    var hideOnLeave by prefOption("hide_on_leave", false)
 
-    /** Minimum hold time, in milliseconds, that counts as a long press. */
-    var longPressMs by prefOption("hide_long_press_ms", 500)
-
-    var tripleClickTitle by prefOption("hide_triple_click_title", false)
+    /** 息屏时进入隐藏态，解锁不恢复。 */
+    var hideOnLock by prefOption("hide_on_lock", false)
 
     /**
-     * Maximum gap between two taps, in milliseconds, for them to count as consecutive taps of the
-     * triple-tap gesture. Set on the last tap of a triple (which is how WeChat's own double-tap
-     * detection measures it), so a slower rhythm simply starts the count over.
+     * 前后台翻转只管进隐藏这一半：离开前台且开了「离开微信隐藏」就进入持久隐藏态；
+     * 回前台什么都不做 —— 恢复是手势、`#show`、定时或关功能的事。
      */
-    var tripleTapMs by prefOption("hide_triple_tap_ms", 500)
+    private val foregroundListener: (Boolean) -> Unit = { foreground ->
+        if (!foreground && hideOnLeave) enterAwayHidden()
+    }
 
     /**
-     * Attaches the two 临时显示 gestures to the home-screen title.
+     * Attaches the two 手动恢复 gestures to the home-screen title: long press or triple tap calls
+     * [showTemporarily]. Neither gesture ever hides — hiding is exclusively leave / screen-off.
      *
      * Both gestures share one touch listener on purpose — the title is a plain label with no other
      * behaviour, and a single listener is the only way to tell "held long enough to be a long press"
      * apart from "the first tap of a triple tap". The click listener is still installed, and is a
      * no-op: a View only receives ACTION_DOWN/UP events while it is clickable, so it is what keeps
      * the touch stream coming.
-     *
-     * Thresholds are read inside the listener rather than captured at install time, so changing
-     * them in settings applies from the next touch without restarting WeChat.
      */
     private fun installTitleGestures(context: Activity) {
         val titleView = context.window?.decorView
@@ -504,21 +556,21 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
                 MotionEvent.ACTION_DOWN -> downTime = event.eventTime
 
                 MotionEvent.ACTION_UP -> {
-                    val longPress = longPressTitle && event.eventTime - downTime >= longPressMs
+                    // A press held for TITLE_LONG_PRESS_MS is a long press; anything shorter joins
+                    // the triple-tap count, measured against the same threshold.
                     when {
-                        longPress -> {
+                        event.eventTime - downTime >= TITLE_LONG_PRESS_MS -> {
                             tapCount = 0
-                            toggleTemporarilyShown(context)
+                            showTemporarily(context)
                         }
-                        tripleClickTitle -> {
-                            tapCount = if (event.eventTime - lastTapTime > tripleTapMs) 1 else tapCount + 1
+                        else -> {
+                            tapCount = if (event.eventTime - lastTapTime > TITLE_TRIPLE_TAP_MS) 1 else tapCount + 1
                             lastTapTime = event.eventTime
                             if (tapCount >= 3) {
                                 tapCount = 0
-                                toggleTemporarilyShown(context)
+                                showTemporarily(context)
                             }
                         }
-                        else -> tapCount = 0
                     }
                 }
 
