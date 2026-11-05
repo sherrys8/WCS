@@ -141,9 +141,9 @@ private fun HideContacts.installRecentListAssembleHook() {
         list.removeAll { item ->
             if (item == null) return@removeAll false
             val username = runCatching {
-                val v8D = item.javaClass.reflekt().fields { name { it == "d" } }.first().self.apply { isAccessible = true }
+                val v8D = item.javaClass.reflekt().fields { name { it == "d" } }.first().self.makeAccessible()
                 val w8 = v8D.get(item) ?: return@runCatching null
-                val w8A = w8.javaClass.reflekt().fields { name { it == "a" } }.first().self.apply { isAccessible = true }
+                val w8A = w8.javaClass.reflekt().fields { name { it == "a" } }.first().self.makeAccessible()
                 w8A.get(w8) as? String
             }.getOrNull()
             if (username != null && isHiddenNow(username)) {
