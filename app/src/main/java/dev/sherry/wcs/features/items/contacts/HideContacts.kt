@@ -40,6 +40,7 @@ import dev.sherry.wcs.features.items.contacts.hidecontacts.installSearchHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installSqlHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installVoipHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteFtsSql
+import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteMomentsCommentsSql
 import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteMomentsFeedSql
 import dev.sherry.wcs.features.items.contacts.hidecontacts.surfaceOn
 import dev.sherry.wcs.features.items.contacts.hidecontacts.uninstallBlockHooks
