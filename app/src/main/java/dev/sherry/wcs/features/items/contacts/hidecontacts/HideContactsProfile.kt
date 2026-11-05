@@ -48,9 +48,12 @@ private val FRIEND_ONLY_PROFILE_KEYS = listOf(
     "contact_profile_label",
     "contact_profile_phone",
     "contact_profile_desc",
-    // 资料页的朋友圈入口（ContactInfoUI.onPreferenceTreeClick，8.0.76 :8400）。它同样只在
-    // 好友的资料页上出现，隐藏它就挡住了从资料页进入对方朋友圈的通路。
+    // 资料页的朋友圈入口。两个 key 各属一代资料页：`contact_info_sns` 是旧
+    // ContactInfoUI.onPreferenceTreeClick 的 key（8.0.76 :8400），`contact_profile_sns` 是
+    // `use_new_profile=true`（默认开）时新资料页控制器 profile/e0.K5 用的 key —— 上一版只带了旧
+    // key，新页其它行都藏了、唯独朋友圈入口留在屏上（2026-11-05 真机第 4 条反馈）。
     "contact_info_sns",
+    "contact_profile_sns",
 )
 
 /**

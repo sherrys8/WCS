@@ -202,23 +202,12 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                                 },
                             )
                         }
-                        item(key = "gesture-triple-tap") {
-                            SwitchWidget(
-                                iconPlaceholder = false,
-                                title = stringResource(R.string.contacts_hide_gesture_triple_tap),
-                                description = stringResource(R.string.contacts_hide_gesture_triple_tap_description),
-                                checked = gestureTripleTapInput,
-                                onCheckedChange = {
-                                    gestureTripleTapInput = it
-                                    gestureTripleTapEnabled = it
-                                },
-                            )
-                        }
                         item(key = "long-press-ms") {
                             BaseItemContainer {
                                 IntNumberPickerWidget(
                                     title = stringResource(R.string.contacts_hide_long_press_ms),
                                     description = stringResource(R.string.contacts_hide_long_press_ms_description),
+                                    enabled = gestureLongPressInput,
                                     value = longPressMsInput,
                                     startInt = 200,
                                     endInt = 2000,
@@ -231,11 +220,24 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                                 )
                             }
                         }
+                        item(key = "gesture-triple-tap") {
+                            SwitchWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(R.string.contacts_hide_gesture_triple_tap),
+                                description = stringResource(R.string.contacts_hide_gesture_triple_tap_description),
+                                checked = gestureTripleTapInput,
+                                onCheckedChange = {
+                                    gestureTripleTapInput = it
+                                    gestureTripleTapEnabled = it
+                                },
+                            )
+                        }
                         item(key = "triple-tap-ms") {
                             BaseItemContainer {
                                 IntNumberPickerWidget(
                                     title = stringResource(R.string.contacts_hide_triple_click_ms),
                                     description = stringResource(R.string.contacts_hide_triple_click_ms_description),
+                                    enabled = gestureTripleTapInput,
                                     value = tripleTapMsInput,
                                     startInt = 200,
                                     endInt = 1500,

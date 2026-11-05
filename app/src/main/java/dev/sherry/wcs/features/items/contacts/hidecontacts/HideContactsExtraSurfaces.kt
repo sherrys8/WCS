@@ -1,5 +1,7 @@
 package dev.sherry.wcs.features.items.contacts.hidecontacts
 
+import android.database.Cursor
+import android.database.MatrixCursor
 import dev.ujhhgtg.reflekt.reflekt
 import dev.ujhhgtg.reflekt.utils.makeAccessible
 import dev.sherry.wcs.constants.PackageNames
@@ -29,6 +31,7 @@ private const val TAG = "HideContacts.Extra"
  */
 fun HideContacts.installExtraSurfaceHooks() {
     installRecentForwardHook()
+    installRecentConversationCursorHook()
     installStorageManageHook()
     installStatusHook()
 }
@@ -70,6 +73,81 @@ private fun HideContacts.installRecentForwardHook() {
 
         WeLogger.i(TAG, "filtered ${targets.size - kept.size} hidden target(s) from 最近转发")
         result = ArrayList(kept)
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 最近转发（游标级兜底）
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * 转发选择器两段列表的行游标 —— 名单过滤的兜底腿。
+ *
+ * 选择器的适配器（`NewRecentConversationAdapter.r()` = "resetData"）把 [methodRecentForwardList]
+ * 给出的名单只当作 6 参查询的 `username IN (...)` 包含条件，另一次**不带任何包含列表**的 5 参查询
+ * 把该类型的全部最近会话都捞出来 —— 名单过滤对后者结构上无效，这就是 2026-11-05 真机第 2 条反馈
+ * 「名单过滤命中了、界面照旧」的机制。这两个查询的返回游标是适配器唯一的数据来源，在出口处把
+ * 隐藏联系人的行剔掉，两段一起干净。
+ *
+ * 物化成 [MatrixCursor] 而不是包一层 CursorWrapper：这两条查询的投影只有 int/String 列、行数是
+ * 最近会话的量级，物化的成本可忽略，而装饰器要同时重写 getCount/position/moveToPosition 等一整套
+ * 位置映射，出错的暴露面大得多。原游标读完后立即关闭；调用方（适配器）对游标只做
+ * getCount/getColumnIndex/getString/moveToNext，MatrixCursor 全部满足。
+ *
+ * 命中为 0 时也返回物化结果（内容相同），避免为了「判断有没有命中」把原游标消费掉却还要还回去。
+ */
+private fun HideContacts.installRecentConversationCursorHook() {
+    val hooks = listOf(
+        "5-arg" to methodRecentConversationCursor5,
+        "6-arg" to methodRecentConversationCursor6,
+    )
+    if (hooks.any { it.second.isPlaceholder }) {
+        WeLogger.w(TAG, "最近转发 cursor query wasn't resolved (${hooks.filter { it.second.isPlaceholder }.joinToString { it.first }}); picker rows stay unfiltered")
+        return
+    }
+    WeLogger.i(
+        TAG,
+        "最近转发 cursor queries resolved: " + hooks.joinToString {
+            it.second.method.declaringClass.name + "." + it.second.method.name + "(" + it.first + ")"
+        },
+    )
+
+    hooks.forEach { (_, delegate) ->
+        delegate.hookAfter {
+            if (isShowingAll) return@hookAfter
+            if (!surfaceOn(HideSurface.RECENT_FORWARD)) return@hookAfter
+            if (hiddenContacts.isEmpty()) return@hookAfter
+
+            val cursor = result as? Cursor ?: return@hookAfter
+            val usernameIdx = cursor.getColumnIndex("username")
+            if (usernameIdx < 0) return@hookAfter
+
+            val names = cursor.columnNames
+            var dropped = 0
+            val matrix = MatrixCursor(names, cursor.count)
+            while (cursor.moveToNext()) {
+                val wxid = cursor.getString(usernameIdx)
+                if (wxid != null && isHiddenNow(wxid)) {
+                    dropped++
+                    continue
+                }
+                val row = arrayOfNulls<Any>(names.size)
+                for (i in names.indices) {
+                    row[i] = when (cursor.getType(i)) {
+                        Cursor.FIELD_TYPE_NULL -> null
+                        Cursor.FIELD_TYPE_INTEGER -> cursor.getLong(i)
+                        Cursor.FIELD_TYPE_FLOAT -> cursor.getDouble(i)
+                        Cursor.FIELD_TYPE_BLOB -> cursor.getBlob(i)
+                        else -> cursor.getString(i)
+                    }
+                }
+                matrix.addRow(row)
+            }
+            cursor.close()
+
+            if (dropped > 0) WeLogger.i(TAG, "dropped $dropped hidden row(s) from a 最近转发 cursor")
+            result = matrix
+        }
     }
 }
 

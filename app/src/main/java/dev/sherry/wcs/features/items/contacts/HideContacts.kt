@@ -1249,6 +1249,37 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         }
     }
 
+    /**
+     * `RConversationStorage`'s two list-query builders — `(int, List, String, boolean, String) ->
+     * Cursor` (5 参数) 与 `(List, int, List, String, boolean, String) -> Cursor`（6 参数）.
+     *
+     * 转发选择器里「最近转发 / 最近聊天」两段的行游标都出自这两个方法：5 参版本不带包含列表，6
+     * 参版本把 `RecentForwardInfoStorage` 的名单当 `username IN (...)` 用 —— 所以只过滤那份名单
+     * 挡不住 5 参游标里的行（2026-11-05 真机第 2 条反馈：名单过滤命中、界面照旧）。过滤它们的
+     * 返回游标两条路一起堵上。
+     *
+     * 两条 SQL 的 `select ... from rconversation,rcontact` 字面量全树只在 `l4` 这一个类里出现，
+     * 且类内按参数个数各自唯一（其余 Cursor 方法是 3/4 参数的）。
+     *
+     * `allowFailure`: 同 [methodRecentForwardList]。
+     */
+    val methodRecentConversationCursor5 by dexMethod(allowFailure = true) {
+        matcher {
+            usingStrings("rconversation.digestUser, rconversation.hasTrunc, rcontact.nickname from rconversation,rcontact")
+            returnType("android.database.Cursor")
+            paramCount = 5
+        }
+    }
+
+    /** 6 参版本，同 [methodRecentConversationCursor5]。 */
+    val methodRecentConversationCursor6 by dexMethod(allowFailure = true) {
+        matcher {
+            usingStrings("rconversation.digestUser, rconversation.hasTrunc, rcontact.nickname from rconversation,rcontact")
+            returnType("android.database.Cursor")
+            paramCount = 6
+        }
+    }
+
     // ── 资料模拟非好友 / 拦截提交加好友 ─────────────────────────────────────────────────────────
     // See hidecontacts/HideContactsProfile.kt for how the two are used.
 

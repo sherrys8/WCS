@@ -14,6 +14,12 @@ private const val TAG = "HideContacts.Moments"
 /** 分组字段探测结果只记一次，见 [installMomentsInlineEntryHook] 里的说明。 */
 private var groupProbeLogged = false
 
+/**
+ * D0 入口探测只记一次：钩子装上了但整个测试期零命中时，分不出「这条渲染路径根本不经过 D0」和
+ * 「钩子没挂上」。这句打在所有门禁之前，下一轮真机日志一看便知（2026-11-05 现场遗留）。
+ */
+private var d0ProbeLogged = false
+
 /** Every Moments-side surface a hidden contact can leak through. */
 fun HideContacts.installMomentsHooks() {
     installMomentsRedDotHook()
@@ -146,6 +152,13 @@ private fun HideContacts.installMomentsInlineEntryHook() {
     }
 
     methodSnsInfoToSnsStruct.hookBefore {
+        if (!d0ProbeLogged) {
+            d0ProbeLogged = true
+            WeLogger.i(
+                TAG,
+                "snsInfoToSnsStruct first call, args1=${args.getOrNull(1)?.javaClass?.name ?: "null"}",
+            )
+        }
         if (isShowingAll) return@hookBefore
         val inlineOn = surfaceOn(HideSurface.MOMENTS_INLINE) && hiddenContacts.isNotEmpty()
         val iconOn = surfaceOn(HideSurface.GROUP_ICON)
