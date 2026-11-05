@@ -3328,6 +3328,10 @@
     <string name="contacts_hide_on_leave_description">切到别的应用或按 HOME 回桌面时，会话列表里的隐藏联系人会被摘掉，最近任务卡片上也看不到；回到微信后保持隐藏——长按或三击主页标题、发送 #show 或关闭本功能才会恢复显示。</string>
     <string name="contacts_hide_on_lock">息屏时隐藏</string>
     <string name="contacts_hide_on_lock_description">息屏即隐藏，解锁后保持隐藏——长按或三击主页标题、发送 #show 或关闭本功能才会恢复显示。</string>
+    <string name="contacts_hide_long_press_ms">长按判定时长</string>
+    <string name="contacts_hide_long_press_ms_description">按住主页标题栏达到该时长即恢复显示</string>
+    <string name="contacts_hide_triple_click_ms">三击判定间隔</string>
+    <string name="contacts_hide_triple_click_ms_description">两次点击之间不超过该间隔才算同一次三击</string>
     <string name="contacts_hide_group_messages">会话与消息</string>
     <string name="contacts_hide_group_contacts">通讯录与搜索</string>
     <string name="contacts_hide_group_moments">朋友圈与视频号</string>

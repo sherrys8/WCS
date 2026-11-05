@@ -3285,6 +3285,10 @@ Time: {time}</string>
     <string name="contacts_hide_on_leave_description">Switching to another app or pressing Home takes the hidden contacts out of the conversation list, so the recents card shows nothing. They stay hidden after you come back — long-press or triple-tap the home-screen title, send #show, or turn the feature off to show them again.</string>
     <string name="contacts_hide_on_lock">Hide when the screen turns off</string>
     <string name="contacts_hide_on_lock_description">Turning the screen off hides them and they stay hidden after unlock — long-press or triple-tap the home-screen title, send #show, or turn the feature off to show them again.</string>
+    <string name="contacts_hide_long_press_ms">Long-press duration</string>
+    <string name="contacts_hide_long_press_ms_description">How long the title must be held to trigger the reveal</string>
+    <string name="contacts_hide_triple_click_ms">Triple-tap interval</string>
+    <string name="contacts_hide_triple_click_ms_description">Maximum gap between two taps that still counts as the same triple-tap</string>
     <string name="contacts_hide_group_messages">Chats and messages</string>
     <string name="contacts_hide_group_contacts">Contacts and search</string>
     <string name="contacts_hide_group_moments">Moments and Channels</string>

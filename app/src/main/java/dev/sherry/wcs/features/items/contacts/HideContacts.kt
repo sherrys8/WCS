@@ -68,10 +68,6 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
     private const val TAG = "HideContacts"
 
-    /** Long-press / consecutive-tap thresholds, in milliseconds (see [installTitleGestures]). */
-    private const val TITLE_LONG_PRESS_MS = 500L
-    private const val TITLE_TRIPLE_TAP_MS = 500L
-
     private const val KEY_CONTACTS = "hidden_contacts"
 
     // One-time flag: older versions hid chats by writing parentRef='hidden_conv_parent'. Once we've
@@ -215,6 +211,17 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         // Drop 拍一拍 messages sent by a hidden contact before they become a row.
         hookPatMessage()
 
+        registerScreenOffReceiver()
+
+        // 离开微信检测走 ActivityLifecycleCallbacks：比钩 onUserLeaveHint 稳（微信内部页面跳转
+        // 时 startedCount 不会归零，不会误判成离开），ensureRegistered 与 addOnChanged 都幂等。
+        //
+        // 必须在 onEnable 里注册，不能只靠下面的 doOnCreate 钩子：运行中关了再开本功能时
+        // LauncherUI 已存在、onCreate 不会重跑，而 onDisable 已把接收器和监听摘掉 —— 不在这里
+        // 补注册，离开/息屏触发就全哑了（真机 2026-11-05 复现）。
+        WeChatForegroundTracker.ensureRegistered()
+        WeChatForegroundTracker.addOnChanged(foregroundListener)
+
         WeMainActivityBeautifyApi.methodDoOnCreate.hookAfter {
             migrateLegacyHiddenParentRef()
 
@@ -222,14 +229,7 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
                 .firstField { type { it isSubclassOf Activity::class } }
                 .get()!! as Activity
 
-            registerScreenOffReceiver()
-
             installTitleGestures(context)
-
-            // 离开微信检测走 ActivityLifecycleCallbacks：比钩 onUserLeaveHint 稳（微信内部页面跳转
-            // 时 startedCount 不会归零，不会误判成离开），ensureRegistered 与 addOnChanged 都幂等。
-            WeChatForegroundTracker.ensureRegistered()
-            WeChatForegroundTracker.addOnChanged(foregroundListener)
         }
 
         // --- shake to leave ---
@@ -516,6 +516,14 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     /** 息屏时进入隐藏态，解锁不恢复。 */
     var hideOnLock by prefOption("hide_on_lock", false)
 
+    /** 长按主页标题恢复显示：按住达到该时长（毫秒）即触发。 */
+    var longPressMs by prefOption("hide_long_press_ms", 500)
+
+    /**
+     * 三击判定间隔（毫秒）：在最后一次点击时度量与前一次的间距，超过则重新从一计数。
+     */
+    var tripleTapMs by prefOption("hide_triple_tap_ms", 500)
+
     /**
      * 前后台翻转只管进隐藏这一半：离开前台且开了「离开微信隐藏」就进入持久隐藏态；
      * 回前台什么都不做 —— 恢复是手势、`#show`、定时或关功能的事。
@@ -556,15 +564,17 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
                 MotionEvent.ACTION_DOWN -> downTime = event.eventTime
 
                 MotionEvent.ACTION_UP -> {
-                    // A press held for TITLE_LONG_PRESS_MS is a long press; anything shorter joins
-                    // the triple-tap count, measured against the same threshold.
+                    // A press held for longPressMs is a long press; anything shorter joins the
+                    // triple-tap count, measured against tripleTapMs. Both are read here rather
+                    // than captured at install time, so changing them in settings applies from
+                    // the next touch without restarting WeChat.
                     when {
-                        event.eventTime - downTime >= TITLE_LONG_PRESS_MS -> {
+                        event.eventTime - downTime >= longPressMs -> {
                             tapCount = 0
                             showTemporarily(context)
                         }
                         else -> {
-                            tapCount = if (event.eventTime - lastTapTime > TITLE_TRIPLE_TAP_MS) 1 else tapCount + 1
+                            tapCount = if (event.eventTime - lastTapTime > tripleTapMs) 1 else tapCount + 1
                             lastTapTime = event.eventTime
                             if (tapCount >= 3) {
                                 tapCount = 0
