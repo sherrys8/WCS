@@ -43,6 +43,7 @@ private val MESSAGE_SURFACES = listOf(
     HideSurface.UNREAD,
     HideSurface.MUTE,
     HideSurface.NOTIFICATIONS,
+    HideSurface.HOME_DOT,
     HideSurface.TEAM_SUMMARY,
     HideSurface.PAT,
 )

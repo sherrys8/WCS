@@ -3270,6 +3270,8 @@ Time: {time}</string>
     <string name="contacts_hide_surface_voip_desc">Do not show incoming calls, call records or call banners from hidden contacts. To also reject the call automatically, turn on Automatically reject audio and video calls as well — with that switch off the call is hidden only and keeps ringing on the caller side until timeout.</string>
     <string name="contacts_hide_surface_notifications">Message notifications</string>
     <string name="contacts_hide_surface_notifications_desc">Do not post system notifications for messages from hidden contacts</string>
+    <string name="contacts_hide_surface_home_dot">Title bar dot on the chat list</string>
+    <string name="contacts_hide_surface_home_dot_desc">Lights a small dot left of the search icon in the home title bar when a hidden contact sends a message. It only goes away once every one of those chats has been opened. The dot is not clickable and needs no notification channel</string>
     <string name="contacts_hide_surface_pat">Pats</string>
     <string name="contacts_hide_surface_pat_desc">Discard pat messages that come from hidden contacts</string>
     <string name="contacts_hide_surface_team_summary">WeChat Team alert</string>

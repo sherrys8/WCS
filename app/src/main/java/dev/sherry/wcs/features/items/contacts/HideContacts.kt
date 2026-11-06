@@ -3,6 +3,7 @@ package dev.sherry.wcs.features.items.contacts
 import android.app.Activity
 import android.app.Application
 import android.content.BroadcastReceiver
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -37,8 +38,10 @@ import dev.sherry.wcs.features.api.ui.WeMainActivityBeautifyApi
 import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.items.contacts.hidecontacts.HideSurface
+import dev.sherry.wcs.features.items.contacts.hidecontacts.clearHomeDot
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installBlockHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installExtraSurfaceHooks
+import dev.sherry.wcs.features.items.contacts.hidecontacts.installHomeDot
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installListHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installMomentsHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installProfileHooks
@@ -46,6 +49,8 @@ import dev.sherry.wcs.features.items.contacts.hidecontacts.installSchedules
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installSearchHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installSqlHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installVoipHooks
+import dev.sherry.wcs.features.items.contacts.hidecontacts.onHiddenMessageArrived
+import dev.sherry.wcs.features.items.contacts.hidecontacts.refreshHomeDot
 import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteFtsSql
 import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteMomentsCommentsSql
 import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteMomentsFeedSql
@@ -69,7 +74,7 @@ import kotlin.math.sqrt
 
 
 object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputBarListener,
-    WeDatabaseListenerApi.IQueryListener {
+    WeDatabaseListenerApi.IQueryListener, WeDatabaseListenerApi.IInsertListener {
 
     override val technicalId = "隐藏联系人"
     override val nameRes = R.string.feature_hide_contacts_name
@@ -354,6 +359,7 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
                 .get()!! as Activity
 
             installTitleGestures(context)
+            refreshHomeDot()
         }
 
         // --- 聊天页跟踪：摇一摇退出的宿主，也是「触发隐藏时必须离开隐藏聊天」的数据源 ---
@@ -441,6 +447,7 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         // --- moments feed ---
 
         WeDatabaseListenerApi.addListener(this)
+        installHomeDot()
 
         // --- notification ---
         //
@@ -471,6 +478,7 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         openChats.clear()
         WeChatInputBarApi.removeListener(this)
         WeDatabaseListenerApi.removeListener(this)
+        clearHomeDot()
         WeChatForegroundTracker.removeOnChanged(foregroundListener)
         temporarilyShown = false
         awayHidden = false
@@ -624,6 +632,15 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
     override fun onQuery(sql: String): String? =
         rewriteMomentsFeedSql(sql) ?: rewriteMomentsCommentsSql(sql) ?: rewriteFtsSql(sql)
+
+    /**
+     * 「收到隐藏联系人的消息」这件事的准确信号：消息入库。用它而不是会话变更事件，是因为后者在置顶、
+     * 未读变化时也会派发，会把没有新消息的联系人也记进标题栏红点的待看名单。
+     */
+    override fun onInsert(table: String, values: ContentValues) {
+        if (table != "message") return
+        onHiddenMessageArrived(values)
+    }
 
     // The parentRef marker older versions wrote via WeConversationApi.setConversationsVisibility to
     // hide a chat. WeChat's native list filter (m4.O) hides rows whose parentRef isn't null/empty.

@@ -3313,6 +3313,8 @@
     <string name="contacts_hide_surface_voip_desc">不显示隐藏联系人的来电、通话记录与通话横幅；要自动拒接，还需同时打开「自动拒绝音视频通话」——该开关关闭时只隐藏来电，对方会一直响到超时。</string>
     <string name="contacts_hide_surface_notifications">消息通知</string>
     <string name="contacts_hide_surface_notifications_desc">不为隐藏联系人的消息发送系统通知</string>
+    <string name="contacts_hide_surface_home_dot">会话列表标题栏红点</string>
+    <string name="contacts_hide_surface_home_dot_desc">收到隐藏联系人的消息时，在主页标题栏搜索按钮左边亮一个小红点；把这些隐藏联系人的聊天逐个打开之后才会灭。红点不可点击，也不需要通知渠道</string>
     <string name="contacts_hide_surface_pat">拍一拍</string>
     <string name="contacts_hide_surface_pat_desc">丢弃来自隐藏联系人的拍一拍</string>
     <string name="contacts_hide_surface_team_summary">微信团队提醒</string>

@@ -146,6 +146,12 @@ enum class HideSurface(
         R.string.contacts_hide_surface_notifications_desc,
         false,
     ),
+    HOME_DOT(
+        "hide_surface_home_dot",
+        R.string.contacts_hide_surface_home_dot,
+        R.string.contacts_hide_surface_home_dot_desc,
+        false,
+    ),
     PAT(
         "hide_surface_pat",
         R.string.contacts_hide_surface_pat,
