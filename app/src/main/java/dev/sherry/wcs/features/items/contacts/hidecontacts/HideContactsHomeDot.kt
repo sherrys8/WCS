@@ -99,8 +99,11 @@ fun HideContacts.installHomeDot() {
  * `closeChatting` 是 `HomeSidePanel` 早就在用的同款信号（它那边也靠 startChatting/closeChatting 重算
  * 视图树）。这里延时两次是因为 `closeChatting` 那一刻宿主的树还没重建完；[paint] 是幂等的，多跑一次
  * 只是早退。
+ *
+ * 接收者必须是 `HideContacts`：`hookAfter` 是 `BaseFeature` 的**成员扩展**（`BaseFeature.kt:161`），
+ * 只有隐式接收者在作用域里时才解析得到 —— 写成顶层函数会直接 `Unresolved reference 'hookAfter'`。
  */
-private fun installChatTransitionRepaint() {
+private fun HideContacts.installChatTransitionRepaint() {
     LauncherUI::class.reflekt().firstMethod {
         name = "closeChatting"
         parameters(Boolean::class)
