@@ -22,6 +22,7 @@ import com.tencent.mm.ui.LauncherUI
 import com.tencent.mm.ui.chatting.ChattingUI
 import dev.ujhhgtg.reflekt.reflekt
 import dev.ujhhgtg.reflekt.utils.isSubclassOf
+import dev.sherry.wcs.constants.PackageNames
 import dev.sherry.wcs.dexkit.abc.IResolveDex
 import dev.sherry.wcs.dexkit.dsl.data
 import dev.sherry.wcs.dexkit.dsl.dexClass
@@ -31,6 +32,7 @@ import dev.sherry.wcs.features.api.core.WeConversationApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.core.WeDatabaseListenerApi
 import dev.sherry.wcs.features.api.ui.WeChatInputBarApi
+import dev.sherry.wcs.features.api.ui.WeCurrentConversationApi
 import dev.sherry.wcs.features.api.ui.WeMainActivityBeautifyApi
 import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
@@ -75,6 +77,9 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     override val descriptionRes = R.string.feature_hide_contacts_description
 
     private const val TAG = "HideContacts"
+
+    /** 聊天 fragment 的包名前缀：当前页面属于它才算「此刻停在聊天里」（见 [finishHiddenChats]）。 */
+    private const val CHATTING_UI_PACKAGE = "${PackageNames.WECHAT}.ui.chatting."
 
     private const val KEY_CONTACTS = "hidden_contacts"
 
@@ -270,22 +275,41 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     }
 
     /**
-     * 触发隐藏就一定离开隐藏联系人的聊天界面：只 `finish()`，不 `startActivity`。
+     * 触发隐藏就一定离开隐藏联系人的聊天页。8.0.76 的聊天页有两种承载，**常态是 fragment**，只处理
+     * Activity 那条等于什么都没做（真机 2026-11-06 就是这么错的：看门狗触发 9 次，一次都没关成页面）：
      *
-     * 聊天页本来就压在主页之上，finish 掉底下正好就是 LauncherUI 会话列表；而「锁屏那一刻 / 已经回到
-     * 桌面时」从后台启动 Activity 属于 Android 10+ 的 BAL 限制范围，随时会被静默丢弃 —— 这正是原先那套
-     * `exitToMainActivity()` 在息屏路径上不牢靠的地方。`finish()` 不受 BAL 限制。
+     *  - **LauncherUI 里的聊天 fragment**：主页之上压一个 `com.tencent.mm.ui.chatting.*` fragment，
+     *    根本不是 Activity —— `HomeSidePanel` 判「在不在聊天里」用的就是 `currentFragmet != null`
+     *    （`HomeSidePanel.kt:1138`）。所以 finish Activity、`startActivity(LauncherUI)` 都动不了它，
+     *    只能调微信自己的 `MMFragment.finish()`，它内部走 `getSupportFragmentManager().popBackStack()`，
+     *    正好落到会话列表。
+     *    聊天对象取 `WeCurrentConversationApi.value`（由 `ChatFooter.setUserName` 维护）。它在离开聊天
+     *    时**不会清空**，所以必须先确认当前 fragment 确实是聊天页再采信，否则会把用户从别的页面踢出来。
+     *  - **`ChattingUI` Activity**：独立窗口和通知直达会话那两条路才会出现，`finish()` 掉就行。
      *
-     * 只认 `Chat_User` —— 隐藏名单按需求只收私聊好友（见 `HideContactsSettings.regularContacts`），
-     * 所以群聊页天然不会命中；和摇一摇那条路径判定「现在停在哪个聊天」用的是同一个键。嵌套打开的多个
-     * 隐藏聊天会一次全关，回到第一个非隐藏页。
+     * 一律不用 `startActivity`：从后台启动 Activity 属 Android 10+ 的 BAL 限制范围，锁屏那一刻随时会被
+     * 静默丢弃；`finish()` / `popBackStack()` 不受这个限制。
+     *
+     * 每次触发都打一行状态：这一条曾经因为「静默 return」而让人完全看不出断在哪一环。
      */
     private fun finishHiddenChats() {
-        // 先快照：finish() 会让微信走 onDestroy，直接在 set 上迭代会撞上并发修改。
+        val talker = WeCurrentConversationApi.value
+        val hiddenTalker = talker.isNotEmpty() && talker in hiddenContacts
+        val fragment = LauncherUI.getInstance()?.currentFragmet
+        val fragmentClass = fragment?.javaClass?.name.orEmpty()
+        WeLogger.d(
+            TAG,
+            "close hidden chats: hiddenTalker=$hiddenTalker fragment=$fragmentClass activityChats=${openChats.size}",
+        )
+        if (hiddenTalker && fragmentClass.startsWith(CHATTING_UI_PACKAGE)) {
+            fragment?.finish()
+        }
+
+        // 先快照：finish() 会让微信走 onDestroy，直接在集合上迭代会撞上并发修改。
         for (activity in openChats.toList()) {
             val wxId = activity.intent.getStringExtra("Chat_User") ?: continue
             if (wxId !in hiddenContacts) continue
-            WeLogger.d(TAG, "finishing hidden conversation page $wxId")
+            WeLogger.d(TAG, "finishing hidden ChattingUI activity")
             activity.finish()
         }
     }
