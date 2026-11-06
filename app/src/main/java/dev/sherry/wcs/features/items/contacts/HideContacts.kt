@@ -1115,35 +1115,6 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     }
 
     /**
-     * `ui.contact.w8.<init>(String username, String nickname, Z, Z, Z, int, DefaultConstructorMarker)`
-     * — MVVM 转发选择器「最近」页行数据载体，仅由 recent/o（列表装配 lambda）与 p6 构建
-     * （字段 a=username、b=nickname）。探针：行一旦落在这个类上，说明渲染层数据没有走已被
-     * 过滤的 ia5.j.d 出口，用来分辨「过滤没命中」和「另有数据源」。
-     *
-     * 类名 w8 是混淆名、每版会漂，所以 throwOnFailure = false 且只做遥测，不承载隐藏逻辑。
-     */
-    val ctorRecentChatItemProbe by dexConstructor(throwOnFailure = false) {
-        matcher {
-            declaredClass = "com.tencent.mm.ui.contact.w8"
-        }
-    }
-
-    /**
-     * `ui.mvvm.uic.conversation.recent.o.invoke()` — MVVM 转发选择器「最近」页的列表装配体
-     * （RecentConversationForwardListUIC 的数据 lambda）。锚点对 "MicroMsg.RecentForwardListViewUIC"
-     * + "initDataList: contact == null" 全 dex 唯一落在这个方法里。
-     *
-     * 它把 k3.c()/b()/d() 逐条 new 成 v8/w8 塞进 t.d（ArrayList），结尾再 new 一个
-     * WxRecyclerAdapter 直接持有同一个 t.d 引用 —— 所以在出口对 t.d 原地剔除隐藏行，
-     * RecyclerView 首次绑定前就已经是干净的，不必碰视图层。
-     */
-    val methodRecentListAssembleInvoke by dexMethod(allowFailure = true) {
-        matcher {
-            usingEqStrings("MicroMsg.RecentForwardListViewUIC", "initDataList: contact == null")
-        }
-    }
-
-    /**
      * `static void c3.H(c3 netSceneSnsSync, SnsObject snsObject)` (8.0.76; the same method is
      * `c3.I` on 8.0.69) — `NetSceneSnsSync`'s inlined `updateSyncDataCache`, the single writer of
      * the 发现 tab's "N 位朋友的新动态" state. See hidecontacts/HideContactsMoments.kt.
@@ -1398,37 +1369,6 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
             usingEqStrings("arrow@name")
             returnType("java.util.List")
             paramTypes("android.content.Context", "java.util.List")
-        }
-    }
-
-    /**
-     * `RConversationStorage`'s two list-query builders — `(int, List, String, boolean, String) ->
-     * Cursor` (5 参数) 与 `(List, int, List, String, boolean, String) -> Cursor`（6 参数）.
-     *
-     * 转发选择器里「最近转发 / 最近聊天」两段的行游标都出自这两个方法：5 参版本不带包含列表，6
-     * 参版本把 `RecentForwardInfoStorage` 的名单当 `username IN (...)` 用 —— 所以只过滤那份名单
-     * 挡不住 5 参游标里的行（2026-11-05 真机第 2 条反馈：名单过滤命中、界面照旧）。过滤它们的
-     * 返回游标两条路一起堵上。
-     *
-     * 两条 SQL 的 `select ... from rconversation,rcontact` 字面量全树只在 `l4` 这一个类里出现，
-     * 且类内按参数个数各自唯一（其余 Cursor 方法是 3/4 参数的）。
-     *
-     * `allowFailure`: 同 [methodRecentForwardList]。
-     */
-    val methodRecentConversationCursor5 by dexMethod(allowFailure = true) {
-        matcher {
-            usingStrings("rconversation.digestUser, rconversation.hasTrunc, rcontact.nickname from rconversation,rcontact")
-            returnType("android.database.Cursor")
-            paramCount = 5
-        }
-    }
-
-    /** 6 参版本，同 [methodRecentConversationCursor5]。 */
-    val methodRecentConversationCursor6 by dexMethod(allowFailure = true) {
-        matcher {
-            usingStrings("rconversation.digestUser, rconversation.hasTrunc, rcontact.nickname from rconversation,rcontact")
-            returnType("android.database.Cursor")
-            paramCount = 6
         }
     }
 
