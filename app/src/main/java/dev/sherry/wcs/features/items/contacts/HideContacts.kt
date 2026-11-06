@@ -1096,6 +1096,25 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     }
 
     /**
+     * `jk5.o4.e7()` — 转发选人面板（`MvvmContactListUI`）的**状态工厂**，每次新建一个 `dk5.n0`
+     * 初始状态返回。它上面的 `q` 字段（HashSet）是微信自己的「本次选人屏蔽这些联系人」集合，来源是
+     * intent 的 `block_contact` / `Select_block_List`，外加 `vh0.f3.qj()` 这个全局屏蔽服务；
+     * `recent/o.invoke()` 建行前逐个 `if (!hashSet.contains(str))` 查的就是它。
+     *
+     * 所以往里加隐藏联系人是**一处覆盖整个面板所有列表**的做法，比按组件逐个过滤名单/游标靠谱；
+     * 而且这个 state 对象是本 Activity 私有的（`new dk5.n0()`），改它结构上碰不到首页会话列表。
+     *
+     * 匹配：三个 intent 键名字符串的交集只落在这个方法里。`allowFailure = true`：这是 opt-in 面，
+     * 解析失败时原有的名单过滤（`methodRecentForwardList`）仍在兜底。
+     */
+    val methodSelectConvStateFactory by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings("always_exclude_select_contact", "ForwardParams_ForwardByUIC", "Select_block_List")
+            paramCount = 0
+        }
+    }
+
+    /**
      * `ui.contact.w8.<init>(String username, String nickname, Z, Z, Z, int, DefaultConstructorMarker)`
      * — MVVM 转发选择器「最近」页行数据载体，仅由 recent/o（列表装配 lambda）与 p6 构建
      * （字段 a=username、b=nickname）。探针：行一旦落在这个类上，说明渲染层数据没有走已被

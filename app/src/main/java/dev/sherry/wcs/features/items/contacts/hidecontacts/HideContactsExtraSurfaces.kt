@@ -34,6 +34,7 @@ private val cursorHookProbed = mutableSetOf<String>()
  */
 fun HideContacts.installExtraSurfaceHooks() {
     installRecentForwardHook()
+    installSelectConvBlocklistHook()
     installRecentConversationCursorHook()
     installRecentListAssembleHook()
     installRecentChatItemProbe()
@@ -43,6 +44,63 @@ fun HideContacts.installExtraSurfaceHooks() {
 
 // ---------------------------------------------------------------------------------------------
 // 最近转发
+
+/**
+ * 往转发选人面板自己的屏蔽集里加隐藏联系人 —— 微信原生的「本次选人屏蔽谁」通道。
+ *
+ * `jk5.o4.e7()` 每次新建一个 `dk5.n0` 状态返回，它的 `q` 字段（HashSet）由 intent 的
+ * `block_contact`/`Select_block_List` 和全局服务 `vh0.f3.qj()` 喂；面板里装配列表时逐个
+ * `if (!hashSet.contains(username))` 才建行（`recent/o.invoke()` 实测就是这个形状）。所以写这一个集合
+ * 覆盖面板所有认它的列表，不用再一个组件一个组件去堵名单/游标。
+ *
+ * 关键是作用域：state 对象是 `MvvmContactListUI` 这个 Activity 私有的、每次开面板新建，改它碰不到
+ * 首页会话列表 —— 这也是不用 SQL 游标腿去够同一份 rconversation 的原因（那条会串面）。
+ *
+ * `dk5.n0` 上有 n/o/p/q 四个同型 HashSet，语义各不同（always_select / always_exclude /
+ * already_selected / **block**），**只能按字段名 q 取，按类型会误写错集合**；因此把写入结果和候选
+ * 字段名一起打日志，字段一漂移当场可见。
+ */
+private fun HideContacts.installSelectConvBlocklistHook() {
+    if (methodSelectConvStateFactory.isPlaceholder) {
+        WeLogger.w(TAG, "选人面板 state 工厂未解析; 只能用名单过滤兜底")
+        return
+    }
+    WeLogger.i(
+        TAG,
+        "选人面板 state 工厂已解析: " +
+            "${methodSelectConvStateFactory.method.declaringClass.name}.${methodSelectConvStateFactory.method.name}",
+    )
+    methodSelectConvStateFactory.hookAfter {
+        if (isShowingAll) return@hookAfter
+        if (!surfaceOn(HideSurface.RECENT_FORWARD)) return@hookAfter
+        if (hiddenContacts.isEmpty()) return@hookAfter
+
+        val state = result ?: return@hookAfter
+        val blockField = runCatching {
+            state.javaClass.reflekt().fields { name { it == "q" } }.map { it.self.makeAccessible() }.firstOrNull()
+        }.getOrNull()
+        if (blockField == null) {
+            WeLogger.i(
+                TAG,
+                "RECENT-DIAG picker-blockset: ${state.javaClass.name} 没有字段 'q'（名字漂了）; " +
+                    "候选 HashSet 字段=" +
+                    runCatching {
+                        state.javaClass.reflekt().fields { type = HashSet::class.java }
+                            .joinToString { it.self.name }
+                    }.getOrNull(),
+            )
+            return@hookAfter
+        }
+        val blockSet = blockField.get(state) as? MutableSet<Any> ?: return@hookAfter
+        val before = blockSet.size
+        blockSet.addAll(hiddenContacts)
+        WeLogger.i(
+            TAG,
+            "RECENT-DIAG picker-blockset: ${state.javaClass.name}.q $before->${blockSet.size} " +
+                "(hidden=${hiddenContacts.size})",
+        )
+    }
+}
 // ---------------------------------------------------------------------------------------------
 
 /**
