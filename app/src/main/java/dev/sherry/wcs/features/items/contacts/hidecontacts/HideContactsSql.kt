@@ -55,6 +55,17 @@ private val WRAPPER_RULES = listOf(
     SqlRule("conversation-list", HideSurface.CONVERSATIONS, ::looksLikeConversationListQuery) {
         "rconversation.username NOT IN (${it.toSqlList()})"
     },
+    // 聚合会话/服务通知那个「文件夹里的成员列表」。真机 2026-11-06 定性：主页那条 conversation-list 规则
+    // 按显示列（conversationtime + unreadcount + digestuser）认列表，而这条是 `select *`、被刻意放过了
+    // —— 所以停进聚合会话时，隐藏联系人照旧一行行摆在里面。这条语句出自 ConversationStorage 的
+    // 「按 parentRef 查询」（模块已在 [dev.sherry.wcs.features.items.chat.ConversationAggregation]
+    // 里钩过它、把 parentRef 换成 `wcs_folder_…`，锚点串就是下面两个常量抄的来源），语句本身在方法内部拼，
+    // 拼完照例落到 ka5.b0.g —— 上面那条改写日志负责证实这一步。
+    // 判据必须带到 order by 尾巴：`select * from rconversation where username=?` 这类单行读没有 ORDER BY，
+    // 给它补 NOT IN 会把宿主按名字取会话读成空行，不是显示列表。
+    SqlRule("folder-children", HideSurface.CONVERSATIONS, ::looksLikeFolderChildrenQuery) {
+        "rconversation.username NOT IN (${it.toSqlList()})"
+    },
     // 通讯录 -> 标签 -> 成员列表. A contact-selector query narrowed to label membership, matched first
     // so the 标签页 switch can drop just this surface. The matcher is a strict subset of the
     // contact-selector one below, so a host version that scopes labels differently simply falls
@@ -229,7 +240,14 @@ private fun rewriteWrapperSql(sql: String): String? {
     if (rule.surface == HideSurface.SEARCH) {
         WeLogger.d(TAG, "rule ${rule.name} matched: ${sql.take(80)}")
     }
-    return injectCondition(sql, rule.condition(hidden))
+    val rewritten = injectCondition(sql, rule.condition(hidden))
+    // folder-children 是新规则，而且它唯一的现场证据就是「wrapper 有没有收到这条查询」：命中日志打的是
+    // 改写**之后**的整句，这样 AND 落点对不对、宿主自己那段 WHERE 有没有给 AND 留坑（裸 OR 尾巴），
+    // 一次真机就能定性；反之如果开一页日志里一个字都没有，就是通路判错了。
+    if (rule.name == "folder-children") {
+        WeLogger.i(TAG, "folder children filtered: ${rewritten.take(200)}")
+    }
+    return rewritten
 }
 
 private fun looksLikeConversationListQuery(lower: String): Boolean {
@@ -244,6 +262,21 @@ private fun looksLikeConversationListQuery(lower: String): Boolean {
             lower.contains("unreadcount") &&
             lower.contains("digestuser")
 }
+
+/** 文件夹成员那条查询的两个半句，逐字抄自 `ConversationAggregation.methodConversationStorageQueryByParent`
+ *  的 DexKit 锚点 `usingStrings`（当初从 smali 里读出来的原文），所以这两串在当前宿主版本上真实存在。 */
+private const val FOLDER_CHILDREN_PREFIX = "select * from rconversation where "
+private const val FOLDER_CHILDREN_ORDER_BY = " order by flag desc, conversationtime desc"
+
+/**
+ * 聚合会话、服务通知、消息折叠那几个「按 parentRef 列出成员」的容器页共用的一条查询。
+ *
+ * 只认「前缀 + 这条独有的 order by 尾巴」两头，中间的 WHERE 交给 [injectCondition] 去接：它按整词
+ * 找已有的 `WHERE`（[WHERE_KEYWORD]），有就接 ` AND `，而且插在排序之前，所以宿主在中间拼什么条件都不影响
+ * 这句能不能被改写 —— 判据里刻意不要求 `parentref`，那种要求一旦在别的宿主版本上对不上就成了静默失效。
+ */
+private fun looksLikeFolderChildrenQuery(lower: String): Boolean =
+    lower.startsWith(FOLDER_CHILDREN_PREFIX) && lower.contains(FOLDER_CHILDREN_ORDER_BY)
 
 /**
  * Recognises the 标签 member list: a contact-selector query that also filters on label membership.
