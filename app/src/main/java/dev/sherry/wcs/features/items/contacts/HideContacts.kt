@@ -1,6 +1,7 @@
 package dev.sherry.wcs.features.items.contacts
 
 import android.app.Activity
+import android.app.Application
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -9,6 +10,9 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.MotionEvent
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -53,10 +57,12 @@ import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.getSystemService
+import dev.sherry.wcs.utils.android.getTopMostActivity
 import dev.sherry.wcs.utils.android.showToast
 import org.luckypray.dexkit.query.enums.MatchType
 import org.luckypray.dexkit.query.matchers.MethodMatcher
-import java.lang.ref.WeakReference
+import java.util.Collections
+import java.util.WeakHashMap
 import kotlin.math.sqrt
 
 
@@ -71,6 +77,12 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
     private const val TAG = "HideContacts"
 
     private const val KEY_CONTACTS = "hidden_contacts"
+
+    /** 输入栏指令的默认值：设置里这条被清空时按它恢复（见 [showCommand]）。 */
+    const val DEFAULT_SHOW_COMMAND = "#show"
+
+    /** 同 [DEFAULT_SHOW_COMMAND]，「恢复隐藏」那条。 */
+    const val DEFAULT_HIDE_COMMAND = "#hide"
 
     // One-time flag: older versions hid chats by writing parentRef='hidden_conv_parent'. Once we've
     // cleared that stale marker for the current hidden set (so #show / un-hide work again), we never
@@ -100,18 +112,24 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
                 Intent.ACTION_SCREEN_OFF -> {
                     if (hideOnLock) enterAwayHidden()
 
-                    // 退出隐藏聊天是这功能原有的行为，不受新开关影响
-                    val chattingUi = chattingUi?.get() ?: return
-                    val wxId = chattingUi.intent.getStringExtra("Chat_User")
-                    if (temporarilyShown || wxId !in hiddenContacts) return
-
-                    exitToMainActivity()
+                    // 退出隐藏聊天是这功能原有的行为，不受新开关影响；临时显示开着时照旧不动。
+                    if (!temporarilyShown) finishHiddenChats()
                 }
             }
         }
     }
 
-    private var chattingUi: WeakReference<ChattingUI>? = null
+    /**
+     * 当前还活着的聊天页，**包含已经 onPause 的那些**。
+     *
+     * 这里原来是一个 `WeakReference<ChattingUI>` 单槽，并且在 `onPause` 里清空 —— 可息屏和按 Home 的
+     * 次序正是「先暂停顶层 Activity，再广播 `ACTION_SCREEN_OFF` / 再判离开」，两者都在主线程，所以等
+     * 触发点来取的时候它必然已经是 null，退出聊天这件事一次都没真正执行过。改成只在 `onDestroy` 摘除。
+     *
+     * `WeakHashMap` 的键是弱引用、且 Activity 没覆写 equals/hashCode（按身份比），既不拦 GC 也不会误合并。
+     */
+    private val openChats: MutableSet<ChattingUI> =
+        Collections.newSetFromMap(WeakHashMap<ChattingUI, Boolean>())
 
     // Registered against the application context, exactly once. It used to be registered on the
     // LauncherUI Activity inside doOnCreate — so every Activity recreation added another
@@ -134,6 +152,62 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         screenOffReceiverRegistered = false
         runCatching { HostInfo.application.unregisterReceiver(ScreenOffReceiver) }
             .onFailure { WeLogger.w(TAG, "failed to unregister screen off receiver", it) }
+    }
+
+    private val awayHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * 「按一次 Home 就隐藏」：[WeChatForegroundTracker] 判离开的口径是 onStart/onStop 计数归零，
+     * 而 `onStop` 要等退出动画放完才来，所以体感是「得回到桌面才藏」。这里接上更早的那半个信号：
+     * 任何页面 `onPause` 后等 [awaySettleMs] 再复检一次，其间只要有页面重新 resumed 就当没离开。
+     *
+     * 复检有两层，任一层成立就不触发：`onActivityResumed` 直接摘掉挂起的检查；检查本身再问一次
+     * `getTopMostActivity(allowPaused = false)` —— 内部跳转的恢复偶尔落在窗口外，这层仍然认得出
+     * 「还有个页面没 paused」。这里不能用 `isForeground`：按 Home 后 350ms 时页面还处在 paused 但
+     * 尚未 stopped，按 started 计数的口径仍然算「在前台」，正好会把这次触发吃掉。
+     *
+     * 开关写在体内（和其余门控一样，改开关下一次生效），旧的 onStop 通路保留不动 —— 它现在是这套
+     * 更快通路的兜底，重复调用 [enterAwayHidden] 不会二次重绘。
+     */
+    private val awayLifecycleCallbacks = object : Application.ActivityLifecycleCallbacks {
+        override fun onActivityPaused(activity: Activity) {
+            if (!hideOnLeave) return
+            awayHandler.removeCallbacks(awaySettleCheck)
+            awayHandler.postDelayed(awaySettleCheck, awaySettleMs.toLong())
+        }
+
+        override fun onActivityResumed(activity: Activity) {
+            awayHandler.removeCallbacks(awaySettleCheck)
+        }
+
+        override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+        override fun onActivityStarted(activity: Activity) {}
+        override fun onActivityStopped(activity: Activity) {}
+        override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+        override fun onActivityDestroyed(activity: Activity) {}
+    }
+
+    private val awaySettleCheck = Runnable {
+        if (getTopMostActivity(allowPaused = false) != null) return@Runnable
+        WeLogger.d(TAG, "away watchdog fired after ${awaySettleMs}ms settle")
+        enterAwayHidden()
+    }
+
+    private var awayWatchdogRegistered = false
+
+    private fun registerAwayWatchdog() {
+        if (awayWatchdogRegistered) return
+        HostInfo.application.registerActivityLifecycleCallbacks(awayLifecycleCallbacks)
+        awayWatchdogRegistered = true
+        WeLogger.d(TAG, "registered away watchdog")
+    }
+
+    private fun unregisterAwayWatchdog() {
+        if (!awayWatchdogRegistered) return
+        awayWatchdogRegistered = false
+        awayHandler.removeCallbacks(awaySettleCheck)
+        runCatching { HostInfo.application.unregisterActivityLifecycleCallbacks(awayLifecycleCallbacks) }
+            .onFailure { WeLogger.w(TAG, "failed to unregister away watchdog", it) }
     }
 
     private object ShakeDetector : SensorEventListener {
@@ -195,6 +269,27 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         ctx.startActivity(intent)
     }
 
+    /**
+     * 触发隐藏就一定离开隐藏联系人的聊天界面：只 `finish()`，不 `startActivity`。
+     *
+     * 聊天页本来就压在主页之上，finish 掉底下正好就是 LauncherUI 会话列表；而「锁屏那一刻 / 已经回到
+     * 桌面时」从后台启动 Activity 属于 Android 10+ 的 BAL 限制范围，随时会被静默丢弃 —— 这正是原先那套
+     * `exitToMainActivity()` 在息屏路径上不牢靠的地方。`finish()` 不受 BAL 限制。
+     *
+     * 只认 `Chat_User` —— 隐藏名单按需求只收私聊好友（见 `HideContactsSettings.regularContacts`），
+     * 所以群聊页天然不会命中；和摇一摇那条路径判定「现在停在哪个聊天」用的是同一个键。嵌套打开的多个
+     * 隐藏聊天会一次全关，回到第一个非隐藏页。
+     */
+    private fun finishHiddenChats() {
+        // 先快照：finish() 会让微信走 onDestroy，直接在 set 上迭代会撞上并发修改。
+        for (activity in openChats.toList()) {
+            val wxId = activity.intent.getStringExtra("Chat_User") ?: continue
+            if (wxId !in hiddenContacts) continue
+            WeLogger.d(TAG, "finishing hidden conversation page $wxId")
+            activity.finish()
+        }
+    }
+
     override fun onEnable() {
         // --- home screen conversation list ---
 
@@ -217,12 +312,15 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
         // 离开微信检测走 ActivityLifecycleCallbacks：比钩 onUserLeaveHint 稳（微信内部页面跳转
         // 时 startedCount 不会归零，不会误判成离开），ensureRegistered 与 addOnChanged 都幂等。
+        // 这套口径要到 onStop 才成立，也就是「回到桌面才藏」，所以下面另有一套 onPause + 延时复检
+        // 的看门狗把触发点提前到按 Home 的瞬间（见 [awayLifecycleCallbacks]）。
         //
         // 必须在 onEnable 里注册，不能只靠下面的 doOnCreate 钩子：运行中关了再开本功能时
         // LauncherUI 已存在、onCreate 不会重跑，而 onDisable 已把接收器和监听摘掉 —— 不在这里
         // 补注册，离开/息屏触发就全哑了（真机 2026-11-05 复现）。
         WeChatForegroundTracker.ensureRegistered()
         WeChatForegroundTracker.addOnChanged(foregroundListener)
+        registerAwayWatchdog()
 
         WeMainActivityBeautifyApi.methodDoOnCreate.hookAfter {
             migrateLegacyHiddenParentRef()
@@ -234,13 +332,13 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
             installTitleGestures(context)
         }
 
-        // --- shake to leave ---
+        // --- 聊天页跟踪：摇一摇退出的宿主，也是「触发隐藏时必须离开隐藏聊天」的数据源 ---
 
         ChattingUI::class.reflekt().apply {
             firstMethod { name = "onResume" }.hookAfter {
                 val activity = thisObject as ChattingUI
 
-                chattingUi = WeakReference(activity)
+                openChats += activity
 
                 val wxId = activity.intent.getStringExtra("Chat_User")
                 if (temporarilyShown || wxId !in hiddenContacts) return@hookAfter
@@ -248,10 +346,13 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
                 ShakeDetector.start(activity)
             }
 
+            // onPause 只停摇一摇，不再摘引用：离开/息屏的判定就发生在这之后，那时还得认得出停在哪个聊天。
             firstMethod { name = "onPause" }.hookAfter {
-                chattingUi?.clear()
-                chattingUi = null
                 ShakeDetector.stop()
+            }
+
+            firstMethod { name = "onDestroy" }.hookAfter {
+                openChats -= thisObject as ChattingUI
             }
         }
 
@@ -341,9 +442,9 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         uninstallBlockHooks()
         uninstallProfileHooks()
         unregisterScreenOffReceiver()
+        unregisterAwayWatchdog()
         ShakeDetector.stop()
-        chattingUi?.clear()
-        chattingUi = null
+        openChats.clear()
         WeChatInputBarApi.removeListener(this)
         WeDatabaseListenerApi.removeListener(this)
         WeChatForegroundTracker.removeOnChanged(foregroundListener)
@@ -356,31 +457,33 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
      * Enters the persistent hidden state — the trigger side of away-hiding, and the only way
      * hiding starts.
      *
-     * 隐藏一经触发就一直保持：回到前台、解锁都不恢复，只有长按/三击标题、`#show`、定时显示或
-     * 关闭功能才解除。所以进隐藏时要先清掉上一次手动显示的覆盖，否则 `#show` 之后再离开微信，
+     * 隐藏一经触发就一直保持：回到前台、解锁都不恢复，只有长按/三击标题、显示指令、定时显示或
+     * 关闭功能才解除。所以进隐藏时要先清掉上一次手动显示的覆盖，否则显示指令之后再离开微信，
      * 这一次隐藏会静默失效。
      *
      * Repaints through `WeConversationApi.reloadConversations()` rather than just flipping the flag:
      * the recents card and the lock-screen view are captured right around this callback, so the list
      * has to be rebuilt before the system takes that picture.
+     *
+     * 也是在这里收尾「离开隐藏联系人的聊天页」：停在谁的聊天里、从哪条路触发的隐藏都归一到这个入口，
+     * 所以退出写在这一处，而不是按 Home 看门狗 / onStop / 息屏 三条路各写一遍（用户定：触发隐藏就必须
+     * 回到主页会话列表，不挂任何表面开关）。
      */
     fun enterAwayHidden() {
+        val wasHidden = awayHidden
         val wasShown = temporarilyShown
         temporarilyShown = false
-        if (awayHidden) {
-            // 已经处于隐藏态但覆盖还开着：状态位没翻，可列表此刻正显示着覆盖前的内容，
-            // 不重绘的话这次离开就静默失效了。
-            if (wasShown) WeConversationApi.reloadConversations()
-            return
-        }
         awayHidden = true
-        WeConversationApi.reloadConversations()
+        // 已经处于隐藏态但覆盖还开着时也要重绘：状态位没翻，可列表此刻正显示着覆盖前的内容。
+        if (!wasHidden || wasShown) WeConversationApi.reloadConversations()
+        finishHiddenChats()
     }
 
     /**
      * The 手动恢复 entry shared by the title gestures (long press / triple tap) and by nothing else —
-     * `#show` keeps its own toast wording. Only meaningful while away-hiding is active; afterwards
-     * the next leave / screen-off clears the override again (see [enterAwayHidden]).
+     * it reports with the same 显示提示文案 as the show command (see [showHintText]). Only meaningful
+     * while away-hiding is active; afterwards the next leave / screen-off clears the override again
+     * (see [enterAwayHidden]).
      */
     fun showTemporarily(context: Context) {
         if (temporarilyShown) {
@@ -393,7 +496,12 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         temporarilyShown = true
         showToast(
             context,
-            context.localizedContactsString(R.string.contacts_hide_shown_command_hint),
+            hintFor(
+                context,
+                showHintText,
+                R.string.contacts_hide_shown_command_hint,
+                hideCommand.trim().ifEmpty { DEFAULT_HIDE_COMMAND },
+            ),
         )
         WeConversationApi.reloadConversations()
     }
@@ -415,42 +523,79 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         WeConversationApi.reloadConversations()
     }
 
+    /**
+     * 输入栏指令派发：见 [showCommand] / [hideCommand]。
+     *
+     * 仍然是整串相等（不是前缀匹配）—— 这两条指令的语义是「切换显示状态」，误触发一次就把用户
+     * 正在打的字清掉了。改成 trim 后比较，是因为设置里手输很容易带进首尾空格，那样指令会静默失效。
+     *
+     * 留空不等于关闭：按 [DEFAULT_SHOW_COMMAND] / [DEFAULT_HIDE_COMMAND] 生效，所以有效指令永远非
+     * 空，不会和「刚被清空的输入框」相等而每轮自触发。
+     */
     override fun onTextChanged(chatFooter: ChatFooter, text: String) {
-        when (text) {
-            "#show" -> {
-                chatFooter.lastText = ""
-                if (temporarilyShown) {
-                    showToast(
-                        chatFooter.context,
-                        chatFooter.context.localizedContactsString(R.string.contacts_hide_already_shown),
-                    )
-                    return
-                }
-                temporarilyShown = true
-                showToast(
-                    chatFooter.context,
-                    chatFooter.context.localizedContactsString(R.string.contacts_hide_shown_command_hint),
-                )
-                WeConversationApi.reloadConversations()
-            }
-
-            "#hide" -> {
-                chatFooter.lastText = ""
-                if (!temporarilyShown) {
-                    showToast(
-                        chatFooter.context,
-                        chatFooter.context.localizedContactsString(R.string.contacts_hide_nothing_to_restore),
-                    )
-                    return
-                }
-                temporarilyShown = false
-                showToast(
-                    chatFooter.context,
-                    chatFooter.context.localizedContactsString(R.string.contacts_hide_restored),
-                )
-                WeConversationApi.reloadConversations()
-            }
+        val typed = text.trim()
+        val show = showCommand.trim().ifEmpty { DEFAULT_SHOW_COMMAND }
+        val hide = hideCommand.trim().ifEmpty { DEFAULT_HIDE_COMMAND }
+        // 两条指令被配成同一个字符串时按当前状态来回切：只按字面顺序匹配的话同串只会命中一条腿，
+        // 用户切过去就切不回来，只能靠手势或改设置收拾。
+        val wantHide = typed == hide && (typed != show || temporarilyShown)
+        when {
+            wantHide -> reHide(chatFooter)
+            typed == show -> temporarilyShow(chatFooter)
         }
+    }
+
+    /**
+     * 提示文案取词：[custom]（[showHintText] / [hideHintText]）留空就用内置文案，内置文案里的
+     * `%1$s` 交给 Android 填成 [command]；自定义文案原样显示，只把 `{command}` 换成那条指令 —— 不
+     * 走 String.format，免得用户写的百分号被当成格式符崩掉。
+     */
+    private fun hintFor(context: Context, custom: String, defaultRes: Int, command: String): String =
+        if (custom.isBlank()) context.localizedContactsString(defaultRes, command)
+        else custom.replace("{command}", command)
+
+    private fun temporarilyShow(chatFooter: ChatFooter) {
+        chatFooter.lastText = ""
+        if (temporarilyShown) {
+            showToast(
+                chatFooter.context,
+                chatFooter.context.localizedContactsString(R.string.contacts_hide_already_shown),
+            )
+            return
+        }
+        temporarilyShown = true
+        showToast(
+            chatFooter.context,
+            hintFor(
+                chatFooter.context,
+                showHintText,
+                R.string.contacts_hide_shown_command_hint,
+                hideCommand.trim().ifEmpty { DEFAULT_HIDE_COMMAND },
+            ),
+        )
+        WeConversationApi.reloadConversations()
+    }
+
+    private fun reHide(chatFooter: ChatFooter) {
+        chatFooter.lastText = ""
+        if (!temporarilyShown) {
+            showToast(
+                chatFooter.context,
+                chatFooter.context.localizedContactsString(R.string.contacts_hide_nothing_to_restore),
+            )
+            return
+        }
+        temporarilyShown = false
+        showToast(
+            chatFooter.context,
+            hintFor(
+                chatFooter.context,
+                hideHintText,
+                R.string.contacts_hide_restored,
+                showCommand.trim().ifEmpty { DEFAULT_SHOW_COMMAND },
+            ),
+        )
+        WeConversationApi.reloadConversations()
     }
 
     override fun onQuery(sql: String): String? =
@@ -532,6 +677,35 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
      * 三击判定间隔（毫秒）：在最后一次点击时度量与前一次的间距，超过则重新从一计数。
      */
     var tripleTapMs by prefOption("hide_triple_tap_ms", 500)
+
+    /**
+     * 输入栏里的「临时显示」指令，默认 [DEFAULT_SHOW_COMMAND]。
+     *
+     * 可改是为了让用户避开自己聊天内容里会出现的文本：`onTextChanged` 由 `afterTextChanged`
+     * 每次击键驱动，所以指令**输完即触发、不需要按发送**，靠清空输入框避免它真的发出去。代价是
+     * 指令若与常用词重合，打字打到一半就会触发 —— 这两条偏好存在的理由。
+     *
+     * 空串不表示关闭，表示「用默认值」（设置侧写入时也会把空值改回默认，见 [onTextChanged]）。
+     */
+    var showCommand by prefOption("hide_show_command", DEFAULT_SHOW_COMMAND)
+
+    /** 输入栏里的「恢复隐藏」指令，默认 [DEFAULT_HIDE_COMMAND]；与 [showCommand] 同规则。 */
+    var hideCommand by prefOption("hide_hide_command", DEFAULT_HIDE_COMMAND)
+
+    /**
+     * 「临时显示」成功后提示的自定义文案；空 = 用内置文案。自定义文案里的 `{command}` 会换成
+     * [hideCommand]，长按/三击手势也走这份文案（见 [showTemporarily]）。
+     */
+    var showHintText by prefOption("hide_show_hint_text", "")
+
+    /** 「恢复隐藏」成功后提示的自定义文案；空 = 用内置文案，`{command}` 换成 [showCommand]。 */
+    var hideHintText by prefOption("hide_hide_hint_text", "")
+
+    /**
+     * 按 Home 后隔多久复检「是不是真的离开了微信」（毫秒），见 [awayLifecycleCallbacks]。
+     * 默认 350ms：短了会赶上微信内部页面还没 resume 的间隙而误触发，长了就退回原来的迟钝。
+     */
+    var awaySettleMs by prefOption("hide_away_settle_ms", 350)
 
     /**
      * 前后台翻转只管进隐藏这一半：离开前台且开了「离开微信隐藏」就进入持久隐藏态；

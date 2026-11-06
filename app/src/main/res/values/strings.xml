@@ -3212,8 +3212,16 @@ Time: {time}</string>
     <string name="contacts_detect_delete_all">Delete all</string>
     <string name="contacts_hide_restored">Hidden contacts restored</string>
     <string name="contacts_hide_already_shown">Hidden contacts are already temporarily visible</string>
-    <string name="contacts_hide_shown_command_hint">All hidden contacts are temporarily visible; enter #hide to hide them again</string>
+    <string name="contacts_hide_shown_command_hint">All hidden contacts are temporarily visible; enter %1$s to hide them again</string>
     <string name="contacts_hide_nothing_to_restore">There are no hidden contacts to restore</string>
+    <string name="contacts_hide_show_command">Show command</string>
+    <string name="contacts_hide_show_command_value_hint">e.g. #show; leaving it blank restores the default</string>
+    <string name="contacts_hide_hide_command">Hide again command</string>
+    <string name="contacts_hide_hide_command_value_hint">e.g. #hide; leaving it blank restores the default</string>
+    <string name="contacts_hide_show_hint">Reveal message</string>
+    <string name="contacts_hide_show_hint_value_hint">Blank uses the built-in text; {command} becomes the hide command</string>
+    <string name="contacts_hide_hide_hint">Hide again message</string>
+    <string name="contacts_hide_hide_hint_value_hint">Blank uses the built-in text; {command} becomes the show command</string>
     <string name="contacts_hide_select">Select contacts to hide</string>
     <plurals name="contacts_hide_saved"><item quantity="one">Saved %1$d contact</item><item quantity="other">Saved %1$d contacts</item></plurals>
     <string name="contacts_hide_configure">Configure hidden list</string>
@@ -3284,9 +3292,11 @@ Time: {time}</string>
     <string name="contacts_hide_group_general">Hidden list</string>
     <string name="contacts_hide_group_timing">When to hide</string>
     <string name="contacts_hide_on_leave">Hide when leaving WeChat</string>
-    <string name="contacts_hide_on_leave_description">Switching to another app or pressing Home takes the hidden contacts out of the conversation list, so the recents card shows nothing. They stay hidden after you come back — long-press or triple-tap the home-screen title, send #show, or turn the feature off to show them again.</string>
+    <string name="contacts_hide_on_leave_description">Switching to another app or pressing Home takes the hidden contacts out of the conversation list, so the recents card shows nothing. They stay hidden after you come back — long-press or triple-tap the home-screen title, type the show command in the input bar, or turn the feature off to show them again.</string>
+    <string name="contacts_hide_away_settle_ms">Away check delay</string>
+    <string name="contacts_hide_away_settle_ms_description">How long to wait after a page pauses before deciding you left WeChat. Too short can hide contacts during an internal page switch, too long delays the hide.</string>
     <string name="contacts_hide_on_lock">Hide when the screen turns off</string>
-    <string name="contacts_hide_on_lock_description">Turning the screen off hides them and they stay hidden after unlock — long-press or triple-tap the home-screen title, send #show, or turn the feature off to show them again.</string>
+    <string name="contacts_hide_on_lock_description">Turning the screen off hides them and they stay hidden after unlock — long-press or triple-tap the home-screen title, type the show command in the input bar, or turn the feature off to show them again.</string>
     <string name="contacts_hide_gesture_long_press">Long-press to reveal</string>
     <string name="contacts_hide_gesture_long_press_description">Press and hold the home-screen title to show the hidden contacts again</string>
     <string name="contacts_hide_gesture_triple_tap">Triple-tap to reveal</string>

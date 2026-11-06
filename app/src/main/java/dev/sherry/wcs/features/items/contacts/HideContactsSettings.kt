@@ -34,6 +34,7 @@ import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.IntNumberPickerWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
+import dev.sherry.wcs.ui.content.m3.TextFieldDialogWidget
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.android.showToast
 
@@ -92,7 +93,9 @@ private val ACCESS_SURFACES = listOf(
  * scanned from the user's side: 会话 / 通讯录 / 朋友圈 / 其他入口 / 访问控制.
  */
 fun HideContacts.showSettingsDialog(context: ComponentActivity) {
-    val regularContacts = WeDatabaseApi.getFriends() + WeDatabaseApi.getGroups()
+    // 隐藏名单只收私聊好友：本功能针对「某个人看不见」，群聊不在这个语义里（其它功能仍用
+    // getFriends() + getGroups() 的常规名单，互不影响）。
+    val regularContacts = WeDatabaseApi.getFriends()
 
     showComposeDialog(context) {
         AlertDialogContent(
@@ -106,6 +109,7 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                 var gestureTripleTapInput by remember { mutableStateOf(gestureTripleTapEnabled) }
                 var longPressMsInput by remember { mutableIntStateOf(longPressMs) }
                 var tripleTapMsInput by remember { mutableIntStateOf(tripleTapMs) }
+                var awaySettleMsInput by remember { mutableIntStateOf(awaySettleMs) }
 
                 Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
                     SegmentedColumn(
@@ -178,6 +182,26 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                                     hideOnLeave = it
                                 },
                             )
+                        }
+                        // 时长条跟着「离开微信隐藏」显隐，和两个手势时长条同一个规矩。
+                        if (hideOnLeaveInput) {
+                            item(key = "away-settle-ms") {
+                                BaseItemContainer {
+                                    IntNumberPickerWidget(
+                                        title = stringResource(R.string.contacts_hide_away_settle_ms),
+                                        description = stringResource(R.string.contacts_hide_away_settle_ms_description),
+                                        value = awaySettleMsInput,
+                                        startInt = 150,
+                                        endInt = 1000,
+                                        stepSize = 50,
+                                        valueSuffix = "ms",
+                                        onValueChange = {
+                                            awaySettleMsInput = it
+                                            awaySettleMs = it
+                                        },
+                                    )
+                                }
+                            }
                         }
                         item(key = "hide-on-lock") {
                             SwitchWidget(
@@ -253,6 +277,50 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                                     )
                                 }
                             }
+                        }
+                        item(key = "show-command") {
+                            TextFieldDialogWidget(
+                                title = stringResource(R.string.contacts_hide_show_command),
+                                value = showCommand,
+                                onValueChange = { showCommand = it.trim().ifEmpty { DEFAULT_SHOW_COMMAND } },
+                                dialogTitle = stringResource(R.string.contacts_hide_show_command),
+                                confirmLabel = stringResource(R.string.dialog_confirm),
+                                dismissLabel = stringResource(R.string.dialog_cancel),
+                                valueHint = stringResource(R.string.contacts_hide_show_command_value_hint),
+                            )
+                        }
+                        item(key = "hide-command") {
+                            TextFieldDialogWidget(
+                                title = stringResource(R.string.contacts_hide_hide_command),
+                                value = hideCommand,
+                                onValueChange = { hideCommand = it.trim().ifEmpty { DEFAULT_HIDE_COMMAND } },
+                                dialogTitle = stringResource(R.string.contacts_hide_hide_command),
+                                confirmLabel = stringResource(R.string.dialog_confirm),
+                                dismissLabel = stringResource(R.string.dialog_cancel),
+                                valueHint = stringResource(R.string.contacts_hide_hide_command_value_hint),
+                            )
+                        }
+                        item(key = "show-hint-text") {
+                            TextFieldDialogWidget(
+                                title = stringResource(R.string.contacts_hide_show_hint),
+                                value = showHintText,
+                                onValueChange = { showHintText = it.trim() },
+                                dialogTitle = stringResource(R.string.contacts_hide_show_hint),
+                                confirmLabel = stringResource(R.string.dialog_confirm),
+                                dismissLabel = stringResource(R.string.dialog_cancel),
+                                valueHint = stringResource(R.string.contacts_hide_show_hint_value_hint),
+                            )
+                        }
+                        item(key = "hide-hint-text") {
+                            TextFieldDialogWidget(
+                                title = stringResource(R.string.contacts_hide_hide_hint),
+                                value = hideHintText,
+                                onValueChange = { hideHintText = it.trim() },
+                                dialogTitle = stringResource(R.string.contacts_hide_hide_hint),
+                                confirmLabel = stringResource(R.string.dialog_confirm),
+                                dismissLabel = stringResource(R.string.dialog_cancel),
+                                valueHint = stringResource(R.string.contacts_hide_hide_hint_value_hint),
+                            )
                         }
                     }
 
