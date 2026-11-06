@@ -188,6 +188,9 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
         override fun onActivityResumed(activity: Activity) {
             awayHandler.removeCallbacks(awaySettleCheck)
+            // 主页（含从聊天页返回、切 tab）重新可见时补画一次标题栏红点：标题栏是宿主的视图树，
+            // 换掉之后我们那个红点跟着旧树消失，只靠消息到达/点开聊天两个事件永远不会回来。
+            if (activity is LauncherUI) refreshHomeDot()
         }
 
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}

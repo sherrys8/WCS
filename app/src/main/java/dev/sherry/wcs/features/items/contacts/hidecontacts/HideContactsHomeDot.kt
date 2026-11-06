@@ -17,6 +17,7 @@ import dev.ujhhgtg.reflekt.reflekt
 import dev.sherry.wcs.features.items.contacts.HideContacts
 import dev.sherry.wcs.preferences.WePrefs
 import dev.sherry.wcs.ui.utils.findViewWhich
+import dev.sherry.wcs.ui.utils.findViewsWhich
 import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
 
@@ -28,17 +29,26 @@ import dev.sherry.wcs.utils.WeLogger
  * 用户要的是「多个隐藏联系人的消息必须全部点开才清掉」。一个布尔表达不了这件事：点开 A 不该把 B 的
  * 痕迹一起抹掉。所以存的是 `Set<String>`（MMKV `hidden_dot_pending`）：收到加、点开减、空了才灭。
  *
- * ## 为什么不需要通知通道，也不需要 :push
+ * ## 为什么不需要通知通道
  *
  * 这就是标题栏里的一个 View，不是系统通知 —— 没有渠道、没有角标、没有点击行为（用户明确要求红点不可点，
- * 作用和「微信团队提醒」一样只是提醒）。两个信号也都在主进程：消息入库走 `WeDatabaseListenerApi` 的
+ * 作用和「微信团队提醒」一样只用于提醒）。两个信号也都在主进程：消息入库走 `WeDatabaseListenerApi` 的
  * 插入监听，点开聊天走 `ChatFooter.setUserName`。所以红点是**当场出现**的，不用等列表刷新或回前台。
  *
- * ## 为什么挂在「搜索按钮左边」
+ * ## 标题栏的真实形状（真机 8.0.76 `dumpsys activity top`，别再照猜的写）
  *
- * 主页标题栏是那个装着 `android.R.id.text1` 标题的 RelativeLayout（`HomeSidePanel` 认标题栏用的就是
- * 同一个 TextView）。红点插在标题右侧**最靠左**的那个可点击图标左边，那就是搜索按钮，「+」在它右边。
- * 这条判据只用运行期的 `view.id` 与 `left`，不碰任何混淆的 `R.id` 名字。
+ *     LinearLayout (1018,64-1272,140)          ← 图标组，红点要插在它的第 0 位
+ *       RelativeLayout                          ← 「搜索」那一格（第二格才是「+」）
+ *         WeImageView  meb                      ← 可点击图标本体
+ *         ImageView    med  (GONE)
+ *     … RelativeLayout gp
+ *       LinearLayout > LinearLayout
+ *         TextView  android:id/text1            ← 标题「微信」，它往上第三四行才是标题栏
+ *
+ * 两版实现都栽在这里：`text1.parent` 是 LinearLayout 而不是 RelativeLayout（第一版因此每次都
+ * `findTitleBar() == null` 静默返回），而图标又不是标题的兄弟、在另一个容器里。所以现在的找法是
+ * 「从每个可见的 text1 往上爬，在同一条水平带里找最靠左的可点击图标」，红点插在图标组最左、
+ * 「搜索」那一格之前。
  */
 private const val TAG = "HideContactsHomeDot"
 
@@ -49,6 +59,9 @@ private const val KEY_PENDING = "hidden_dot_pending"
 private const val DOT_TAG = "wcs_hidden_dot"
 
 private val mainHandler = Handler(Looper.getMainLooper())
+
+/** 找不到锚点只报一次：这个刷新点很密，刷屏会把有用行冲掉。 */
+private var missingLogged = false
 
 /**
  * 装在 `HideContacts.onEnable` 里。钩子不在 `onDisable` 摘除（本功能惯例：直接挂钩子的卸载是尽力而为，
@@ -95,8 +108,10 @@ fun HideContacts.onHiddenMessageArrived(values: ContentValues) {
 }
 
 /**
- * 由 `HideContacts` 的 `doOnCreate` 钩子和 `installHomeDot` 调用：主页刚建好（或重建）的那一刻按当前
- * 名单补画一次。消息到达与点开聊天这两处本来就会刷，所以这里只负责「名单是旧的、视图是新的」这一种。
+ * 由 `doOnCreate` 与 `onActivityResumed` 调用：主页回到前台/重建时按当前名单补画一次。
+ *
+ * 必须有一个「回到主页」的刷新点 —— 标题栏是宿主自己的视图树，切 tab 或从聊天页返回时会被换掉，
+ * 我们那个红点跟着旧树一起没；只有消息到达/点开聊天两个事件的话，红点就再也不回来了。
  */
 fun HideContacts.refreshHomeDot() {
     if (!isActive || !surfaceOn(HideSurface.HOME_DOT)) return
@@ -113,62 +128,41 @@ fun HideContacts.clearHomeDot() {
 
 private fun pending(): Set<String> = WePrefs.getStringSetOrDef(KEY_PENDING, emptySet())
 
+/** 标题栏宿主 + 要插在哪个容器、哪一位之前（anchorId 供 RelativeLayout 那一路 LEFT_OF 用）。 */
+private class Bar(val container: ViewGroup, val index: Int, val anchorId: Int)
+
 /** 按当前名单把红点画出来或撤掉。 */
 private fun paint() {
-    // 已经被移出隐藏名单的人顺手剔掉，否则红点会永远灭不掉。注意这一步只看名单，不能被下面的开关
-    // 判断带着走 —— 关掉那一面应当只是不画，不该把攒下来的名单清空，否则再打开就什么都没有了。
+    // 已被移出隐藏名单的人顺手剔除，否则红点永远灭不掉。这一步只看名单，不能被开关带着走 ——
+    // 关掉那一面应当只是不画，不该把攒下来的名单清空，否则再打开就什么都没有了。
     val waiting = pending().filter { it in HideContacts.hiddenContacts }.toSet()
     if (waiting.size != pending().size) WePrefs.putStringSet(KEY_PENDING, waiting)
 
     val show = waiting.isNotEmpty() && HideContacts.surfaceOn(HideSurface.HOME_DOT)
-    val bar = findTitleBar() ?: return
-    val dot = bar.findViewWhich { it.tag == DOT_TAG }
-    when {
-        !show -> dot?.visibility = View.GONE
-        dot != null -> dot.visibility = View.VISIBLE
-        else -> attachDot(bar, allowRetry = true)
-    }
-}
-
-private fun findTitleBar(): RelativeLayout? {
-    val activity = LauncherUI.getInstance() ?: return null
-    if (activity.isFinishing) return null
-    val title = activity.window.decorView.findViewWhich { it is TextView && it.id == android.R.id.text1 }
-        ?: return null
-    return title.parent as? RelativeLayout
-}
-
-/** 标题右侧最靠左的可点击图标 = 搜索按钮。宽度为 0 说明这一版还没布局完，不算找到。 */
-private fun findSearchAnchor(bar: ViewGroup, title: View): View? =
-    (0 until bar.childCount)
-        .map { bar.getChildAt(it) }
-        .filter { it !== title && it.tag != DOT_TAG && it.visibility == View.VISIBLE && it.isClickable }
-        .filter { it.left >= title.right && it.width > 0 }
-        .minByOrNull { it.left }
-
-private fun attachDot(bar: RelativeLayout, allowRetry: Boolean) {
-    val title = bar.findViewWhich { it is TextView && it.id == android.R.id.text1 } ?: return
-    val anchor = findSearchAnchor(bar, title)
-    if (anchor == null) {
-        if (!allowRetry) {
-            WeLogger.w(TAG, "still no clickable icon right of the title; children=${bar.childCount}")
-            return
+    val bar = findBar()
+    if (bar == null) {
+        if (show && !missingLogged) {
+            missingLogged = true
+            WeLogger.w(TAG, "title bar icon group not found; dot cannot be placed")
         }
-        // 回前台/标题栏刚重建的那一刻还没测量完，布局稳定后补一次（只补一次，避免和布局风暴对循环）。
-        bar.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                bar.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                if (pending().isNotEmpty() && bar.findViewWhich { it.tag == DOT_TAG } == null) {
-                    attachDot(bar, allowRetry = false)
-                }
-            }
-        })
         return
     }
 
+    val dot = bar.container.findViewWhich { it.tag == DOT_TAG }
+    if (dot != null) {
+        dot.visibility = if (show) View.VISIBLE else View.GONE
+        return
+    }
+    if (!show) return
+
+    attachDot(bar)
+}
+
+private fun attachDot(bar: Bar) {
     val density = HostInfo.application.resources.displayMetrics.density
     val size = (8 * density).toInt()
-    val dot = View(bar.context).apply {
+    val margin = (4 * density).toInt()
+    val dot = View(bar.container.context).apply {
         tag = DOT_TAG
         isClickable = false
         background = GradientDrawable().apply {
@@ -177,33 +171,94 @@ private fun attachDot(bar: RelativeLayout, allowRetry: Boolean) {
         }
     }
 
-    when (val container = anchor.parent) {
-        // 图标直接挂在标题栏那个 RelativeLayout 上：LEFT_OF 贴到搜索按钮左边。这里用的是运行期
-        // anchor.id，不是混淆的 R.id 名字，所以改版重命名不影响。
-        bar -> {
-            // `addRule` 是返回 void 的 Java 方法，不能链式连写（CI 实测 Unresolved reference）。
+    // `addRule` 返回 void，不能链式连写（CI 实测 Unresolved reference）。
+    when (bar.container) {
+        is RelativeLayout -> {
             val params = RelativeLayout.LayoutParams(size, size)
             params.addRule(RelativeLayout.CENTER_VERTICAL)
-            params.addRule(RelativeLayout.LEFT_OF, anchor.id)
-            params.rightMargin = (4 * density).toInt()
-            bar.addView(dot, params)
+            // 有可用 id 才 LEFT_OF（真机那一格的容器是 LinearLayout，走下面那条；这条留给改版）。
+            if (bar.anchorId > 0) params.addRule(RelativeLayout.LEFT_OF, bar.anchorId)
+            params.marginEnd = margin
+            bar.container.addView(dot, bar.index, params)
         }
-        // 图标被包了一层容器：在同一容器里插到搜索按钮之前，视觉位置同样是「搜索左边」。
+
         is LinearLayout -> {
             val params = LinearLayout.LayoutParams(size, size)
             params.gravity = Gravity.CENTER_VERTICAL
-            params.marginEnd = (4 * density).toInt()
-            container.addView(dot, container.indexOfChild(anchor), params)
+            params.marginEnd = margin
+            bar.container.addView(dot, bar.index, params)
         }
 
         else -> {
-            WeLogger.w(TAG, "search icon sits in an unsupported container: ${container.javaClass.name}")
+            WeLogger.w(TAG, "icon group container type unsupported: ${bar.container.javaClass.name}")
             return
         }
     }
-    WeLogger.d(
-        TAG,
-        "dot attached left of ${anchor.javaClass.simpleName}(id=${anchor.id}) " +
-                "in ${anchor.parent.javaClass.simpleName}",
-    )
+    WeLogger.d(TAG, "dot attached in ${bar.container.javaClass.simpleName} at index ${bar.index}")
 }
+
+/**
+ * 找到标题栏里的图标组：从每个「可见、有宽度」的 `android.R.id.text1` 往上爬（最多到 decor），
+ * 在它某个祖先的子树里找**与标题同一水平带、且位于标题右侧**的最靠左可点击图标；找到后按
+ * 「当前容器只剩一个可见子 View 就继续往上并」爬出图标组容器，把红点插在图标那一格之前。
+ *
+ * 候选标题按窗口内 y 坐标升序取第一个成立的 —— 主页头部在窗口顶端，其它带 text1 的工具条（聊天页
+ * 那条）y 更大或当下根本没显示。
+ */
+private fun findBar(): Bar? {
+    val decor = LauncherUI.getInstance()?.window?.decorView ?: return null
+    val titles = decor.findViewsWhich { it is TextView && it.id == android.R.id.text1 && it.isShown && it.width > 0 }
+        .toList()
+        .sortedBy { title -> IntArray(2).also { title.getLocationInWindow(it) }[1] }
+
+    for (title in titles) {
+        val box = IntArray(2).also { title.getLocationInWindow(it) }
+        val titleLeft = box[0]
+        val titleBottom = box[1] + title.height
+        val bar = barFor(title, titleLeft, titleBottom) ?: continue
+        return bar
+    }
+    return null
+}
+
+private fun barFor(title: View, titleLeft: Int, titleBottom: Int): Bar? {
+    var ancestor: View = title
+    while (ancestor.parent is View) {
+        ancestor = ancestor.parent as View
+        val icons = ancestor.findViewsWhich { candidate ->
+            candidate !== title && candidate.isClickable && candidate.isShown && candidate.width > 0 &&
+                    candidate.tag != DOT_TAG && runsInTitleStrip(candidate, titleLeft, titleBottom)
+        }.toList()
+        val icon = icons.minByOrNull { windowX(it) } ?: continue
+        return climbToIconGroup(icon)
+    }
+    return null
+}
+
+/** 图标必须排在标题右边、且和标题同一条水平带（顶部工具条 vs 内容区的同名 id 就靠这个分开）。 */
+private fun runsInTitleStrip(view: View, titleLeft: Int, titleBottom: Int): Boolean {
+    val box = IntArray(2).also { view.getLocationInWindow(it) }
+    return box[0] >= titleLeft && box[1] <= titleBottom
+}
+
+/** 比较左右必须用窗口坐标：候选图标可能来自不同父容器，`left` 是各自容器内的相对值。 */
+private fun windowX(view: View): Int = IntArray(2).also { view.getLocationInWindow(it) }[0]
+
+/**
+ * 图标自己那一格通常还挂着一个 GONE 的小红点 View，所以「只有一个可见子 View 的容器」要一路并到
+ * 真正的图标组（搜索和「+」都在里面），红点插在那里才不会挤进图标格内。
+ */
+private fun climbToIconGroup(icon: View): Bar? {
+    var cell: View = icon
+    var container = icon.parent as? ViewGroup ?: return null
+    while (visibleChildCount(container) == 1 && container.parent is ViewGroup) {
+        cell = container
+        container = container.parent as ViewGroup
+    }
+    val index = container.indexOfChild(cell)
+    if (index < 0) return null
+    return Bar(container, index, cell.id)
+}
+
+private fun visibleChildCount(container: ViewGroup): Int =
+    (0 until container.childCount).count { container.getChildAt(it).visibility == View.VISIBLE }
