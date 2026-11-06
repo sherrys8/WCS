@@ -798,16 +798,6 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         }
     }
 
-    // Hooks the ConversationStorage notify dispatcher to cancel per-row update events (type 3)
-    // for hidden contacts before they reach list adapters. WeChat fires b(3, storage, talker)
-    // synchronously after every new message, pin, or unread-state change; without this hook the
-    // adapter sees the row immediately — before any SQL query runs — so the contact reappears
-    // regardless of the query-rewrite filter. Cancelling the notification at source is
-    // race-free: the hidden contact never reaches the adapter at all.
-    //
-    // Event type 5 (global reload) is not suppressed — that is the path reloadConversations() uses to
-    // trigger a full re-query (which our SQL hook then filters correctly). The empty-talker check
-    // additionally guards the "" sentinel used by reloadConversations().
     /**
      * Re-entrancy guard for [hookNewMessageNotification].
      *
@@ -822,6 +812,20 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
      */
     private val markingAsRead = ThreadLocal.withInitial { false }
 
+    /**
+     * 隐藏联系人收到新消息时的两处处置，都挂在同一个宿主事件上（`ConversationStorage` 的通知派发，
+     * type 3；微信在每条新消息、置顶、未读变化之后同步派发一次）。两件事分属两个面：
+     *
+     * - **摘掉事件**，闸 [HideSurface.CONVERSATIONS]。不摘的话适配器在任何 SQL 查询之前就看见这一行，
+     *   查询改写白做；在源头取消没有竞态问题 —— 隐藏联系人根本到不了适配器。
+     * - **清掉未读**，闸 [HideSurface.UNREAD]。`updateUnreadByTalker` 会把该会话未读归零并把消息标成
+     *   已读，这是**往真库里写、且不可逆**：被清掉的那条消息，之后即使恢复显示也没有任何「未读」痕迹。
+     *   所以它只由「未读角标」那一面承诺（它的文案写的就是「计算未读数时不计入」），不再跟着「隐藏会话
+     *   列表」默认发生 —— 用户 2026-11-06 定：收到隐藏联系人的消息时，那条消息要留着。
+     *
+     * type 5（全局重载）不摘：那是 [WeConversationApi.reloadConversations] 用来触发全量重查的通路；
+     * 空 talker 检查顺带挡掉它用的 `""` 哨兵。
+     */
     private fun hookNewMessageNotification() {
         val method = WeConversationApi.methodNotifyConversationChanged
         if (method.isPlaceholder) {
@@ -833,7 +837,10 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
             val eventType = args[0] as? Int ?: return@hookBefore
             if (eventType != 3) return@hookBefore
             if (temporarilyShown) return@hookBefore
-            if (!surfaceOn(HideSurface.CONVERSATIONS)) return@hookBefore
+            // 两处处置分属两个面，见函数注释：摘事件跟着「隐藏会话列表」，写库清未读跟着「未读角标」。
+            val rowsHidden = surfaceOn(HideSurface.CONVERSATIONS)
+            val unreadSuppressed = surfaceOn(HideSurface.UNREAD)
+            if (!rowsHidden && !unreadSuppressed) return@hookBefore
             val talker = args[2] as? String ?: return@hookBefore
             if (talker.isEmpty()) return@hookBefore
             if (talker !in hiddenContacts) return@hookBefore
@@ -841,17 +848,19 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
             // Already inside our own markAsRead: this is the storage echoing our write back at us.
             // Still cancel the event so the row never reaches an adapter, but do not write again.
             if (markingAsRead.get() == true) {
-                result = null
+                if (rowsHidden) result = null
                 return@hookBefore
             }
 
-            markingAsRead.set(true)
-            try {
-                WeConversationApi.markAsRead(talker)
-            } finally {
-                markingAsRead.set(false)
+            if (unreadSuppressed) {
+                markingAsRead.set(true)
+                try {
+                    WeConversationApi.markAsRead(talker)
+                } finally {
+                    markingAsRead.set(false)
+                }
             }
-            result = null
+            if (rowsHidden) result = null
         }
     }
 

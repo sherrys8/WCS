@@ -3282,7 +3282,7 @@
     <string name="contacts_hide_surface_new_friends">新的朋友</string>
     <string name="contacts_hide_surface_new_friends_desc">隐藏来自隐藏联系人的好友申请，包括顶部头像与红点计数</string>
     <string name="contacts_hide_surface_unread">未读角标</string>
-    <string name="contacts_hide_surface_unread_desc">计算桌面图标与底部标签未读数时不计入隐藏联系人的消息</string>
+    <string name="contacts_hide_surface_unread_desc">计算桌面图标与底部标签未读数时不计入隐藏联系人的消息。这一面是把会话标记成已读来做到的，被清掉的未读事后无法还原；想保留那条已收到的消息痕迹就别开</string>
     <string name="contacts_hide_surface_mute">自动免打扰</string>
     <string name="contacts_hide_surface_mute_desc">把联系人加进隐藏名单的同时，立即为它开启消息免打扰</string>
     <string name="contacts_hide_surface_search">全局搜索</string>

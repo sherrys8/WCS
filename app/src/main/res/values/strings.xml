@@ -3239,7 +3239,7 @@ Time: {time}</string>
     <string name="contacts_hide_surface_new_friends">New friends</string>
     <string name="contacts_hide_surface_new_friends_desc">Hide friend requests from hidden contacts, including the header avatars and the red dot count</string>
     <string name="contacts_hide_surface_unread">Unread badges</string>
-    <string name="contacts_hide_surface_unread_desc">Do not count messages from hidden contacts in the launcher and tab badges</string>
+    <string name="contacts_hide_surface_unread_desc">Do not count messages from hidden contacts in the launcher and tab badges. It achieves this by marking those chats as read, which erases the unread trace for good, so leave it off to keep the arrived message intact</string>
     <string name="contacts_hide_surface_mute">Auto do-not-disturb</string>
     <string name="contacts_hide_surface_mute_desc">Turn on message do-not-disturb for a contact the moment it is added to the hidden list</string>
     <string name="contacts_hide_surface_search">Global search</string>
