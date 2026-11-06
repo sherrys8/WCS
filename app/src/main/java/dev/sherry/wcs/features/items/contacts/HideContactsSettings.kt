@@ -110,6 +110,12 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                 var longPressMsInput by remember { mutableIntStateOf(longPressMs) }
                 var tripleTapMsInput by remember { mutableIntStateOf(tripleTapMs) }
                 var awaySettleMsInput by remember { mutableIntStateOf(awaySettleMs) }
+                // 四条文本行的显示值必须走局部状态：`by prefOption` 委托不是 Compose State，直接在组合里
+                // 读它，写完也不会触发重组 —— 行上会一直挂着改之前的旧值（三个时长条从一开始就是这么写的）。
+                var showCommandInput by remember { mutableStateOf(showCommand) }
+                var hideCommandInput by remember { mutableStateOf(hideCommand) }
+                var showHintInput by remember { mutableStateOf(showHintText) }
+                var hideHintInput by remember { mutableStateOf(hideHintText) }
 
                 Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
                     SegmentedColumn(
@@ -281,8 +287,12 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                         item(key = "show-command") {
                             TextFieldDialogWidget(
                                 title = stringResource(R.string.contacts_hide_show_command),
-                                value = showCommand,
-                                onValueChange = { showCommand = it.trim().ifEmpty { DEFAULT_SHOW_COMMAND } },
+                                value = showCommandInput,
+                                onValueChange = {
+                                    val next = it.trim().ifEmpty { DEFAULT_SHOW_COMMAND }
+                                    showCommandInput = next
+                                    showCommand = next
+                                },
                                 dialogTitle = stringResource(R.string.contacts_hide_show_command),
                                 confirmLabel = stringResource(R.string.dialog_confirm),
                                 dismissLabel = stringResource(R.string.dialog_cancel),
@@ -292,8 +302,12 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                         item(key = "hide-command") {
                             TextFieldDialogWidget(
                                 title = stringResource(R.string.contacts_hide_hide_command),
-                                value = hideCommand,
-                                onValueChange = { hideCommand = it.trim().ifEmpty { DEFAULT_HIDE_COMMAND } },
+                                value = hideCommandInput,
+                                onValueChange = {
+                                    val next = it.trim().ifEmpty { DEFAULT_HIDE_COMMAND }
+                                    hideCommandInput = next
+                                    hideCommand = next
+                                },
                                 dialogTitle = stringResource(R.string.contacts_hide_hide_command),
                                 confirmLabel = stringResource(R.string.dialog_confirm),
                                 dismissLabel = stringResource(R.string.dialog_cancel),
@@ -303,8 +317,12 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                         item(key = "show-hint-text") {
                             TextFieldDialogWidget(
                                 title = stringResource(R.string.contacts_hide_show_hint),
-                                value = showHintText,
-                                onValueChange = { showHintText = it.trim() },
+                                value = showHintInput,
+                                onValueChange = {
+                                    val next = it.trim()
+                                    showHintInput = next
+                                    showHintText = next
+                                },
                                 dialogTitle = stringResource(R.string.contacts_hide_show_hint),
                                 confirmLabel = stringResource(R.string.dialog_confirm),
                                 dismissLabel = stringResource(R.string.dialog_cancel),
@@ -314,8 +332,12 @@ fun HideContacts.showSettingsDialog(context: ComponentActivity) {
                         item(key = "hide-hint-text") {
                             TextFieldDialogWidget(
                                 title = stringResource(R.string.contacts_hide_hide_hint),
-                                value = hideHintText,
-                                onValueChange = { hideHintText = it.trim() },
+                                value = hideHintInput,
+                                onValueChange = {
+                                    val next = it.trim()
+                                    hideHintInput = next
+                                    hideHintText = next
+                                },
                                 dialogTitle = stringResource(R.string.contacts_hide_hide_hint),
                                 confirmLabel = stringResource(R.string.dialog_confirm),
                                 dismissLabel = stringResource(R.string.dialog_cancel),
