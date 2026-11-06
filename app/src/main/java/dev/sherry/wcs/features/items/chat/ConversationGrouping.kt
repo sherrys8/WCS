@@ -762,9 +762,16 @@ object ConversationGrouping : ClickableFeature(), IResolveDex {
             .minOrNull() ?: sql.length
         val head = sql.substring(0, insertionPoint)
         val tail = sql.substring(insertionPoint)
-        val connector = if (head.contains(" where ", ignoreCase = true)) " AND " else " WHERE "
+        val connector = if (WHERE_KEYWORD.containsMatchIn(head)) " AND " else " WHERE "
         return "$head$connector$condition$tail"
     }
+
+    /**
+     * 整词判 WHERE，别找带空格的 `" where "`：本仓不少 SQL 是三引号排版写的，WHERE 单独一行、前面是
+     * 换行，那种查找会误判成「还没有 WHERE」并接出第二个，SQLite 报 `near "WHERE"`（与
+     * `HideContactsSql.WHERE_KEYWORD` 同一条原因）。
+     */
+    private val WHERE_KEYWORD = Regex("(?i)\\bwhere\\b")
 
     private const val TAG = "ConversationGrouping"
 

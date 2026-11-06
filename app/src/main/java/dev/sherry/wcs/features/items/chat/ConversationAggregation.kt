@@ -57,6 +57,7 @@ import dev.sherry.wcs.features.core.ClickableFeature
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.items.chat.ConversationAggregation.syncFoldersToDatabase
 import dev.sherry.wcs.features.items.contacts.CustomLocalFriendAvatars
+import dev.sherry.wcs.features.items.contacts.HideContacts
 import dev.sherry.wcs.i18n.LocalWcSLocalizedContext
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.BaseContactSelector
@@ -1298,6 +1299,10 @@ object ConversationAggregation : ClickableFeature(),
                 while (cursor.moveToNext()) {
                     val username = cursor.getStringOrEmpty(ConversationTable.USERNAME)
                     val folderId = ownerByMember[username] ?: continue
+                    // 文件夹行是我们自己合成的显示行，它不能替隐藏联系人把摘要、未读和头像露出来：
+                    // 隐藏生效时直接把这个成员从聚合结果里跳过，不动那个人的真实会话，也不动绑定关系
+                    // （绑定是功能语义，隐藏只是显示口径）。
+                    if (HideContacts.isHiddenNow(username)) continue
                     val state = states.getValue(folderId)
                     val unread = cursor.getIntOrZero(ConversationTable.UNREAD_COUNT).coerceAtLeast(0)
                     if (unread > 0) {

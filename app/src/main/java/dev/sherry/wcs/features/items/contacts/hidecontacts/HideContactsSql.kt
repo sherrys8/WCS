@@ -324,9 +324,16 @@ fun injectCondition(sql: String, condition: String): String {
         .minOrNull() ?: sql.length
     val head = sql.substring(0, insertionPoint)
     val tail = sql.substring(insertionPoint)
-    val connector = if (head.contains(" where ", ignoreCase = true)) " AND " else " WHERE "
+    val connector = if (WHERE_KEYWORD.containsMatchIn(head)) " AND " else " WHERE "
     return "$head$connector$condition$tail"
 }
+
+/**
+ * 「这句已经有 WHERE 了吗」必须按整词判，不能找 `" where "` 这种带空格的形状：模块里不少 SQL 是用
+ * 三引号排版的，`WHERE` 单独占一行、前面是换行，带空格的查找会判成「还没有」，于是接出第二个 WHERE，
+ * SQLite 直接 `near "WHERE": syntax error`（真机 2026-11-06 就是把聚合会话的文件夹同步打挂 17 次）。
+ */
+private val WHERE_KEYWORD = Regex("(?i)\\bwhere\\b")
 
 /** Renders a hidden-contact set as a single-quoted SQL value list with `''` escaping. */
 fun Set<String>.toSqlList(): String =

@@ -481,6 +481,9 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         clearHomeDot()
         WeChatForegroundTracker.removeOnChanged(foregroundListener)
         temporarilyShown = false
+        // 关闭功能就把持久隐藏态一并删掉（用户定）：这一行现在写的是 MMKV，所以「关了再开」不会一开
+        // 就处于隐藏，也不会在关着的状态下继续把隐藏态带到下一个进程。
+        WeLogger.d(TAG, "feature off: clearing the persisted away-hidden state")
         awayHidden = false
         WeConversationApi.reloadConversations()
     }
@@ -677,16 +680,28 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         }
     }
 
+    /**
+     * 临时显示覆盖：进程内存态，**刻意不落盘** —— 手势/指令/定时的「恢复显示」语义都是进程内的，
+     * 重启后该回到隐藏态（用户 2026-11-07 定：只持久化隐藏态，恢复入口保持原样）。
+     */
     private var temporarilyShown = false
 
-    /** 离开微信或息屏时置位（[enterAwayHidden]），此后一直保持到手动恢复或功能关闭。 */
-    @Volatile
-    private var awayHidden = false
+    /**
+     * 离开微信或息屏时置位（[enterAwayHidden]），此后一直保持到手动恢复或功能关闭。
+     *
+     * **落盘**（MMKV `hide_away_hidden`）：这一位原先只在内存里，所以微信进程重启后第一次渲染是
+     * 「没在隐藏」—— 别人拿起手机直接打开微信、或来消息把进程唤醒后打开，都会先把密友亮出来，
+     * 直到用户第一次离开微信才重新藏上。与「别人拿到手机看不到密友」这个使用模型正好相反，故持久化：
+     * 进程一起来读到的就是上次的隐藏态，不需要任何恢复代码（委托本身就读了 MMKV）。
+     *
+     * 关闭功能时写回 false（见 [onDisable]），所以「关掉再打开」不会莫名处于隐藏。
+     */
+    private var awayHidden by prefOption("hide_away_hidden", false)
 
     /**
      * The predicate every hook should use: a contact counts as hidden only while the app is in the
-     * away-hidden state (entered by leaving WeChat / screen off) and the `#show` / scheduled reveal
-     * is off.
+     * away-hidden state (entered by leaving WeChat / screen off, and now kept across process restarts)
+     * and the reveal override (显示指令 / 手势 / 定时显示) is off.
      */
     val isHidingActive: Boolean get() = awayHidden && !temporarilyShown
 
