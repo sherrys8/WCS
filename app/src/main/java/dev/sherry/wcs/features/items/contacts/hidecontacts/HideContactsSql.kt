@@ -215,54 +215,22 @@ private fun logUnmatchedContactQuery(sql: String) {
     WeLogger.d(TAG, "search on, no rule matched: ${sql.take(80)}")
 }
 
-/**
- * The rules that ride `WeDatabaseListenerApi`'s query listener in addition to the SQLite wrapper.
- *
- * Deliberately a one-rule list, not the whole table. On 8.0.76 the wrapper hook receives the Moments
- * statements (see the `hid N contacts from moments …` device logs) but has never once received an
- * `rconversation`/`rcontact` **list** query, so anything wired only there filters nothing — that is
- * why 首页会话列表 never hid anyone. The listener is the proven-live path, so `conversation-list`
- * moves onto it.
- *
- * The other eight rules stay wrapper-only on purpose. Several were written for a path that has never
- * executed a rewrite on this host, and at least `moments-comments` (matcher: any `from snscomment`)
- * is broad enough to take over statements `rewriteMomentsCommentsSql` deliberately declines. Wiring
- * the whole table would ship eight untested injections at once; each one should be promoted here only
- * after a device log shows it needs it.
- */
-private val LISTENER_RULES = WRAPPER_RULES.filter { it.name == "conversation-list" }
-
-/**
- * The 9 [WRAPPER_RULES] applied to one SQL statement, from the SQLite wrapper chokepoint.
- */
-private fun rewriteWrapperSql(sql: String): String? = rewriteRules(sql, WRAPPER_RULES)
-
-/**
- * The listener-side pass, scoped to [LISTENER_RULES]. Called from `HideContacts.onQuery` after the
- * Moments/FTS rewriters have had their chance.
- */
-fun rewriteListenerSql(sql: String): String? = rewriteRules(sql, LISTENER_RULES)
-
-/** Applies [rules] to one statement and returns the rewritten SQL, or null to leave it untouched. */
-private fun rewriteRules(sql: String, rules: List<SqlRule>): String? {
+/** Returns the rewritten SQL, or null to leave the query untouched. */
+private fun rewriteWrapperSql(sql: String): String? {
     if (HideContacts.isShowingAll) return null
     val hidden = HideContacts.hiddenContacts
     if (hidden.isEmpty()) return null
 
     val lower = sql.lowercase()
-    val rule = rules.firstOrNull { it.matches(lower) } ?: return null
+    val rule = WRAPPER_RULES.firstOrNull { it.matches(lower) } ?: return null
     if (!HideContacts.surfaceOn(rule.surface)) return null
-    // 每条规则一辈子只报一次改写：这几条跑在每次通讯录/会话列表渲染上，全打会淹掉日志；但一条都不打
-    // 就分不出「规则没匹配上」和「匹配了、开关没开」—— 2026-11-06 判首页会话列表时正是栽在这里，
-    // 原先只有 SEARCH 面打点，其它面的零命中根本无从证明。
-    if (rewrittenRules.add(rule.name)) {
-        WeLogger.i(TAG, "rule ${rule.name} rewrote (${hidden.size} hidden): ${sql.take(80)}")
+    // wrapper 通路原本一句改写日志都没有，「到底有没有命中规则」只能靠猜；搜索这一条刚加了新规则，
+    // 先只给它打点（其它规则每次通讯录渲染都会跑，打了会淹掉日志）。
+    if (rule.surface == HideSurface.SEARCH) {
+        WeLogger.d(TAG, "rule ${rule.name} matched: ${sql.take(80)}")
     }
     return injectCondition(sql, rule.condition(hidden))
 }
-
-/** 已经报过改写日志的规则名，见 [rewriteRules]。 */
-private val rewrittenRules = mutableSetOf<String>()
 
 private fun looksLikeConversationListQuery(lower: String): Boolean {
     if (!lower.contains("select")) return false

@@ -41,7 +41,6 @@ import dev.sherry.wcs.features.items.contacts.hidecontacts.installSearchHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installSqlHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.installVoipHooks
 import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteFtsSql
-import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteListenerSql
 import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteMomentsCommentsSql
 import dev.sherry.wcs.features.items.contacts.hidecontacts.rewriteMomentsFeedSql
 import dev.sherry.wcs.features.items.contacts.hidecontacts.surfaceOn
@@ -454,19 +453,8 @@ object HideContacts : ClickableFeature(), IResolveDex, WeChatInputBarApi.IInputB
         }
     }
 
-    /**
-     * The live SQL chokepoint.
-     *
-     * `rewriteListenerSql` is here because on 8.0.76 the SQLite wrapper hook receives the Moments
-     * statements but never an `rconversation` list query, so a rule wired only there filters nothing
-     * — which is why 首页会话列表（「最近聊天」）never hid anyone. See
-     * `HideContactsSql.LISTENER_RULES` for why exactly one rule makes the move.
-     */
     override fun onQuery(sql: String): String? =
-        rewriteMomentsFeedSql(sql)
-            ?: rewriteMomentsCommentsSql(sql)
-            ?: rewriteFtsSql(sql)
-            ?: rewriteListenerSql(sql)
+        rewriteMomentsFeedSql(sql) ?: rewriteMomentsCommentsSql(sql) ?: rewriteFtsSql(sql)
 
     // The parentRef marker older versions wrote via WeConversationApi.setConversationsVisibility to
     // hide a chat. WeChat's native list filter (m4.O) hides rows whose parentRef isn't null/empty.
