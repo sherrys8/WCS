@@ -73,6 +73,17 @@ private fun HideContacts.installRecentForwardHook() {
         if (hiddenContacts.isEmpty()) return@hookAfter
 
         val targets = result as? List<*> ?: return@hookAfter
+        // 每次调用都转储这份名单，包括「一个都没摘掉」的那些次。原来 kept.size == targets.size
+        // 就直接 return，于是日志里只看得见命中过的调用 —— 「隐藏联系人到底有没有进到这份名单」
+        // 这个最基本的问题反而没有读数，而它正是分辨「过滤没生效」和「泄露行压根不走这条路」的分界。
+        // 只截前 15 项，够认形状；type 参数决定是最近转发(1/2)还是最近聊天(-1)。
+        WeLogger.i(
+            TAG,
+            "RECENT-DIAG storage type=${args.getOrNull(2)} returned=${targets.size} " +
+                targets.filterIsInstance<String>().take(15).joinToString(
+                    prefix = "ids=[", postfix = "]"
+                ) { "$it${if (isHiddenNow(it)) "(HIDDEN)" else ""}" },
+        )
         val kept = targets.filterNot { it is String && isHiddenNow(it) }
         if (kept.size == targets.size) return@hookAfter
 
@@ -86,12 +97,6 @@ private fun HideContacts.installRecentForwardHook() {
 // ---------------------------------------------------------------------------------------------
 // 最近聊天（MVVM 转发选择器渲染层）
 // ---------------------------------------------------------------------------------------------
-
-/** 一次性遥测：w8 构造器第一次被调用时打一行，用来分辨「渲染层根本没进」和「进了但没匹配」。 */
-private var w8ProbeLogged = false
-
-/** 一次性遥测：o.invoke 出口过滤第一次进入时打一行。 */
-private var recentAssembleProbeLogged = false
 
 /**
  * MVVM 转发选择器「最近」页的列表装配体 `recent/o.invoke()` 出口过滤。
@@ -115,37 +120,54 @@ private fun HideContacts.installRecentListAssembleHook() {
             "${methodRecentListAssembleInvoke.method.name}",
     )
     methodRecentListAssembleInvoke.hookAfter {
-        if (!recentAssembleProbeLogged) {
-            recentAssembleProbeLogged = true
-            WeLogger.i(TAG, "recent list assemble first exit, thiz=${thisObject?.javaClass?.name ?: "null"}")
-        }
+        val outer = thisObject
+        // 每次装配都转储，且**不再**只在拿到列表之后才打：原来五处反射失败一律静默 return@hookAfter，
+        // 字段一漂移就表现为「钩子进了、dropped 却是 0」，和「名单真的没有隐藏人」长得一模一样。
+        WeLogger.i(TAG, "RECENT-DIAG assemble exit, thiz=${outer?.javaClass?.name ?: "null"}")
         if (isShowingAll) return@hookAfter
         if (!surfaceOn(HideSurface.RECENT_FORWARD)) return@hookAfter
         if (hiddenContacts.isEmpty()) return@hookAfter
 
         // thisObject = o 实例；o.d = t（RecentForwardListViewUIC 字段）；t.d = ArrayList<v8>。
-        val outer = thisObject ?: return@hookAfter
+        // 混淆字段名每版会漂，漂了就报是哪一步断的，别让它伪装成「没命中」。
+        if (outer == null) return@hookAfter
         val outerClass = outer.javaClass
         val tField = runCatching { outerClass.reflekt().fields { name { it == "d" } }.map { it.self.makeAccessible() }.firstOrNull() }.getOrNull()
-            ?: return@hookAfter
-        val t = tField.get(outer) ?: return@hookAfter
+        if (tField == null) {
+            WeLogger.i(TAG, "RECENT-DIAG assemble: ${outerClass.name} has no field 'd' (t) — 字段漂移，出口过滤失效")
+            return@hookAfter
+        }
+        val t = tField.get(outer)
+        if (t == null) {
+            WeLogger.i(TAG, "RECENT-DIAG assemble: ${outerClass.name}.d is null")
+            return@hookAfter
+        }
         val tClass = t.javaClass
         val listField = runCatching { tClass.reflekt().fields { name { it == "d" } }.map { it.self.makeAccessible() }.firstOrNull() }.getOrNull()
-            ?: return@hookAfter
-        val list = listField.get(t) as? MutableList<*> ?: return@hookAfter
+        if (listField == null) {
+            WeLogger.i(TAG, "RECENT-DIAG assemble: ${tClass.name} has no field 'd' (row list) — 字段漂移，出口过滤失效")
+            return@hookAfter
+        }
+        val list = listField.get(t) as? MutableList<*>
+        if (list == null) {
+            WeLogger.i(TAG, "RECENT-DIAG assemble: ${tClass.name}.d is not a MutableList (${listField.get(t)?.javaClass?.name ?: "null"})")
+            return@hookAfter
+        }
+
+        // 摘之前先把整份行名单打出来：这一行有没有真的装配进来、它的 wxid 是什么、在不在隐藏名单里。
+        WeLogger.i(
+            TAG,
+            "RECENT-DIAG assemble rows=${list.size} " +
+                list.mapNotNull { item ->
+                    item?.let { readRecentRowUsername(it) }
+                }.take(15).joinToString(prefix = "users=[", postfix = "]") { "$it${if (isHiddenNow(it)) "(HIDDEN)" else ""}" },
+        )
 
         var dropped = 0
         val droppedIds = mutableListOf<String>()
         list.removeAll { item ->
             if (item == null) return@removeAll false
-            val username = runCatching {
-                val v8D = item.javaClass.reflekt().fields { name { it == "d" } }.map { it.self.makeAccessible() }.firstOrNull()
-                    ?: return@runCatching null
-                val w8 = v8D.get(item) ?: return@runCatching null
-                val w8A = w8.javaClass.reflekt().fields { name { it == "a" } }.map { it.self.makeAccessible() }.firstOrNull()
-                    ?: return@runCatching null
-                w8A.get(w8) as? String
-            }.getOrNull()
+            val username = readRecentRowUsername(item)
             if (username != null && isHiddenNow(username)) {
                 dropped++
                 if (droppedIds.size < 5) droppedIds.add(username)
@@ -159,10 +181,25 @@ private fun HideContacts.installRecentListAssembleHook() {
 }
 
 /**
+ * 从一行 `v8` 里取它承载的 `w8.username`（`v8.d` → `w8.a`）。取不到返回 null —— 分隔行的
+ * username 本来就是空串，别把「字段漂移」和「这行没有 username」混为一谈，调用方各自打日志。
+ */
+private fun readRecentRowUsername(item: Any): String? = runCatching {
+    val v8D = item.javaClass.reflekt().fields { name { it == "d" } }.map { it.self.makeAccessible() }.firstOrNull()
+        ?: return@runCatching null
+    val w8 = v8D.get(item) ?: return@runCatching null
+    val w8A = w8.javaClass.reflekt().fields { name { it == "a" } }.map { it.self.makeAccessible() }.firstOrNull()
+        ?: return@runCatching null
+    w8A.get(w8) as? String
+}.getOrNull()
+
+/**
  * `ui.contact.w8` 构造器探针：MVVM 转发选择器「最近」页的行数据载体。
  *
- * 仅做遥测：每行构建都打一行（带隐藏命中高亮），用来分辨「渲染层根本没进 w8」和「进了但没匹配」。
- * 类名 w8 是混淆名、每版会漂，所以 throwOnFailure = false 且解析失败直接跳过。
+ * **每一行都打**（2026-11-06 起）：wxid + 昵称 + 是否命中隐藏名单。这是唯一与具体组件无关的观测点
+ * —— 不管泄露的那一栏出自哪个 UIC，只要它的行走 w8 这个载体，这里就会留下读数。早期版本只在「第一行
+ * 或命中隐藏」时打，于是「面板里有 10 行、隐藏人在第 6 行」这种情况日志里
+ * 只有第一行，看着像「根本没进渲染层」。
  */
 private fun HideContacts.installRecentChatItemProbe() {
     if (ctorRecentChatItemProbe.isPlaceholder) {
@@ -177,10 +214,7 @@ private fun HideContacts.installRecentChatItemProbe() {
         val username = args.getOrNull(0) as? String
         val nickname = args.getOrNull(1) as? String
         val hidden = username != null && isHiddenNow(username)
-        if (!w8ProbeLogged || hidden) {
-            if (!w8ProbeLogged) w8ProbeLogged = true
-            WeLogger.i(TAG, "w8 row built: username=$username, nickname=$nickname, hidden=$hidden")
-        }
+        WeLogger.i(TAG, "RECENT-DIAG w8 row: username=$username, nickname=$nickname, hidden=$hidden")
     }
 }
 
