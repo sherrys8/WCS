@@ -181,9 +181,10 @@ private fun attachDot(bar: RelativeLayout, allowRetry: Boolean) {
         // 图标直接挂在标题栏那个 RelativeLayout 上：LEFT_OF 贴到搜索按钮左边。这里用的是运行期
         // anchor.id，不是混淆的 R.id 名字，所以改版重命名不影响。
         bar -> {
+            // `addRule` 是返回 void 的 Java 方法，不能链式连写（CI 实测 Unresolved reference）。
             val params = RelativeLayout.LayoutParams(size, size)
-                .addRule(RelativeLayout.CENTER_VERTICAL)
-                .addRule(RelativeLayout.LEFT_OF, anchor.id)
+            params.addRule(RelativeLayout.CENTER_VERTICAL)
+            params.addRule(RelativeLayout.LEFT_OF, anchor.id)
             params.rightMargin = (4 * density).toInt()
             bar.addView(dot, params)
         }
