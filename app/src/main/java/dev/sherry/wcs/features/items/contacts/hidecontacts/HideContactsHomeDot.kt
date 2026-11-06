@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -16,7 +17,6 @@ import com.tencent.mm.ui.LauncherUI
 import dev.ujhhgtg.reflekt.reflekt
 import dev.sherry.wcs.features.items.contacts.HideContacts
 import dev.sherry.wcs.preferences.WePrefs
-import dev.sherry.wcs.ui.utils.findViewWhich
 import dev.sherry.wcs.ui.utils.findViewsWhich
 import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.WeLogger
@@ -60,8 +60,8 @@ private const val DOT_TAG = "wcs_hidden_dot"
 
 private val mainHandler = Handler(Looper.getMainLooper())
 
-/** 找不到锚点只报一次：这个刷新点很密，刷屏会把有用行冲掉。 */
-private var missingLogged = false
+/** 「找不到锚点」的日志按时间节流（见 [logMissingBar]）。 */
+private var lastMissingLogMs = 0L
 
 /**
  * 装在 `HideContacts.onEnable` 里。钩子不在 `onDisable` 摘除（本功能惯例：直接挂钩子的卸载是尽力而为，
@@ -83,9 +83,34 @@ fun HideContacts.installHomeDot() {
         }
     }
 
+    installChatTransitionRepaint()
+
     // 名单是跨重启的，功能一装好就按它画一次，别等下一条消息。
     refreshHomeDot()
 }
+
+/**
+ * 从聊天页回到会话列表时补画两次。
+ *
+ * **这一条是「红点亮过一次就再也不出现」的真因**：标题栏跟着聊天 fragment 一起被重建，我们原先唯一的
+ * 重绘点是 `LauncherUI.onResume` —— 而打开聊天是同一个 Activity 里 push 一个 fragment，Activity 从没
+ * 暂停过，onResume 压根不触发，于是红点随旧树一起没了，之后没有任何时机再画。
+ *
+ * `closeChatting` 是 `HomeSidePanel` 早就在用的同款信号（它那边也靠 startChatting/closeChatting 重算
+ * 视图树）。这里延时两次是因为 `closeChatting` 那一刻宿主的树还没重建完；[paint] 是幂等的，多跑一次
+ * 只是早退。
+ */
+private fun installChatTransitionRepaint() {
+    LauncherUI::class.reflekt().firstMethod {
+        name = "closeChatting"
+        parameters(Boolean::class)
+    }.hookAfter {
+        mainHandler.postDelayed({ paint() }, REPAINT_DELAY_MS)
+        mainHandler.postDelayed({ paint() }, REPAINT_DELAY_MS * 3)
+    }
+}
+
+private const val REPAINT_DELAY_MS = 300L
 
 /**
  * 消息入库侧的入口（由 `HideContacts.onInsert` 转过来）。只认**收到的**消息，自己发出去的不算提醒。
@@ -110,8 +135,9 @@ fun HideContacts.onHiddenMessageArrived(values: ContentValues) {
 /**
  * 由 `doOnCreate` 与 `onActivityResumed` 调用：主页回到前台/重建时按当前名单补画一次。
  *
- * 必须有一个「回到主页」的刷新点 —— 标题栏是宿主自己的视图树，切 tab 或从聊天页返回时会被换掉，
- * 我们那个红点跟着旧树一起没；只有消息到达/点开聊天两个事件的话，红点就再也不回来了。
+ * 必须有人在「主页重新出现在屏幕上」这一刻重画 —— 标题栏是宿主自己的视图树，聊天 fragment 弹栈时会被
+ * 换掉，我们那个红点跟着旧树一起没。`onActivityResumed` 只覆盖"整个 Activity 重新可见"（切回来、解锁），
+ * **从聊天页返回列表不走它**，那一路由 [installChatTransitionRepaint] 补。
  */
 fun HideContacts.refreshHomeDot() {
     if (!isActive || !surfaceOn(HideSurface.HOME_DOT)) return
@@ -131,7 +157,13 @@ private fun pending(): Set<String> = WePrefs.getStringSetOrDef(KEY_PENDING, empt
 /** 标题栏宿主 + 要插在哪个容器、哪一位之前（anchorId 供 RelativeLayout 那一路 LEFT_OF 用）。 */
 private class Bar(val container: ViewGroup, val index: Int, val anchorId: Int)
 
-/** 按当前名单把红点画出来或撤掉。 */
+/**
+ * 按当前名单把红点画出来或撤掉。
+ *
+ * **已有红点一律在整棵 decor 里找**，不是只在「这一次算出来的那个容器」里找。标题栏会被重建、也会同时
+ * 存在好几条（主页与聊天页各一条 `text1`），按容器找会同时犯两种错：旧点永远灭不掉、新点永远亮不起来，
+ * 而这两种在界面上看起来都是「红点不出现」。
+ */
 private fun paint() {
     // 已被移出隐藏名单的人顺手剔除，否则红点永远灭不掉。这一步只看名单，不能被开关带着走 ——
     // 关掉那一面应当只是不画，不该把攒下来的名单清空，否则再打开就什么都没有了。
@@ -139,26 +171,61 @@ private fun paint() {
     if (waiting.size != pending().size) WePrefs.putStringSet(KEY_PENDING, waiting)
 
     val show = waiting.isNotEmpty() && HideContacts.surfaceOn(HideSurface.HOME_DOT)
-    val bar = findBar()
+    val launcher = LauncherUI.getInstance()
+    val decor = launcher?.window?.decorView
+    if (decor == null) {
+        logMissingBar(show, "no LauncherUI decor")
+        return
+    }
+    val dots = decor.findViewsWhich { it.tag == DOT_TAG }.toList()
+
+    if (!show) {
+        dots.forEach { it.visibility = View.GONE }
+        WeLogger.d(TAG, "paint: off, waiting=${waiting.size} dots=${dots.size}")
+        return
+    }
+
+    // 聊天页顶栏也有一条 text1 加一组可点击图标 —— 判据用 LauncherUI 自己的 `currentFragmet`
+    // （非空=正在看聊天页，`HomeSidePanel.isChattingVisible` 同款）。这时候只把手上已有的点按名单摆好，
+    // 新画留给 closeChatting 之后的补画，否则红点会画到聊天页的工具栏上去。
+    val fragment = launcher?.currentFragmet?.javaClass?.name.orEmpty()
+    if (fragment.isNotEmpty()) {
+        dots.forEach { it.visibility = View.VISIBLE }
+        WeLogger.d(TAG, "paint: on a chat page, dots=${dots.size} fragment=$fragment")
+        return
+    }
+
+    val titles = titlesOf(decor)
+    val bar = barOf(titles)
     if (bar == null) {
-        if (show && !missingLogged) {
-            missingLogged = true
-            WeLogger.w(TAG, "title bar icon group not found; dot cannot be placed")
-        }
+        dots.forEach { it.visibility = View.VISIBLE }
+        logMissingBar(show, "titles=${titles.size}")
         return
     }
 
-    val dot = bar.container.findViewWhich { it.tag == DOT_TAG }
-    if (dot != null) {
-        dot.visibility = if (show) View.VISIBLE else View.GONE
-        return
+    val mine = dots.filter { it.parent === bar.container }
+    dots.filterNot { it.parent === bar.container }.forEach { it.visibility = View.GONE }
+    if (mine.isEmpty()) {
+        attachDot(bar, waiting.size)
+    } else {
+        mine.forEach { it.visibility = View.VISIBLE }
+        WeLogger.d(TAG, "paint: already in place, waiting=${waiting.size} onScreen=${mine.count { it.isShown }}")
     }
-    if (!show) return
-
-    attachDot(bar)
 }
 
-private fun attachDot(bar: Bar) {
+/**
+ * 「找不到锚点」按时间节流，而不是一次性 —— 真机 2026-11-07 那次，进程启动期必然失败的一次把唯一
+ * 那条日志消耗掉了，之后每一次真失败全是静默，于是「画不上」和「画了但看不见」在日志里长得一模一样。
+ */
+private fun logMissingBar(show: Boolean, detail: String) {
+    if (!show) return
+    val now = SystemClock.elapsedRealtime()
+    if (now - lastMissingLogMs < 5_000L) return
+    lastMissingLogMs = now
+    WeLogger.w(TAG, "title bar icon group not found; dot cannot be placed ($detail)")
+}
+
+private fun attachDot(bar: Bar, waiting: Int) {
     val density = HostInfo.application.resources.displayMetrics.density
     val size = (8 * density).toInt()
     val margin = (4 * density).toInt()
@@ -194,32 +261,38 @@ private fun attachDot(bar: Bar) {
             return
         }
     }
-    WeLogger.d(TAG, "dot attached in ${bar.container.javaClass.simpleName} at index ${bar.index}")
+    WeLogger.d(TAG, "dot attached in ${bar.container.javaClass.simpleName} at index ${bar.index}, waiting=$waiting")
+
+    // addView 之后才知道它到底有没有真的出现在屏幕上：布局参数不合（0 宽、被挤到容器外、父级不可见）
+    // 在日志里和"画上了"完全一样。等一轮布局再读一次，界面上"没红点"就能当场分诊。
+    mainHandler.postDelayed({
+        val box = IntArray(2).also { dot.getLocationInWindow(it) }
+        WeLogger.i(
+            TAG,
+            "dot probe: shown=${dot.isShown} size=${dot.width}x${dot.height} " +
+                "at=${box[0]},${box[1]} parent=${dot.parent?.javaClass?.simpleName}",
+        )
+    }, REPAINT_DELAY_MS)
 }
 
 /**
- * 找到标题栏里的图标组：从每个「可见、有宽度」的 `android.R.id.text1` 往上爬（最多到 decor），
- * 在它某个祖先的子树里找**与标题同一水平带、且位于标题右侧**的最靠左可点击图标；找到后按
- * 「当前容器只剩一个可见子 View 就继续往上并」爬出图标组容器，把红点插在图标那一格之前。
+ * 候选标题：所有「可见、有宽度」的 `android.R.id.text1`，按窗口内 y 升序。
  *
- * 候选标题按窗口内 y 坐标升序取第一个成立的 —— 主页头部在窗口顶端，其它带 text1 的工具条（聊天页
- * 那条）y 更大或当下根本没显示。
+ * 主页头部在窗口顶端，其它带 text1 的工具条要么 y 更大、要么当下根本没显示（`isShown` 要求整条祖先链
+ * 都可见，所以被聊天页压在下面的那条主页标题不会进来）。
  */
-private fun findBar(): Bar? {
-    val decor = LauncherUI.getInstance()?.window?.decorView ?: return null
-    val titles = decor.findViewsWhich { it is TextView && it.id == android.R.id.text1 && it.isShown && it.width > 0 }
+private fun titlesOf(decor: View): List<View> =
+    decor.findViewsWhich { it is TextView && it.id == android.R.id.text1 && it.isShown && it.width > 0 }
         .toList()
-        .sortedBy { title -> IntArray(2).also { title.getLocationInWindow(it) }[1] }
+        .sortedBy { windowY(it) }
 
-    for (title in titles) {
-        val box = IntArray(2).also { title.getLocationInWindow(it) }
-        val titleLeft = box[0]
-        val titleBottom = box[1] + title.height
-        val bar = barFor(title, titleLeft, titleBottom) ?: continue
-        return bar
-    }
-    return null
+/** 逐个标题往上找图标组，第一个成立的就是要插红点的那条工具栏。 */
+private fun barOf(titles: List<View>): Bar? = titles.firstNotNullOfOrNull { title ->
+    val box = IntArray(2).also { title.getLocationInWindow(it) }
+    barFor(title, box[0], box[1] + title.height)
 }
+
+private fun windowY(view: View): Int = IntArray(2).also { view.getLocationInWindow(it) }[1]
 
 private fun barFor(title: View, titleLeft: Int, titleBottom: Int): Bar? {
     var ancestor: View = title
