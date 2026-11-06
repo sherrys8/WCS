@@ -35,20 +35,22 @@ import dev.sherry.wcs.utils.WeLogger
  * 作用和「微信团队提醒」一样只用于提醒）。两个信号也都在主进程：消息入库走 `WeDatabaseListenerApi` 的
  * 插入监听，点开聊天走 `ChatFooter.setUserName`。所以红点是**当场出现**的，不用等列表刷新或回前台。
  *
- * ## 标题栏的真实形状（真机 8.0.76 `dumpsys activity top`，别再照猜的写）
+ * ## 标题栏的真实形状（真机 8.0.76 `dumpsys activity top` + `dot probe`，别再照猜的写）
  *
- *     LinearLayout (1018,64-1272,140)          ← 图标组，红点要插在它的第 0 位
- *       RelativeLayout                          ← 「搜索」那一格（第二格才是「+」）
- *         WeImageView  meb                      ← 可点击图标本体
- *         ImageView    med  (GONE)
- *     … RelativeLayout gp
- *       LinearLayout > LinearLayout
- *         TextView  android:id/text1            ← 标题「微信」，它往上第三四行才是标题栏
+ *     androidx.appcompat.widget.Toolbar          ← 标题栏的骨架，认它（结构判据，见 [barFor]）
+ *       … RelativeLayout gp
+ *         LinearLayout > LinearLayout
+ *           TextView  android:id/text1          ← 标题「微信」
+ *       LinearLayout (1018,64-1272,140)         ← 图标组，红点插在它的第 0 位
+ *         RelativeLayout                        ← 「搜索」那一格（第二格才是「+」）
+ *           WeImageView  meb                    ← 可点击图标本体
+ *           ImageView    med  (GONE)
  *
- * 两版实现都栽在这里：`text1.parent` 是 LinearLayout 而不是 RelativeLayout（第一版因此每次都
- * `findTitleBar() == null` 静默返回），而图标又不是标题的兄弟、在另一个容器里。所以现在的找法是
- * 「从每个可见的 text1 往上爬，在同一条水平带里找最靠左的可点击图标」，红点插在图标组最左、
- * 「搜索」那一格之前。
+ * 三版实现各栽在一次：① `text1.parent` 是 LinearLayout 而不是 RelativeLayout，静默返回 null；
+ * ② 改成「从可见的 text1 往上爬，在同一条水平带里找最靠左的可点击图标」之后确实画上了，但真机
+ * `dot probe` 量到 `at=981,205` —— 主页上 `android.R.id.text1` **不止一条**，搜索框那一行自己就带一组
+ * 「同一水平带内」的可点击图标，那条水平带判据对它自动成立，于是红点画到了搜索框行里。
+ * 现在按结构认：标题必须在一个 androidx Toolbar 里，图标也只在这个 Toolbar 的子树里、标题右边找。
  */
 private const val TAG = "HideContactsHomeDot"
 
@@ -202,7 +204,9 @@ private fun paint() {
     val bar = barOf(titles)
     if (bar == null) {
         dots.forEach { it.visibility = View.VISIBLE }
-        logMissingBar(show, "titles=${titles.size}")
+        // 三种失败要分得开：一条 text1 都没有 / 有 text1 但没有一条在 Toolbar 里（画错行的前兆）/
+        // 在 Toolbar 里但找不到它右边可点击的图标。
+        logMissingBar(show, "titles=${titles.size} inToolbar=${titles.count { toolbarOf(it) != null }}")
         return
     }
 
@@ -281,40 +285,60 @@ private fun attachDot(bar: Bar, waiting: Int) {
 /**
  * 候选标题：所有「可见、有宽度」的 `android.R.id.text1`，按窗口内 y 升序。
  *
- * 主页头部在窗口顶端，其它带 text1 的工具条要么 y 更大、要么当下根本没显示（`isShown` 要求整条祖先链
- * 都可见，所以被聊天页压在下面的那条主页标题不会进来）。
+ * 这个 id 在主页上**不止一条** —— 标题栏一条、下面搜索框那条也是一条 `text1` 加一组可点击图标，
+ * 所以「谁在上面」不能用来认标题栏，真正的判据在 [barFor]（必须在 Toolbar 里）。这里排序只是为了
+ * 让标题栏那一条先被试到。
  */
 private fun titlesOf(decor: View): List<View> =
     decor.findViewsWhich { it is TextView && it.id == android.R.id.text1 && it.isShown && it.width > 0 }
         .toList()
         .sortedBy { windowY(it) }
 
-/** 逐个标题往上找图标组，第一个成立的就是要插红点的那条工具栏。 */
-private fun barOf(titles: List<View>): Bar? = titles.firstNotNullOfOrNull { title ->
-    val box = IntArray(2).also { title.getLocationInWindow(it) }
-    barFor(title, box[0], box[1] + title.height)
-}
-
 private fun windowY(view: View): Int = IntArray(2).also { view.getLocationInWindow(it) }[1]
 
-private fun barFor(title: View, titleLeft: Int, titleBottom: Int): Bar? {
-    var ancestor: View = title
-    while (ancestor.parent is View) {
-        ancestor = ancestor.parent as View
-        val icons = ancestor.findViewsWhich { candidate ->
-            candidate !== title && candidate.isClickable && candidate.isShown && candidate.width > 0 &&
-                    candidate.tag != DOT_TAG && runsInTitleStrip(candidate, titleLeft, titleBottom)
-        }.toList()
-        val icon = icons.minByOrNull { windowX(it) } ?: continue
-        return climbToIconGroup(icon)
+/** 逐个标题找图标组，第一个成立的就是要插红点的那条工具栏。 */
+private fun barOf(titles: List<View>): Bar? = titles.firstNotNullOfOrNull { title -> barFor(title) }
+
+/** 这条标题在不在「工具栏」里 —— 见 [barFor]，判据照 `HomeSidePanel.isToolbar`。 */
+private fun toolbarOf(title: View): ViewGroup? {
+    var node: View = title
+    while (node.parent is View) {
+        node = node.parent as View
+        if (node is ViewGroup && node.isToolbar()) return node
     }
     return null
 }
 
-/** 图标必须排在标题右边、且和标题同一条水平带（顶部工具条 vs 内容区的同名 id 就靠这个分开）。 */
-private fun runsInTitleStrip(view: View, titleLeft: Int, titleBottom: Int): Boolean {
-    val box = IntArray(2).also { view.getLocationInWindow(it) }
-    return box[0] >= titleLeft && box[1] <= titleBottom
+private const val TOOLBAR_CLASS = "androidx.appcompat.widget.Toolbar"
+
+/** 按类名比，不引 androidx 依赖：改版就算换掉这个类，最坏也只是「画不上」（有日志），不会再画到别处。 */
+private fun View.isToolbar(): Boolean {
+    var type: Class<*>? = javaClass
+    while (type != null) {
+        if (type.name == TOOLBAR_CLASS) return true
+        type = type.superclass
+    }
+    return false
+}
+
+/**
+ * 图标组只在**这条标题所属的那个 Toolbar 的子树**里找，且必须排在标题右边。
+ *
+ * 真机 2026-11-07 02:06 的 `dot probe` 把这条改动的必要性直接量出来了：红点画上了、也 `shown=true`，
+ * 但坐标是 `at=981,205`，而标题栏那条图标组在 y≈64-140 —— 它落在了**下面搜索框那一行**里。原因不是
+ * 找错了图标，而是找错了标题：主页上 `android.R.id.text1` 不止一条，搜索框那条自己就带着「同一水平带内
+ * 的可点击图标」，所以旧版那条"和标题同一条水平带"的判据对它是**自动成立**的（带的就是它自己那一行）。
+ * 换成结构判据：标题必须在一个 androidx Toolbar 里，图标也只在这个 Toolbar 里找。
+ */
+private fun barFor(title: View): Bar? {
+    val toolbar = toolbarOf(title) ?: return null
+    val titleRight = windowX(title) + title.width
+    val icons = toolbar.findViewsWhich { candidate ->
+        candidate !== title && candidate.isClickable && candidate.isShown && candidate.width > 0 &&
+                candidate.tag != DOT_TAG && windowX(candidate) >= titleRight
+    }.toList()
+    val icon = icons.minByOrNull { windowX(it) } ?: return null
+    return climbToIconGroup(icon, toolbar)
 }
 
 /** 比较左右必须用窗口坐标：候选图标可能来自不同父容器，`left` 是各自容器内的相对值。 */
@@ -322,12 +346,13 @@ private fun windowX(view: View): Int = IntArray(2).also { view.getLocationInWind
 
 /**
  * 图标自己那一格通常还挂着一个 GONE 的小红点 View，所以「只有一个可见子 View 的容器」要一路并到
- * 真正的图标组（搜索和「+」都在里面），红点插在那里才不会挤进图标格内。
+ * 真正的图标组（搜索和「+」都在里面），红点插在那里才不会挤进图标格内。并到 [ceiling]（工具栏）为止，
+ * 再往上并就出栏了。
  */
-private fun climbToIconGroup(icon: View): Bar? {
+private fun climbToIconGroup(icon: View, ceiling: ViewGroup): Bar? {
     var cell: View = icon
     var container = icon.parent as? ViewGroup ?: return null
-    while (visibleChildCount(container) == 1 && container.parent is ViewGroup) {
+    while (container !== ceiling && visibleChildCount(container) == 1 && container.parent is ViewGroup) {
         cell = container
         container = container.parent as ViewGroup
     }

@@ -245,7 +245,8 @@ private fun rewriteWrapperSql(sql: String): String? {
     // 改写**之后**的整句，这样 AND 落点对不对、宿主自己那段 WHERE 有没有给 AND 留坑（裸 OR 尾巴），
     // 一次真机就能定性；反之如果开一页日志里一个字都没有，就是通路判错了。
     if (rule.name == "folder-children") {
-        WeLogger.i(TAG, "folder children filtered: ${rewritten.take(200)}")
+        // 400 不是随手写的：宿主那半句 WHERE 本身就 200 字符上下，截在 200 看不到注入的 AND 落在哪。
+        WeLogger.i(TAG, "folder children filtered: ${rewritten.take(400)}")
     }
     return rewritten
 }
