@@ -2,23 +2,51 @@ package dev.sherry.wcs.features.items.chat
 
 import dev.sherry.wcs.agent.data.entity.ModelProviderType
 import dev.sherry.wcs.preferences.WePrefs
+import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 
-/** 一份 OpenAI 兼容的 API 配置，直接持久化到 MMKV，与 WeAgent 的模型数据库解耦。 */
+/**
+ * 一次请求所需的连接视图。实现方只做读，值全部来自「API 配置档」，
+ * 不再各自持有 prefKey —— 换 key 只改配置档，引用它的功能自动跟着变。
+ */
 interface AiApiConfig {
-    var baseUrl: String
-    var apiPath: String
-    var apiKey: String
-    var modelId: String
+    val baseUrl: String
+    val apiPath: String
+    val apiKey: String
+    val modelId: String
+    val protocol: ApiProtocol
 }
 
-/** 完整请求前缀 = baseUrl + apiPath；apiPath 可为前缀（/v1）或完整端点路径（/v1/chat/completions） */
+/** 适配器认识的端点末段。用户把完整端点粘进地址时先剥掉，交给适配器按协议重新补。 */
+private val KNOWN_ENDPOINT_SUFFIXES = listOf("/chat/completions", "/responses", "/messages")
+
+/**
+ * 去掉地址里可能多写的端点末段。
+ *
+ * 三种协议的适配器写法并不一致：Chat 有 `endsWith` 判断，Responses / Anthropic 是直拼。
+ * 那层属于 `agent/`（WeAgent 也在用），这里不动它，改在「配置 → 客户端」之间统一收口，
+ * 因此三种协议都允许「填到版本号」和「粘完整端点」两种写法。
+ */
+private fun stripEndpointSuffix(raw: String): String {
+    var base = raw.trim().trimEnd('/')
+    for (suffix in KNOWN_ENDPOINT_SUFFIXES) {
+        if (base.endsWith(suffix)) {
+            base = base.removeSuffix(suffix).trimEnd('/')
+        }
+    }
+    // Gemini 完整端点形如 .../models/gemini-2.5-flash:generateContent
+    base = base.removeSuffix(":streamGenerateContent").removeSuffix(":generateContent")
+    if (base.contains("/models/")) base = base.substringBefore("/models/")
+    return base.trimEnd('/')
+}
+
+/** 完整请求前缀 = baseUrl + apiPath；apiPath 可为版本段（/v1）或完整端点路径。 */
 fun AiApiConfig.resolvedBaseUrl(): String {
-    var base = baseUrl.trim().trimEnd('/')
+    val base = stripEndpointSuffix(baseUrl)
     if (base.isEmpty()) return base
-    // 用户可能在 baseUrl 里误填了完整端点（如 https://api.deepseek.com/v1/chat/completions），
-    // 剥离掉尾部的 /chat/completions，统一由客户端拼接
-    base = base.removeSuffix("/chat/completions").trimEnd('/')
-    val path = apiPath.trim().trim('/')
+    // 路径里也可能粘了完整末段（如 apiPath = /v1/messages），先归一再拼，
+    // 否则适配器会在这条路径后面再补一次 /messages
+    val strippedPath = stripEndpointSuffix(apiPath)
+    val path = strippedPath.trim('/')
     if (path.isEmpty()) return base
     // 防重复路径：baseUrl 已带该前缀（如 baseUrl=https://api.deepseek.com/v1 且 apiPath=/v1）
     // 时避免拼成 /v1/v1 导致 HTTP 404
@@ -26,54 +54,116 @@ fun AiApiConfig.resolvedBaseUrl(): String {
     return "$base/$path"
 }
 
-fun AiApiConfig.providerType(): ModelProviderType = ModelProviderType.OPENAI_CHAT_COMPLETION
+fun AiApiConfig.providerType(): ModelProviderType = protocol.type
+
+/** Gemini 的模型名可能自带 `models/` 前缀，统一成 `models/{id}`。 */
+internal fun geminiModelPath(model: String): String {
+    val id = model.trim()
+    return if (id.startsWith("models/")) id else "models/$id"
+}
 
 /**
- * 实际请求端点。与 OpenAiChatCompletionsClient 用同一条规则：已带 /chat/completions 就原样用，
- * 否则补上，避免「测试连接」测的是一个永远不会被请求的 URL。
+ * 实际请求端点（连接测试用）。与适配器保持同一套规则：已带本协议末段就原样用，否则补上，
+ * 避免「测试连接」测的是一个永远不会被请求的 URL。
  */
 fun AiApiConfig.requestEndpoint(): String {
     val base = resolvedBaseUrl().trimEnd('/')
     if (base.isEmpty()) return base
-    return if (base.endsWith("/chat/completions")) base else "$base/chat/completions"
+    if (protocol == ApiProtocol.GEMINI_GENERATE_CONTENT) {
+        return "$base/${geminiModelPath(modelId)}:generateContent"
+    }
+    val suffix = protocol.endpointSuffix
+    return if (base.endsWith(suffix)) base else "$base$suffix"
 }
 
 fun AiApiConfig.isConfigured(): Boolean =
     baseUrl.isNotBlank() && apiKey.isNotBlank() && modelId.isNotBlank()
 
-/** 群聊智能分析的配置。偏好键沿用它最初的名字 `ai_reply_*`，改名会让老设备的配置清空。 */
-internal object AiModelConfig : AiApiConfig {
-    override var baseUrl by WePrefs.prefOption("ai_reply_base_url", "")
-    override var apiPath by WePrefs.prefOption("ai_reply_api_path", "")
-    override var apiKey by WePrefs.prefOption("ai_reply_api_key", "")
-    override var modelId by WePrefs.prefOption("ai_reply_model_id", "")
+/**
+ * 以配置档为后端的连接视图。功能侧只额外存「引用哪一条」和「模型是否覆盖」，
+ * 其余字段一律实时读配置档，因此改配置档立即对所有引用方生效。
+ */
+abstract class ProfileBackedConfig(
+    profileKey: String,
+    overrideKey: String,
+) : AiApiConfig {
 
+    private var profileIdPref by WePrefs.prefOption(profileKey, "")
+    private var modelOverridePref by WePrefs.prefOption(overrideKey, "")
+
+    /** 引用的配置档 id；空表示尚未指派（首次启动由迁移逻辑补齐）。 */
+    var profileId: String
+        get() {
+            ApiProfiles.ensureMigrated()
+            return profileIdPref
+        }
+        set(value) {
+            profileIdPref = value.trim()
+        }
+
+    /** 非空表示本功能单独指定模型，不再跟随配置档的默认模型。 */
+    var modelOverride: String
+        get() = modelOverridePref
+        set(value) {
+            modelOverridePref = value.trim()
+        }
+
+    val profile: ApiProfile? get() = ApiProfiles.get(profileId)
+
+    val profileName: String get() = profile?.name.orEmpty()
+
+    val profileDefaultModelId: String get() = profile?.defaultModelId.orEmpty()
+
+    val followsProfileModel: Boolean get() = modelOverridePref.isBlank()
+
+    override val baseUrl: String get() = profile?.baseUrl.orEmpty()
+
+    override val apiPath: String get() = profile?.apiPath.orEmpty()
+
+    override val apiKey: String get() = profile?.apiKey.orEmpty()
+
+    override val protocol: ApiProtocol get() = profile?.protocol ?: ApiProtocol.CHAT_COMPLETIONS
+
+    override val modelId: String get() = modelOverridePref.ifBlank { profileDefaultModelId }
+}
+
+/** 把一条配置档包成 [AiApiConfig]，供「管理页里当场测试」这类不经过功能引用的场景使用。 */
+fun ApiProfile.asConfig(modelOverride: String = ""): AiApiConfig = object : AiApiConfig {
+    override val baseUrl: String get() = this@asConfig.baseUrl
+    override val apiPath: String get() = this@asConfig.apiPath
+    override val apiKey: String get() = this@asConfig.apiKey
+    override val protocol: ApiProtocol get() = this@asConfig.protocol
+    override val modelId: String get() = modelOverride.ifBlank { this@asConfig.defaultModelId }
+}
+
+/**
+ * 群聊智能分析引用哪条配置档。偏好键沿用它最初的名字 `ai_reply_*`，改名会让老设备的引用丢失。
+ */
+internal object AiModelConfig : ProfileBackedConfig(
+    profileKey = "ai_reply_profile_id",
+    overrideKey = "ai_reply_model_override",
+) {
     /**
      * AI 分析提取消息数量上限；0 表示自动（按模型容量估算），否则取最近 N 条。
-     * 上限会同时作用于默认主题与自定义主题的聊天片段。
+     * 这是功能私有参数，不进配置档。
      */
     var extractLimit by WePrefs.prefOption("ai_reply_extract_limit", 0)
 }
 
 /**
- * AI 回复候选的配置。两套上游回复功能合并前，回复与群聊分析共用 `ai_reply_*`，
- * 现在各自独立，只在首次使用时把群聊那份继承一次。
+ * AI 回复候选引用哪条配置档。两套上游功能合并前回复与群聊分析共用 `ai_reply_*`，
+ * 迁移时若回复侧没有自己的老配置，会继承群聊那条，与改造前的行为一致。
  */
-object AiReplyApiConfig : AiApiConfig {
-    override var baseUrl by WePrefs.prefOption("ai_reply_cand_base_url", "")
-    override var apiPath by WePrefs.prefOption("ai_reply_cand_api_path", "")
-    override var apiKey by WePrefs.prefOption("ai_reply_cand_api_key", "")
-    override var modelId by WePrefs.prefOption("ai_reply_cand_model_id", "")
-
+object AiReplyApiConfig : ProfileBackedConfig(
+    profileKey = "ai_reply_cand_profile_id",
+    overrideKey = "ai_reply_cand_model_override",
+) {
     private var inherited by WePrefs.prefOption("ai_reply_cand_inherited", false)
 
     fun inheritSharedConfigOnce() {
         if (inherited) return
         inherited = true
-        if (baseUrl.isNotBlank() || apiKey.isNotBlank() || modelId.isNotBlank()) return
-        baseUrl = AiModelConfig.baseUrl
-        apiPath = AiModelConfig.apiPath
-        apiKey = AiModelConfig.apiKey
-        modelId = AiModelConfig.modelId
+        if (profileId.isNotBlank()) return
+        if (AiModelConfig.profileId.isNotBlank()) profileId = AiModelConfig.profileId
     }
 }

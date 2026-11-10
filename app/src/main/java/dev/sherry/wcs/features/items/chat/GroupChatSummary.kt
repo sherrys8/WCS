@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -55,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Auto_awesome
@@ -85,8 +85,8 @@ import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.Button
 import dev.sherry.wcs.ui.content.IconButton
 import dev.sherry.wcs.ui.content.TextButton
+import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
-import dev.sherry.wcs.ui.content.m3.TextFieldDialogWidget
 import dev.sherry.wcs.ui.utils.VectorPathDrawable
 import dev.sherry.wcs.utils.HostInfo
 import dev.sherry.wcs.utils.android.copyToClipboard
@@ -616,39 +616,18 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
 
     @Composable
     private fun AiSettingsDialog(onDismiss: () -> Unit) {
-        fun saveSetting(save: () -> Unit) {
-            save()
-            showToast("已保存 API 配置")
-        }
+        val context = LocalContext.current
 
         // MMKV 偏好不是 Compose 快照状态：行内显示必须走本地状态，否则保存后不刷新
-        var baseUrl by remember { mutableStateOf(AiModelConfig.baseUrl) }
-        var apiPath by remember { mutableStateOf(AiModelConfig.apiPath) }
-        var apiKey by remember { mutableStateOf(AiModelConfig.apiKey) }
-        var modelId by remember { mutableStateOf(AiModelConfig.modelId) }
+        var profileIdState by remember { mutableStateOf(AiModelConfig.profileId) }
+        var modelOverrideState by remember { mutableStateOf(AiModelConfig.modelOverride) }
+        val currentProfile = remember(profileIdState) { ApiProfiles.get(profileIdState) }
+        val defaultModel = currentProfile?.defaultModelId.orEmpty()
 
         var testing by remember { mutableStateOf(false) }
-        var fetching by remember { mutableStateOf(false) }
         var testOutcome by remember { mutableStateOf<Boolean?>(null) }
         var testError by remember { mutableStateOf<String?>(null) }
-        var fetchError by remember { mutableStateOf<String?>(null) }
-        var models by remember { mutableStateOf<List<String>>(emptyList()) }
-        var showModelPicker by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
-
-        if (showModelPicker) {
-            ModelPickerDialog(
-                models = models,
-                onPick = {
-                    modelId = it
-                    AiModelConfig.modelId = it
-                    showModelPicker = false
-                    showToast("已选择模型 $it")
-                },
-                onDismiss = { showModelPicker = false },
-            )
-            return
-        }
 
         AlertDialogContent(
             title = {
@@ -670,203 +649,106 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
                 ) {
                     SegmentedColumn {
                         item {
-                            TextFieldDialogWidget(
-                                title = stringResource(R.string.ui_group_ai_settings_base_url),
-                                value = baseUrl,
-                                onValueChange = { saveSetting { baseUrl = it.trim(); AiModelConfig.baseUrl = baseUrl } },
-                                dialogTitle = stringResource(R.string.ui_group_ai_settings_base_url),
-                                confirmLabel = stringResource(R.string.dialog_confirm),
-                                dismissLabel = stringResource(R.string.dialog_cancel),
-                                valueHint = stringResource(R.string.ui_group_ai_settings_base_url_hint),
+                            // 只能选，不能改：地址与密钥属于配置档本身，改一处会影响所有引用方
+                            BaseWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(R.string.ui_group_ai_settings_title),
+                                description = currentProfile?.let { "${it.name} · ${it.protocol.label}" }
+                                    ?: stringResource(R.string.api_profile_none),
+                                onClick = {
+                                    showApiProfilePicker(context, profileIdState) { picked ->
+                                        profileIdState = picked.id
+                                        AiModelConfig.profileId = picked.id
+                                    }
+                                },
                             )
                         }
                         item {
-                            TextFieldDialogWidget(
-                                title = stringResource(R.string.ui_group_ai_settings_path),
-                                value = apiPath,
-                                onValueChange = { saveSetting { apiPath = it.trim(); AiModelConfig.apiPath = apiPath } },
-                                dialogTitle = stringResource(R.string.ui_group_ai_settings_path),
-                                confirmLabel = stringResource(R.string.dialog_confirm),
-                                dismissLabel = stringResource(R.string.dialog_cancel),
-                                valueHint = stringResource(R.string.ui_group_ai_settings_path_hint),
-                            )
-                        }
-                        item {
-                            TextFieldDialogWidget(
-                                title = stringResource(R.string.ui_group_ai_settings_api_key),
-                                value = apiKey,
-                                onValueChange = { saveSetting { apiKey = it.trim(); AiModelConfig.apiKey = apiKey } },
-                                dialogTitle = stringResource(R.string.ui_group_ai_settings_api_key),
-                                confirmLabel = stringResource(R.string.dialog_confirm),
-                                dismissLabel = stringResource(R.string.dialog_cancel),
-                                valueHint = stringResource(R.string.ui_group_ai_settings_api_key_hint),
-                                password = true,
-                            )
-                        }
-                        item {
-                            TextFieldDialogWidget(
+                            // 与 AI 回复同一套：点行 → 获取模型 → 选中 → 确定
+                            BaseWidget(
+                                iconPlaceholder = false,
                                 title = stringResource(R.string.ui_group_ai_settings_model_id),
-                                value = modelId,
-                                onValueChange = { saveSetting { modelId = it.trim(); AiModelConfig.modelId = modelId } },
-                                dialogTitle = stringResource(R.string.ui_group_ai_settings_model_id),
-                                confirmLabel = stringResource(R.string.dialog_confirm),
-                                dismissLabel = stringResource(R.string.dialog_cancel),
+                                description = when {
+                                    modelOverrideState.isNotBlank() -> stringResource(
+                                        R.string.api_profile_model_overridden,
+                                        modelOverrideState,
+                                    )
+                                    defaultModel.isNotBlank() ->
+                                        stringResource(R.string.api_profile_follow_model, defaultModel)
+                                    else -> stringResource(R.string.ai_reply_model_row_hint)
+                                },
+                                onClick = {
+                                    showApiModelPicker(context, AiModelConfig, AiModelConfig.modelId) { picked ->
+                                        modelOverrideState = picked
+                                        AiModelConfig.modelOverride = picked
+                                    }
+                                },
                             )
                         }
-                        item {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Button(
+                        if (modelOverrideState.isNotBlank()) {
+                            item {
+                                BaseWidget(
+                                    iconPlaceholder = false,
+                                    title = stringResource(R.string.api_profile_reset_follow),
                                     onClick = {
-                                        testing = true
-                                        testOutcome = null
-                                        testError = null
-                                        scope.launch {
-                                            val r = AiModelConnection.testConnection(AiModelConfig)
-                                            testing = false
-                                            r.onSuccess {
-                                                testOutcome = true
-                                            }.onFailure {
-                                                testOutcome = false
-                                                testError = it.message
-                                            }
-                                        }
+                                        modelOverrideState = ""
+                                        AiModelConfig.modelOverride = ""
                                     },
-                                    enabled = !testing && !fetching,
-                                    modifier = Modifier.weight(1f),
-                                ) {
-                                    Text(
-                                        if (testing) {
-                                            stringResource(R.string.ui_group_ai_settings_testing)
-                                        } else {
-                                            stringResource(R.string.ui_group_ai_settings_test)
-                                        },
-                                    )
-                                }
-                                Button(
-                                    onClick = {
-                                        fetching = true
-                                        fetchError = null
-                                        scope.launch {
-                                            val r = AiModelConnection.fetchModels(AiModelConfig)
-                                            fetching = false
-                                            r.onSuccess { list ->
-                                                models = list
-                                                showModelPicker = true
-                                            }.onFailure {
-                                                fetchError = it.message
-                                            }
-                                        }
-                                    },
-                                    enabled = !testing && !fetching,
-                                    modifier = Modifier.weight(1f),
-                                ) {
-                                    Text(
-                                        if (fetching) {
-                                            stringResource(R.string.ui_group_ai_settings_fetching)
-                                        } else {
-                                            stringResource(R.string.ui_group_ai_settings_fetch_models)
-                                        },
-                                    )
-                                }
-                            }
-                            testOutcome?.let { ok ->
-                                Text(
-                                    text = if (ok) {
-                                        stringResource(R.string.ui_group_ai_settings_test_ok)
-                                    } else {
-                                        stringResource(R.string.ui_group_ai_settings_test_failed_toast, testError ?: "未知错误")
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.padding(top = 8.dp),
-                                )
-                            }
-                            fetchError?.let { err ->
-                                Text(
-                                    text = stringResource(R.string.ui_group_ai_settings_fetch_failed_toast, err),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.padding(top = 8.dp),
                                 )
                             }
                         }
                     }
+
+                    testOutcome?.let { ok ->
+                        Text(
+                            text = if (ok) {
+                                stringResource(R.string.ui_group_ai_settings_test_ok)
+                            } else {
+                                stringResource(
+                                    R.string.ui_group_ai_settings_test_failed_toast,
+                                    testError.orEmpty(),
+                                )
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (ok) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                 }
             },
-            confirmButton = null,
+            confirmButton = {
+                // 与 AI 回复面板同位置：右下角一个「测试连接」
+                Button(
+                    onClick = {
+                        testing = true
+                        testOutcome = null
+                        testError = null
+                        scope.launch {
+                            val r = AiModelConnection.testConnection(AiModelConfig)
+                            testing = false
+                            r.onSuccess {
+                                testOutcome = true
+                            }.onFailure {
+                                testOutcome = false
+                                testError = it.message
+                            }
+                        }
+                    },
+                    enabled = !testing,
+                ) {
+                    Text(
+                        if (testing) {
+                            stringResource(R.string.ui_group_ai_settings_testing)
+                        } else {
+                            stringResource(R.string.ui_group_ai_settings_test)
+                        },
+                    )
+                }
+            },
             dismissButton = {
                 TextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.dialog_close))
-                }
-            },
-        )
-    }
-
-    @Composable
-    private fun ModelPickerDialog(
-        models: List<String>,
-        onPick: (String) -> Unit,
-        onDismiss: () -> Unit,
-    ) {
-        AlertDialogContent(
-            title = {
-                Text(
-                    text = stringResource(R.string.ui_group_ai_model_picker_title),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(360.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.ui_group_ai_model_picker_summary, models.size),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
-                        models.forEach { model ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onPick(model) }
-                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = model,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = if (model == AiModelConfig.modelId) "✓" else "",
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                            Spacer(Modifier.height(6.dp))
-                        }
-                    }
-                }
-            },
-            confirmButton = null,
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.dialog_cancel))
                 }
             },
         )
