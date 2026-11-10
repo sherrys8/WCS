@@ -4604,4 +4604,24 @@ Time: {time}</string>
     <string name="qq_music_order_reply_voice_failed">Failed to send the song voice</string>
     <string name="qq_music_order_reply_both_failed">Both the card and the voice failed</string>
     <string name="qq_music_order_lyric_none">No lyrics</string>
+    <string name="feature_ai_speech_to_text_name">AI speech to text</string>
+    <string name="feature_ai_speech_to_text_description">Long-press a voice message to transcribe it with cloud ASR; copy or send it as text. Independent of the built-in auto speech-to-text</string>
+    <string name="ai_stt_menu">AI speech to text</string>
+    <string name="ai_stt_entry_group_title">Menu entry</string>
+    <string name="ai_stt_entry_bubble">Long-press voice message</string>
+    <string name="ai_stt_entry_bubble_description">Add "AI speech to text" to the long-press menu of voice messages</string>
+    <string name="ai_stt_cfg_group">Transcription service</string>
+    <string name="ai_stt_api_key">API key</string>
+    <string name="ai_stt_api_key_hint">Not set; enter a SiliconFlow API key</string>
+    <string name="ai_stt_model">Model</string>
+    <string name="ai_stt_result_title">Transcription</string>
+    <string name="ai_stt_btn_copy">Copy</string>
+    <string name="ai_stt_btn_send_text">Send as text</string>
+    <string name="ai_stt_toast_copied">Copied</string>
+    <string name="ai_stt_toast_sent">Sent</string>
+    <string name="ai_stt_toast_send_failed">Send failed</string>
+    <string name="ai_stt_toast_need_key">Set the API key in settings first</string>
+    <string name="ai_stt_toast_no_voice">No readable voice in this message</string>
+    <string name="ai_stt_toast_empty">No text recognized</string>
+    <string name="ai_stt_toast_failed">Transcription failed: %1$s</string>
 </resources>

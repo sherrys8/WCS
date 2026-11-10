@@ -4635,4 +4635,24 @@
     <string name="qq_music_order_reply_voice_failed">歌曲语音发送失败</string>
     <string name="qq_music_order_reply_both_failed">音乐卡片和歌曲语音发送失败</string>
     <string name="qq_music_order_lyric_none">暂无歌词</string>
+    <string name="feature_ai_speech_to_text_name">AI语音转文字</string>
+    <string name="feature_ai_speech_to_text_description">长按语音消息，调用云端 ASR 转成文字，可复制或以文本发送；与「自动语音转文字」相互独立</string>
+    <string name="ai_stt_menu">AI语音转文字</string>
+    <string name="ai_stt_entry_group_title">菜单入口</string>
+    <string name="ai_stt_entry_bubble">长按语音消息</string>
+    <string name="ai_stt_entry_bubble_description">在语音消息的长按菜单中添加「AI语音转文字」</string>
+    <string name="ai_stt_cfg_group">转写服务</string>
+    <string name="ai_stt_api_key">API Key</string>
+    <string name="ai_stt_api_key_hint">未设置，填写 SiliconFlow API Key</string>
+    <string name="ai_stt_model">模型</string>
+    <string name="ai_stt_result_title">转写结果</string>
+    <string name="ai_stt_btn_copy">复制</string>
+    <string name="ai_stt_btn_send_text">发送文本</string>
+    <string name="ai_stt_toast_copied">已复制</string>
+    <string name="ai_stt_toast_sent">已发送</string>
+    <string name="ai_stt_toast_send_failed">发送失败</string>
+    <string name="ai_stt_toast_need_key">请先在设置里填写 API Key</string>
+    <string name="ai_stt_toast_no_voice">该消息没有可读取的语音</string>
+    <string name="ai_stt_toast_empty">未识别到文字</string>
+    <string name="ai_stt_toast_failed">转写失败：%1$s</string>
 </resources>
