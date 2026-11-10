@@ -2231,6 +2231,10 @@
     <string name="api_profile_delete">Delete this profile</string>
     <string name="api_profile_in_use">This profile is used by %1$d feature(s); change their reference first</string>
     <string name="api_profile_deleted">Deleted</string>
+    <string name="api_profile_model_manual">Model name (manual)</string>
+    <string name="api_profile_custom_tail_hint">Note: inference runs through the Chat Completions adapter, which only uses the address verbatim when it ends with /chat/completions; otherwise it appends that suffix.</string>
+    <string name="api_profile_custom_note">Custom protocol: the address is used exactly as typed — no suffix is stripped or appended. Put the full endpoint in the address field (e.g. https://host/v1/chat/completions) and leave the path empty.</string>
+    <string name="api_profile_suffix_mismatch">Path suffix %1$s does not match the selected protocol; the request will be rewritten to the protocol suffix</string>
     <string name="api_profile_endpoint_preview">Full request URL: %1$s</string>
     <string name="api_profile_follow_model">Follow profile (%1$s)</string>
     <string name="api_profile_model_overridden">%1$s (overridden)</string>

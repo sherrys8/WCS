@@ -67,6 +67,14 @@ internal object AiModelConnection {
                     headers = mapOf("x-goog-api-key" to config.apiKey.trim()),
                     body = geminiBody(),
                 )
+
+                // 自定义：endpoint 就是 resolvedBaseUrl() 本身，不补任何末段；
+                // 报文仍按 Chat Completions 发，第三方反代基本都吃这套格式
+                ApiProtocol.CUSTOM -> postJson(
+                    endpoint = base,
+                    headers = bearer(config.apiKey),
+                    body = chatBody(config.modelId),
+                )
             }
             "OK"
         }
@@ -77,6 +85,7 @@ internal object AiModelConnection {
      *
      * - OpenAI 系（Chat / Responses）：`GET {base}/models`，读 `data[].id`
      * - Gemini：`GET {base}/models`，读 `models[].name`（去掉 `models/` 前缀）
+     * - 自定义：地址是完整对话端点，取它的父路径再拼 `/models`，读法同 OpenAI 系
      * - Anthropic：官方没有该端点，直接给明确提示，让用户手填，避免报一个看不懂的 404
      */
     suspend fun fetchModels(config: AiApiConfig): Result<List<String>> = withContext(Dispatchers.IO) {
@@ -88,7 +97,7 @@ internal object AiModelConnection {
                 "Anthropic 没有模型列表接口，请手动填写模型名"
             }
 
-            val endpoint = "$base/models"
+            val endpoint = modelsEndpoint(base, config.protocol)
             val content = if (config.protocol == ApiProtocol.GEMINI_GENERATE_CONTENT) {
                 get(endpoint, mapOf("x-goog-api-key" to config.apiKey.trim()))
             } else {
@@ -122,6 +131,23 @@ internal object AiModelConnection {
     }
 
     // ==================== 请求体 ====================
+
+    /**
+     * 模型列表端点。
+     *
+     * 标准协议就是 `{base}/models`；自定义协议的 `base` 是用户填的完整对话端点，
+     * 直接拼会得到 `.../chat/completions/models`，所以退一级再拼。
+     */
+    private fun modelsEndpoint(base: String, protocol: ApiProtocol): String {
+        if (protocol != ApiProtocol.CUSTOM) return "$base/models"
+        val trimmed = base.trimEnd('/')
+        val parent = if (trimmed.endsWith("/chat/completions")) {
+            trimmed.removeSuffix("/chat/completions")
+        } else {
+            trimmed.substringBeforeLast('/', "")
+        }
+        return if (parent.isBlank()) "$trimmed/models" else "$parent/models"
+    }
 
     private fun chatBody(model: String): String = JSONObject()
         .put("model", model.trim())

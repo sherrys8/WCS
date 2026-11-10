@@ -6,10 +6,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * 线上协议。只暴露四个走网络的协议；[ModelProviderType.LOCAL_LLAMA] 属于 WeAgent 的本地模型，
+ * 线上协议。五个走网络的协议；[ModelProviderType.LOCAL_LLAMA] 属于 WeAgent 的本地模型，
  * 由那边的 Room 表管理，这里不参与。
  *
  * 协议不是从地址猜出来的：它同时决定末段路径、鉴权头和请求体格式，只能由用户显式选择。
+ * [CUSTOM] 是唯一「不改地址」的特例，见它自己的注释。
  */
 enum class ApiProtocol(
     val prefValue: String,
@@ -36,7 +37,23 @@ enum class ApiProtocol(
         "Gemini GenerateContent",
         ModelProviderType.GEMINI_GENERATE_CONTENT,
     ),
+
+    /**
+     * 自定义：地址**原样使用**，既不剥末段也不补末段。
+     *
+     * 给第三方反代 / 私有网关用：这类服务的端点路径往往不是标准末段（`/api/v3/chat`、
+     * `/openai/deployments/x/chat`），按协议补 `/chat/completions` 只会拼出一个 404。
+     * 请求体仍按 OpenAI Chat Completions 发，因为绝大多数反代都兼容这套格式。
+     */
+    CUSTOM(
+        "custom",
+        "自定义（原样使用）",
+        ModelProviderType.OPENAI_CHAT_COMPLETION,
+    ),
     ;
+
+    /** 该协议是否完全不改用户填的地址。 */
+    val keepsUrlVerbatim: Boolean get() = this == CUSTOM
 
     /**
      * 适配器会自己补上的末段。Gemini 的末段带模型名（`/models/{model}:streamGenerateContent`），
@@ -48,6 +65,7 @@ enum class ApiProtocol(
             OPENAI_RESPONSES -> "/responses"
             ANTHROPIC_MESSAGES -> "/messages"
             GEMINI_GENERATE_CONTENT -> ""
+            CUSTOM -> ""
         }
 
     companion object {

@@ -16,6 +16,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,19 +56,23 @@ fun showApiProfilePicker(
 }
 
 /**
- * 功能侧选模型。AI 回复与群聊总结共用这一套：点模型行弹出，先「获取模型」把列表拉下来，
- * 点中一条后右下角原位变成「确定」。
+ * 选模型。AI 回复、群聊总结、API配置编辑页共用这一套：点模型行弹出，
+ * 「获取模型」把列表拉下来，点中一条后右下角原位变成「确定」。
  *
- * 传 [config] 而不是各功能自己的偏好对象，是为了让两条入口走完全相同的请求路径
+ * 传 [config] 而不是各功能自己的偏好对象，是为了让所有入口走完全相同的请求路径
  * —— 换配置档后重开弹窗，拉的就是新配置档的模型列表。
+ *
+ * [autoFetch] 给「点进来就该开始拉」的场景用（配置页的默认模型行）；功能侧保持手动，
+ * 避免每次点开设置都打一次网络。
  */
 fun showApiModelPicker(
     context: Context,
     config: AiApiConfig,
     current: String,
+    autoFetch: Boolean = false,
     onPicked: (String) -> Unit,
 ) {
-    showComposeDialog(context) { ApiModelPickerContent(config, current, onPicked) }
+    showComposeDialog(context) { ApiModelPickerContent(config, current, autoFetch, onPicked) }
 }
 
 @Composable
@@ -133,6 +138,7 @@ private fun ShowComposeDialogScope.ApiProfilePickerContent(
 private fun ShowComposeDialogScope.ApiModelPickerContent(
     config: AiApiConfig,
     current: String,
+    autoFetch: Boolean,
     onPicked: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -140,6 +146,23 @@ private fun ShowComposeDialogScope.ApiModelPickerContent(
     var fetching by remember { mutableStateOf(false) }
     var fetchError by remember { mutableStateOf<String?>(null) }
     var picked by remember { mutableStateOf("") }
+
+    fun fetch() {
+        if (fetching) return
+        fetching = true
+        fetchError = null
+        scope.launch {
+            val result = AiModelConnection.fetchModels(config)
+            fetching = false
+            result.fold(
+                onSuccess = { models = it },
+                onFailure = { failure -> fetchError = failure.message },
+            )
+        }
+    }
+
+    // 配置页的默认模型行：点进来就直接开始拉，省掉再点一次「获取模型」
+    LaunchedEffect(Unit) { if (autoFetch) fetch() }
 
     AlertDialogContent(
         title = {
@@ -208,18 +231,7 @@ private fun ShowComposeDialogScope.ApiModelPickerContent(
         confirmButton = {
             if (picked.isEmpty()) {
                 Button(
-                    onClick = {
-                        fetching = true
-                        fetchError = null
-                        scope.launch {
-                            val result = AiModelConnection.fetchModels(config)
-                            fetching = false
-                            result.fold(
-                                onSuccess = { models = it },
-                                onFailure = { failure -> fetchError = failure.message },
-                            )
-                        }
-                    },
+                    onClick = { fetch() },
                     enabled = !fetching,
                 ) {
                     Text(

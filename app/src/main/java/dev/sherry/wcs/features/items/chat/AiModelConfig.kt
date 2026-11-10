@@ -41,11 +41,23 @@ private fun stripEndpointSuffix(raw: String): String {
 
 /** 完整请求前缀 = baseUrl + apiPath；apiPath 可为版本段（/v1）或完整端点路径。 */
 fun AiApiConfig.resolvedBaseUrl(): String {
-    val base = stripEndpointSuffix(baseUrl)
+    val rawBase = baseUrl.trim()
+    val rawPath = apiPath.trim()
+    // 自定义协议：一个字符都不改。用户填的完整端点就是要被请求的地址，
+    // 剥末段会拆掉他自己的路径，补末段又会拼出他不存在的路由。
+    if (protocol.keepsUrlVerbatim) {
+        val base = rawBase.trimEnd('/')
+        if (base.isEmpty()) return base
+        val path = rawPath.trim('/')
+        if (path.isEmpty()) return base
+        if (base.endsWith("/$path") || base == path) return base
+        return "$base/$path"
+    }
+    val base = stripEndpointSuffix(rawBase)
     if (base.isEmpty()) return base
     // 路径里也可能粘了完整末段（如 apiPath = /v1/messages），先归一再拼，
     // 否则适配器会在这条路径后面再补一次 /messages
-    val strippedPath = stripEndpointSuffix(apiPath)
+    val strippedPath = stripEndpointSuffix(rawPath)
     val path = strippedPath.trim('/')
     if (path.isEmpty()) return base
     // 防重复路径：baseUrl 已带该前缀（如 baseUrl=https://api.deepseek.com/v1 且 apiPath=/v1）
@@ -55,6 +67,27 @@ fun AiApiConfig.resolvedBaseUrl(): String {
 }
 
 fun AiApiConfig.providerType(): ModelProviderType = protocol.type
+
+/**
+ * 路径里写死的末段与所选协议不一致时，返回那个末段。
+ *
+ * 典型场景：协议选 Chat Completions，路径却填了 `/v1/messages`。归一化会把这个末段剥掉再按
+ * 协议补成 `/chat/completions`——请求能发出去，但用户以为自己配的是 Anthropic。配置页拿这个
+ * 返回值给一句提示，比让人对着 404 猜要省事。一致、没写末段、或选了自定义协议都返回 null。
+ *
+ * 末段写进地址栏（而不是路径栏）同样会被剥掉，所以两处都查。
+ */
+fun AiApiConfig.pathSuffixMismatch(): String? {
+    if (protocol.keepsUrlVerbatim) return null
+    val expected = protocol.endpointSuffix
+    val typed = sequenceOf(apiPath, baseUrl)
+        .map { it.trim().trimEnd('/') }
+        .mapNotNull { path -> KNOWN_ENDPOINT_SUFFIXES.firstOrNull { path.endsWith(it) } }
+        .firstOrNull()
+        ?: return null
+    // Gemini 的末段由模型名拼装，路径里写任何固定末段都会被改写
+    return if (expected.isNotEmpty() && typed == expected) null else typed
+}
 
 /** Gemini 的模型名可能自带 `models/` 前缀，统一成 `models/{id}`。 */
 internal fun geminiModelPath(model: String): String {
@@ -69,6 +102,8 @@ internal fun geminiModelPath(model: String): String {
 fun AiApiConfig.requestEndpoint(): String {
     val base = resolvedBaseUrl().trimEnd('/')
     if (base.isEmpty()) return base
+    // 自定义协议：填什么就请求什么，末段一个都不补
+    if (protocol.keepsUrlVerbatim) return base
     if (protocol == ApiProtocol.GEMINI_GENERATE_CONTENT) {
         return "$base/${geminiModelPath(modelId)}:generateContent"
     }

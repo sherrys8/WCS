@@ -2184,6 +2184,10 @@
     <string name="api_profile_delete">删除这条配置</string>
     <string name="api_profile_in_use">该配置正被 %1$d 个功能使用，请先在功能设置里改引用</string>
     <string name="api_profile_deleted">已删除</string>
+    <string name="api_profile_model_manual">手动填写模型名</string>
+    <string name="api_profile_custom_tail_hint">注意：推理请求由 Chat Completions 适配器发出，只有地址以 /chat/completions 结尾时才会精确命中这条路径；否则它会在末尾补上这一段。</string>
+    <string name="api_profile_custom_note">自定义协议：地址按原样使用，不剥末段也不补末段。请把完整端点写进地址（例如 https://host/v1/chat/completions），路径留空即可。</string>
+    <string name="api_profile_suffix_mismatch">路径末段 %1$s 与所选协议不一致，实际请求会被改写成协议末段</string>
     <string name="api_profile_endpoint_preview">完整请求地址：%1$s</string>
     <string name="api_profile_follow_model">跟随配置档（%1$s）</string>
     <string name="api_profile_model_overridden">%1$s（已覆盖）</string>

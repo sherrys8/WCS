@@ -27,6 +27,8 @@ import dev.sherry.wcs.features.items.chat.ApiProtocol
 import dev.sherry.wcs.features.items.chat.AiModelConnection
 import dev.sherry.wcs.features.items.chat.asConfig
 import dev.sherry.wcs.features.items.chat.requestEndpoint
+import dev.sherry.wcs.features.items.chat.pathSuffixMismatch
+import dev.sherry.wcs.features.items.chat.showApiModelPicker
 import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.Button
 import dev.sherry.wcs.ui.content.TextButton
@@ -229,11 +231,39 @@ object ApiProfileManager : ClickableFeature() {
                             )
                         }
                         item {
-                            TextFieldDialogWidget(
+                            // 点这一行 = 用当前地址和 Key 去拉模型列表，选完直接写回默认模型。
+                            // 拉不到（Anthropic 无该端点、自建网关没实现）就用下面那行手填。
+                            BaseWidget(
+                                iconPlaceholder = false,
                                 title = stringResource(R.string.api_profile_default_model),
+                                description = draft.defaultModelId.ifBlank {
+                                    stringResource(R.string.api_profile_default_model_hint)
+                                },
+                                onClick = {
+                                    // 点进来就开始拉：地址和 Key 已经在上面填好了，不该再点一次
+                                    showApiModelPicker(
+                                        context = context,
+                                        config = draft.asConfig(),
+                                        current = draft.defaultModelId,
+                                        autoFetch = true,
+                                    ) { picked ->
+                                        persist(draft.copy(defaultModelId = picked))
+                                    }
+                                },
+                                trailingContent = {
+                                    Icon(
+                                        imageVector = MaterialSymbols.Outlined.Chevron_right,
+                                        contentDescription = null,
+                                    )
+                                },
+                            )
+                        }
+                        item {
+                            TextFieldDialogWidget(
+                                title = stringResource(R.string.api_profile_model_manual),
                                 value = draft.defaultModelId,
                                 onValueChange = { persist(draft.copy(defaultModelId = it.trim())) },
-                                dialogTitle = stringResource(R.string.api_profile_default_model),
+                                dialogTitle = stringResource(R.string.api_profile_model_manual),
                                 confirmLabel = stringResource(R.string.dialog_confirm),
                                 dismissLabel = stringResource(R.string.dialog_cancel),
                                 valueHint = stringResource(R.string.api_profile_default_model_hint),
@@ -248,6 +278,34 @@ object ApiProfileManager : ClickableFeature() {
                             text = stringResource(R.string.api_profile_endpoint_preview, endpoint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    if (draft.protocol.keepsUrlVerbatim) {
+                        Text(
+                            text = stringResource(R.string.api_profile_custom_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        // 适配器只对「已经以 /chat/completions 结尾」的地址免补，其余情况会补一段
+                        if (endpoint.isNotEmpty() && !endpoint.endsWith("/chat/completions")) {
+                            Text(
+                                text = stringResource(R.string.api_profile_custom_tail_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+
+                    // 路径里的末段和协议不一致时，实际请求会被改写成协议末段——与其让人对着 404 猜
+                    draft.asConfig().pathSuffixMismatch()?.let { typed ->
+                        Text(
+                            text = stringResource(R.string.api_profile_suffix_mismatch, typed),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
