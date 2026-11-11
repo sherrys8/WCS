@@ -117,7 +117,13 @@ object AiSpeechToText : ClickableFeature(), WeChatMessageContextMenuApi.IMenuIte
                         showToastSuspend(context, context.localizedChatString(R.string.ai_stt_toast_no_voice))
                         return@launch
                     }
-                    val result = runCatching { transcribe(encPath) }
+                    // 新旧两代接口都试一遍，且要求文件真的落在盘上；拿不到就别把空路径喂给解码器
+                    val voicePath = WeMessageApi.resolveVoicePath(msgInfo, encPath)
+                    if (voicePath == null) {
+                        showToastSuspend(context, context.localizedChatString(R.string.ai_stt_toast_no_voice))
+                        return@launch
+                    }
+                    val result = runCatching { transcribe(voicePath) }
                     withContext(Dispatchers.Main) {
                         result.fold(
                             onSuccess = { text ->
@@ -233,9 +239,8 @@ object AiSpeechToText : ClickableFeature(), WeChatMessageContextMenuApi.IMenuIte
         }
     }
 
-    /** silk → pcm → mp3（临时落缓存），POST 到 ASR，返回识别文本；临时文件用完即删。 */
-    private fun transcribe(encPath: String): String {
-        val silkPath = WeMessageApi.getVoiceFullPath(encPath)
+    /** [silkPath] 为已校验过的真实语音文件；silk → pcm → mp3（临时落缓存），POST 到 ASR，临时文件用完即删。 */
+    private fun transcribe(silkPath: String): String {
         val stamp = System.currentTimeMillis()
         val pcm = KnownPaths.moduleCache.resolve("ai_stt_$stamp.pcm")
         val mp3 = KnownPaths.moduleCache.resolve("ai_stt_$stamp.mp3")

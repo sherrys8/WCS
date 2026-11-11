@@ -59,6 +59,7 @@ import org.luckypray.dexkit.DexKitBridge
 import org.luckypray.dexkit.query.matchers.base.AccessFlagsMatcher
 import org.luckypray.dexkit.result.FieldUsingType
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.lang.reflect.Constructor
@@ -398,6 +399,21 @@ object WeMessageApi : ApiFeature(), IResolveDex {
             usingEqStrings("getAmrFullPath cost: ")
         }
     }
+
+    /**
+     * 微信换文件存储后的新接口：按原生 MsgInfo 对象解析语音路径，而不是只认文件名。
+     *
+     * 老版本微信没有这个重载，因此 `allowFailure = true`——找不到时只留一个 placeholder，
+     * 调用方必须先用 delegate 的 `isPlaceholder` 判断，不能直接取 `.method`。
+     */
+    private val methodGetVoiceFullPathByMessage by dexMethod(allowFailure = true) {
+        matcher {
+            usingEqStrings("[f11]getVoiceFullPath, businessType: ")
+            paramTypes(classMsgInfo.data.name, "java.lang.String", "boolean")
+            returnType("java.lang.String")
+        }
+    }
+
     private val methodStartRecvAndSend by dexMethod {
         matcher {
             usingEqStrings("MicroMsg.SceneVoiceService", "Start Recv[%s] :%s", "Start Send :")
@@ -1514,7 +1530,56 @@ object WeMessageApi : ApiFeature(), IResolveDex {
         if (!Modifier.isStatic(m.modifiers)) {
             service = WeServiceApi.getServiceByClass(m.declaringClass)
         }
-        return methodGetAmrFullPath.method.invoke(service, null, encPath, true) as String
+        // 老接口在不同版本上是 2 参或 3 参：3 参版本前面多一个 resourceKey，
+        // 这里按实际签名调，避免微信改签名后直接抛 IllegalArgumentException
+        return if (m.parameterTypes.size == 2) {
+            m.invoke(service, encPath, true) as String
+        } else {
+            m.invoke(service, null, encPath, true) as String
+        }
+    }
+
+    /**
+     * 解析语音消息的真实文件路径，带新版接口回落与落地校验。
+     *
+     * 顺序：先按原生消息对象走新接口（微信换文件存储后，老接口可能只返回目录而非文件），
+     * 结果必须是**非空且真在盘上的文件**；不满足就回落到只认文件名的老接口，同样校验。
+     * 两边都拿不到可用文件时返回 null，调用方据此提示，而不是把空路径交给解码器。
+     *
+     * 注意：`create` 传 true 与老接口一致，允许微信顺手把语音拉下来；但下载是异步的，
+     * 命中 0 字节文件时这里会判失败——此时需要等下一轮再取，本次先按失败处理。
+     */
+    fun resolveVoicePath(msgInfo: MessageInfo, encPath: String): String? {
+        if (encPath.isBlank()) return null
+
+        val byMessage = runCatching { getVoiceFullPathByMessage(msgInfo.instance, encPath) }
+            .onFailure { WeLogger.w(TAG, "voice path via message failed: ${it.message}") }
+            .getOrNull()
+        if (byMessage.isUsableVoiceFile()) return byMessage
+
+        val byName = runCatching { getVoiceFullPath(encPath) }
+            .onFailure { WeLogger.w(TAG, "voice path via name failed: ${it.message}") }
+            .getOrNull()
+        return byName?.takeIf { it.isUsableVoiceFile() }
+    }
+
+    private fun String?.isUsableVoiceFile(): Boolean {
+        val path = this
+        if (path.isNullOrBlank()) return false
+        val file = File(path)
+        return file.isFile && file.length() > 0L
+    }
+
+    private fun getVoiceFullPathByMessage(nativeMsgInfo: Any, encPath: String): String? {
+        val delegate = methodGetVoiceFullPathByMessage
+        if (delegate.isPlaceholder) return null
+        val m = delegate.method
+        val service = if (Modifier.isStatic(m.modifiers)) {
+            null
+        } else {
+            WeServiceApi.getServiceByClass(m.declaringClass)
+        }
+        return m.invoke(service, nativeMsgInfo, encPath, true) as? String
     }
 
     // WeChat marks a received voice message as read (clearing the unplayed red dot) by
@@ -2607,7 +2672,13 @@ object WeMessageApi : ApiFeature(), IResolveDex {
      */
     fun saveVoiceByEncPath(encPath: String): String? {
         return try {
-            val silkOriginalPath = getVoiceFullPath(encPath).asPath
+            val fullPath = getVoiceFullPath(encPath)
+            // 未下载完的语音会给出空串或 0 字节文件，直接拷会得到一个坏 mp3
+            if (!fullPath.isUsableVoiceFile()) {
+                WeLogger.e(TAG, "saveVoiceByEncPath: voice file not ready: $fullPath")
+                return null
+            }
+            val silkOriginalPath = fullPath.asPath
             val silkPath = KnownPaths.downloads / silkOriginalPath.name
             val pcmPath = KnownPaths.downloads / (silkOriginalPath.nameWithoutExtension + ".pcm")
             val mp3Path = KnownPaths.downloads / (silkOriginalPath.nameWithoutExtension + ".mp3")
