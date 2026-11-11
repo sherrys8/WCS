@@ -461,18 +461,10 @@ pub fn get_audio_duration_ms(path: &str) -> Result<i64> {
 }
 
 fn is_silk_header(path: &str) -> Result<bool> {
-    let mut file = File::open(path)?;
-    let mut header = [0u8; 10];
-    let n = file.read(&mut header)?;
-
-    if n >= SILK_MAGIC.len() && &header[..SILK_MAGIC.len()] == SILK_MAGIC {
-        return Ok(true);
-    }
-    if n > SILK_MAGIC.len() && header[0] == 0x02 && &header[1..1 + SILK_MAGIC.len()] == SILK_MAGIC {
-        return Ok(true);
-    }
-
-    Ok(false)
+    let mut reader = BufReader::new(File::open(path)?);
+    let mut header = [0u8; 16];
+    let n = fill_prefix(&mut reader, &mut header)?;
+    Ok(silk_payload_offset(&header[..n]).is_some())
 }
 
 fn get_symphonia_duration_ms(path: &str) -> Result<i64> {
@@ -509,19 +501,43 @@ fn get_symphonia_duration_ms(path: &str) -> Result<i64> {
     Ok(ms)
 }
 
-fn seek_silk_header(reader: &mut (impl Read + Seek)) -> Result<()> {
-    let mut header = [0u8; 9];
-    reader.read_exact(&mut header)?;
-    if &header[0..9] != SILK_MAGIC {
-        // WeChat sometimes prepends a byte (0x02) or uses a slightly different offset
-        // This is a basic check; you might need to seek if it's WeChat format
-        if header[0] == 0x02 {
-            reader.seek(SeekFrom::Start(10))?; // Skip WeChat's extra byte + header
-        } else {
-            bail!("Invalid Silk Header");
+/// 在前若干字节里找 `#!SILK_V3`，返回 payload 起始偏移。
+///
+/// 微信落盘的语音会在魔数前塞一个字节（实测 0x02 和 0x03 都有），值是版本/标志位，
+/// 不同版本/不同来源会变，所以不去判断这个字节，直接信任魔数本身。
+fn silk_payload_offset(header: &[u8]) -> Option<usize> {
+    if header.len() < SILK_MAGIC.len() {
+        return None;
+    }
+    (0..=header.len() - SILK_MAGIC.len())
+        .find(|&start| &header[start..start + SILK_MAGIC.len()] == SILK_MAGIC)
+        .map(|start| start + SILK_MAGIC.len())
+}
+
+/// 尽量填满 buf，返回实际读到的字节数（不因短读失败）。
+fn fill_prefix(reader: &mut (impl Read + Seek), buf: &mut [u8]) -> Result<usize> {
+    let mut filled = 0;
+    while filled < buf.len() {
+        match reader.read(&mut buf[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e.into()),
         }
     }
-    Ok(())
+    Ok(filled)
+}
+
+fn seek_silk_header(reader: &mut (impl Read + Seek)) -> Result<()> {
+    let mut header = [0u8; 16];
+    let n = fill_prefix(reader, &mut header)?;
+    match silk_payload_offset(&header[..n]) {
+        Some(offset) => {
+            reader.seek(SeekFrom::Start(offset as u64))?;
+            Ok(())
+        }
+        None => bail!("Invalid Silk Header"),
+    }
 }
 
 fn get_silk_duration_ms(path: &str) -> Result<i64> {
@@ -608,6 +624,52 @@ mod tests {
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
             "wcs-silk-duration-{}-{unique}.amr",
+            std::process::id(),
+        ));
+        std::fs::write(&path, silk).unwrap();
+
+        let duration_ms = get_audio_duration_ms(path.to_str().unwrap()).unwrap();
+        std::fs::remove_file(path).unwrap();
+
+        assert_eq!(duration_ms, 40);
+    }
+
+    #[test]
+    fn silk_payload_offset_finds_magic_after_any_prefix_byte() {
+        assert_eq!(silk_payload_offset(SILK_MAGIC), Some(SILK_MAGIC.len()));
+
+        for prefix in [0x00u8, 0x01, 0x02, 0x03, 0x07] {
+            let mut buf = Vec::from([prefix]);
+            buf.extend_from_slice(SILK_MAGIC);
+            buf.extend_from_slice(&[0u8; 4]);
+            assert_eq!(
+                silk_payload_offset(&buf),
+                Some(SILK_MAGIC.len() + 1),
+                "prefix {prefix:#04x} should still be recognised",
+            );
+        }
+
+        assert_eq!(silk_payload_offset(b"not a silk file"), None);
+        assert_eq!(silk_payload_offset(b"#!SILK"), None);
+    }
+
+    #[test]
+    fn silk_duration_accepts_0x03_prefixed_wechat_file() {
+        // 实测微信部分版本会在魔数前写 0x03，旧实现只认 0x02 导致
+        // `Invalid Silk Header` 并让整条语音转写失败。
+        let mut silk = Vec::from([0x03]);
+        silk.extend_from_slice(SILK_MAGIC);
+        for _ in 0..2 {
+            silk.extend_from_slice(&11_i16.to_le_bytes());
+            silk.extend_from_slice(&[0; 11]);
+        }
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "wcs-silk-duration-03-{}-{unique}.amr",
             std::process::id(),
         ));
         std::fs::write(&path, silk).unwrap();
