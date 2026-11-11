@@ -101,18 +101,40 @@ find_mirror() {
 }
 
 # 写一份只含该镜像的临时源；系统源文件不动
+#
+# 必须是旧式单行 `deb ...`：通过 -o Dir::Etc::sourcelist 指定的文件走的是老解析器，
+# 写成 deb822（Types:/URIs:）会直接报 "Type 'Types:' is not known"。
 SRC_FILE=""
 write_mirror_sources() {
-  SRC_FILE=$(mktemp 2>/dev/null) || return 1
-  {
-    echo "Types: deb"
-    echo "URIs: $1"
-    echo "Suites: $codename $codename-updates $codename-security"
-    echo "Components: main universe restricted multiverse"
-    if [ -f /usr/share/keyrings/ubuntu-archive-keyring.gpg ]; then
-      echo "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg"
+  local uri="$1"
+  local opt=""
+  local suite
+  local suites=()
+  if [ -f /usr/share/keyrings/ubuntu-archive-keyring.gpg ]; then
+    opt="[signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] "
+  else
+    # 找不到 Ubuntu 官方 keyring 时放行签名，否则 apt 连索引都读不了
+    opt="[trusted=yes] "
+  fi
+
+  # 只写镜像上真的存在的 suite：少一个 -security，apt-get update 就会整轮报错
+  for suite in "$codename" "$codename-updates" "$codename-security"; do
+    if curl -fsSL -m 8 -o /dev/null "$uri/dists/$suite/Release" 2>/dev/null; then
+      suites+=("$suite")
+    else
+      log "镜像没有 $suite，跳过"
     fi
-  } >"$SRC_FILE"
+  done
+  if [ "${#suites[@]}" -eq 0 ]; then
+    log "镜像上找不到 $codename 的任何索引"
+    return 1
+  fi
+
+  SRC_FILE=$(mktemp 2>/dev/null) || return 1
+  : >"$SRC_FILE"
+  for suite in "${suites[@]}"; do
+    echo "deb ${opt}${uri} ${suite} main universe restricted multiverse" >>"$SRC_FILE"
+  done
   [ -s "$SRC_FILE" ]
 }
 
