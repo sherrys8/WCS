@@ -65,6 +65,7 @@ import dev.sherry.wcs.agent.model.LlmStreamEvent
 import dev.sherry.wcs.agent.model.ModelProviderManager
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.core.WeMessageApi
+import dev.sherry.wcs.features.api.core.models.MessageType
 import dev.sherry.wcs.features.api.ui.WeChatMessageContextMenuApi
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.core.SwitchFeature
@@ -86,6 +87,7 @@ import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.BreezeTtsClient
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.showToast
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -224,15 +226,60 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                 localizedChatString(R.string.ai_reply_menu),
                 ReplyIcon,
                 MaterialSymbols.Outlined.Auto_awesome,
-                isSupported = { msgInfo -> msgInfo.type?.isText == true },
+                // 语音消息也放行：先转文字，再走同一套候选生成
+                isSupported = { msgInfo ->
+                    msgInfo.type?.isText == true || msgInfo.type == MessageType.VOICE
+                },
                 multiSelect = WeChatMessageContextMenuApi.MultiSelectSupport.Unsupported,
                 onClick = { view, _, msgInfo ->
-                    val text = msgInfo.humanReadableRepr.trim()
-                    if (text.isEmpty()) {
-                        showToast(view.context, localizedChatString(R.string.ai_reply_no_text))
+                    val context = view.context
+                    if (msgInfo.type == MessageType.VOICE) {
+                        if (!VoiceTranscriber.isConfigured) {
+                            showToast(context, localizedChatString(R.string.ai_reply_voice_need_key))
+                            return@MenuItem
+                        }
+                        // 转写要几秒，先给个反馈，避免以为没点中
+                        showToast(context, localizedChatString(R.string.ai_reply_voice_transcribing))
+                        CoroutineScope(Dispatchers.IO).launch {
+                            val result = runCatching { VoiceTranscriber.transcribe(msgInfo) }
+                            withContext(Dispatchers.Main) {
+                                result.fold(
+                                    onSuccess = { text ->
+                                        when {
+                                            text == null -> showToast(
+                                                context,
+                                                localizedChatString(R.string.ai_reply_voice_unavailable),
+                                            )
+
+                                            text.isBlank() -> showToast(
+                                                context,
+                                                localizedChatString(R.string.ai_reply_voice_empty),
+                                            )
+
+                                            else -> showCandidateDialog(context, msgInfo.talker, text)
+                                        }
+                                    },
+                                    onFailure = {
+                                        WeLogger.e(TAG, "voice transcribe failed", it)
+                                        showToast(
+                                            context,
+                                            localizedChatString(
+                                                R.string.ai_reply_voice_failed,
+                                                it.message.orEmpty(),
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
+                        }
                         return@MenuItem
                     }
-                    showCandidateDialog(view.context, msgInfo.talker, text)
+                    val text = msgInfo.humanReadableRepr.trim()
+                    if (text.isEmpty()) {
+                        showToast(context, localizedChatString(R.string.ai_reply_no_text))
+                        return@MenuItem
+                    }
+                    showCandidateDialog(context, msgInfo.talker, text)
                 },
             ),
         )
@@ -1309,17 +1356,31 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
             val now = System.currentTimeMillis()
             WeDatabaseApi.getMessagesInRangeDesc(talker, now - CONTEXT_WINDOW_MS, now, limit)
                 .reversed()
-                .filter { it.typeCode == 1 }
+                // 文本（typeCode==1）之外也留语音：不求把每条都转写（那就是按条计费），
+                // 但至少让模型知道对方发过语音，否则语音连成一片的对话在上下文里会凭空断档
+                .filter { it.typeCode == 1 || it.type == MessageType.VOICE }
                 .joinToString("\n") { msg ->
                     val who = if (msg.isSend != 0) "我" else "对方"
-                    // Group messages store "sender:\ntext"; the payload is the last line.
-                    val body = msg.content.lineSequence().last().trim().take(MAX_CONTEXT_LINE_CHARS)
+                    val body = if (msg.type == MessageType.VOICE) {
+                        voicePlaceholder(msg.content)
+                    } else {
+                        // Group messages store "sender:\ntext"; the payload is the last line.
+                        msg.content.lineSequence().last().trim().take(MAX_CONTEXT_LINE_CHARS)
+                    }
                     "$who：$body"
                 }
         }.getOrElse {
             WeLogger.w(TAG, "failed to load reply context", it)
             ""
         }
+    }
+
+    /** `[语音 5 秒]`。时长取 `voicemsg` 里的 `voicelength`（毫秒），取不到就只写「语音」。 */
+    private fun voicePlaceholder(content: String): String {
+        val millis = Regex("voicelength=\"(\\d+)\"")
+            .find(content)?.groupValues?.get(1)?.toIntOrNull()
+        val seconds = millis?.div(1000)?.takeIf { it > 0 }
+        return if (seconds != null) "[语音 $seconds 秒]" else "[语音]"
     }
 
     private fun parseNumbered(text: String): List<String> {

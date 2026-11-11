@@ -2092,6 +2092,11 @@
     <string name="feature_ai_reply_candidates_name">AI回复候选</string>
     <string name="feature_ai_reply_candidates_description">长按消息，按所选语气生成多条回复候选，编辑后发送</string>
     <string name="ai_reply_menu">AI回复</string>
+    <string name="ai_reply_voice_need_key">语音回复需要先填语音转文字的 ASR Key（娱乐 → AI 语音转文字）</string>
+    <string name="ai_reply_voice_transcribing">正在转写语音…</string>
+    <string name="ai_reply_voice_unavailable">这条语音还没有可读取的音频，等下载完再试</string>
+    <string name="ai_reply_voice_empty">语音里没有识别出文字</string>
+    <string name="ai_reply_voice_failed">语音转写失败：%1$s</string>
     <string name="ai_reply_no_text">这条消息没有可回复的文本</string>
     <string name="ai_reply_generation_title">生成参数</string>
     <string name="ai_reply_count">候选条数</string>

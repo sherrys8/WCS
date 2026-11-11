@@ -33,26 +33,14 @@ import dev.sherry.wcs.ui.content.m3.SwitchWidget
 import dev.sherry.wcs.ui.content.m3.TextFieldDialogWidget
 import dev.sherry.wcs.ui.utils.MicIcon
 import dev.sherry.wcs.ui.utils.showComposeDialog
-import dev.sherry.wcs.utils.AudioUtils
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.copyToClipboard
 import dev.sherry.wcs.utils.android.showToast
 import dev.sherry.wcs.utils.android.showToastSuspend
-import dev.sherry.wcs.utils.fs.KnownPaths
-import java.util.concurrent.TimeUnit
-import kotlin.io.path.absolutePathString
-import kotlin.io.path.deleteIfExists
-import kotlin.io.path.readBytes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
 
 /**
  * AI 语音转文字：长按语音消息，走云端 ASR（SiliconFlow）转成文字，可复制或以文本发送。
@@ -66,25 +54,14 @@ object AiSpeechToText : ClickableFeature(), WeChatMessageContextMenuApi.IMenuIte
     override val descriptionRes = R.string.feature_ai_speech_to_text_description
 
     private const val TAG = "AiSpeechToText"
-    private const val ASR_ENDPOINT = "https://api.siliconflow.cn/v1/audio/transcriptions"
-    private const val DEFAULT_MODEL = "FunAudioLLM/SenseVoiceSmall"
     private val MODELS = listOf(
-        DEFAULT_MODEL to "SenseVoiceSmall",
+        VoiceTranscriber.DEFAULT_MODEL to "SenseVoiceSmall",
         "TeleAI/TeleSpeechASR" to "TeleSpeechASR",
     )
 
     private var entryBubble by prefOption("ai_stt_entry_bubble", false)
-    private var apiKey by prefOption("ai_stt_api_key", "")
-    private var model by prefOption("ai_stt_model", DEFAULT_MODEL)
 
     private val micVector = MaterialSymbols.Outlined.Graphic_eq
-
-    private val http by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .build()
-    }
 
     override fun onEnable() {
         WeChatMessageContextMenuApi.addProvider(this)
@@ -108,29 +85,27 @@ object AiSpeechToText : ClickableFeature(), WeChatMessageContextMenuApi.IMenuIte
             ) { view, _, msgInfo ->
                 CoroutineScope(Dispatchers.IO).launch {
                     val context = view.context
-                    if (apiKey.isBlank()) {
+                    if (!VoiceTranscriber.isConfigured) {
                         showToastSuspend(context, context.localizedChatString(R.string.ai_stt_toast_need_key))
                         return@launch
                     }
-                    val encPath = msgInfo.imagePath
-                    if (encPath.isNullOrBlank()) {
-                        showToastSuspend(context, context.localizedChatString(R.string.ai_stt_toast_no_voice))
-                        return@launch
-                    }
-                    // 新旧两代接口都试一遍，且要求文件真的落在盘上；拿不到就别把空路径喂给解码器
-                    val voicePath = WeMessageApi.resolveVoicePath(msgInfo, encPath)
-                    if (voicePath == null) {
-                        showToastSuspend(context, context.localizedChatString(R.string.ai_stt_toast_no_voice))
-                        return@launch
-                    }
-                    val result = runCatching { transcribe(voicePath) }
+                    val result = runCatching { VoiceTranscriber.transcribe(msgInfo) }
                     withContext(Dispatchers.Main) {
                         result.fold(
                             onSuccess = { text ->
-                                if (text.isBlank()) {
-                                    showToast(context, context.localizedChatString(R.string.ai_stt_toast_empty))
-                                } else {
-                                    showResultDialog(context, msgInfo.talker, text)
+                                when {
+                                    // null 是「这条语音还没有可读文件」，和识别失败要分开提示
+                                    text == null -> showToast(
+                                        context,
+                                        context.localizedChatString(R.string.ai_stt_toast_no_voice),
+                                    )
+
+                                    text.isBlank() -> showToast(
+                                        context,
+                                        context.localizedChatString(R.string.ai_stt_toast_empty),
+                                    )
+
+                                    else -> showResultDialog(context, msgInfo.talker, text)
                                 }
                             },
                             onFailure = {
@@ -150,8 +125,8 @@ object AiSpeechToText : ClickableFeature(), WeChatMessageContextMenuApi.IMenuIte
     override fun onClick(context: ComponentActivity) {
         showComposeDialog(context) {
             var bubbleEntry by remember { mutableStateOf(entryBubble) }
-            var key by remember { mutableStateOf(apiKey) }
-            var selectedModel by remember { mutableStateOf(model) }
+            var key by remember { mutableStateOf(VoiceTranscriber.apiKey) }
+            var selectedModel by remember { mutableStateOf(VoiceTranscriber.model) }
 
             AlertDialogContent(
                 title = { Text(stringResource(R.string.feature_ai_speech_to_text_name)) },
@@ -178,7 +153,7 @@ object AiSpeechToText : ClickableFeature(), WeChatMessageContextMenuApi.IMenuIte
                                     value = key,
                                     onValueChange = {
                                         key = it
-                                        apiKey = it
+                                        VoiceTranscriber.apiKey = it
                                     },
                                     dialogTitle = stringResource(R.string.ai_stt_api_key),
                                     confirmLabel = stringResource(R.string.dialog_confirm),
@@ -195,7 +170,7 @@ object AiSpeechToText : ClickableFeature(), WeChatMessageContextMenuApi.IMenuIte
                                     options = MODELS.map { DropdownOption(it.first, it.second) },
                                     onValueChange = {
                                         selectedModel = it
-                                        model = it
+                                        VoiceTranscriber.model = it
                                     },
                                 )
                             }
@@ -236,39 +211,6 @@ object AiSpeechToText : ClickableFeature(), WeChatMessageContextMenuApi.IMenuIte
                     TextButton(onDismiss) { Text(stringResource(R.string.dialog_close)) }
                 },
             )
-        }
-    }
-
-    /** [silkPath] 为已校验过的真实语音文件；silk → pcm → mp3（临时落缓存），POST 到 ASR，临时文件用完即删。 */
-    private fun transcribe(silkPath: String): String {
-        val stamp = System.currentTimeMillis()
-        val pcm = KnownPaths.moduleCache.resolve("ai_stt_$stamp.pcm")
-        val mp3 = KnownPaths.moduleCache.resolve("ai_stt_$stamp.mp3")
-        try {
-            check(AudioUtils.silkToPcm(silkPath, pcm.absolutePathString())) { "silk decode failed" }
-            check(AudioUtils.pcmToMp3(pcm.absolutePathString(), mp3.absolutePathString())) { "mp3 encode failed" }
-            return postAsr(mp3.readBytes())
-        } finally {
-            pcm.deleteIfExists()
-            mp3.deleteIfExists()
-        }
-    }
-
-    private fun postAsr(mp3: ByteArray): String {
-        val body = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("model", model)
-            .addFormDataPart("file", "voice.mp3", mp3.toRequestBody("audio/mpeg".toMediaType()))
-            .build()
-        val request = Request.Builder()
-            .url(ASR_ENDPOINT)
-            .header("Authorization", "Bearer $apiKey")
-            .post(body)
-            .build()
-        http.newCall(request).execute().use { response ->
-            val payload = response.body?.string().orEmpty()
-            if (!response.isSuccessful) error("HTTP ${response.code}: $payload")
-            return JSONObject(payload).optString("text")
         }
     }
 }

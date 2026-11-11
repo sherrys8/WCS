@@ -2139,6 +2139,11 @@
     <string name="feature_ai_reply_candidates_name">AI reply candidates</string>
     <string name="feature_ai_reply_candidates_description">Long-press a message to generate reply drafts in a chosen tone and send one</string>
     <string name="ai_reply_menu">AI reply</string>
+    <string name="ai_reply_voice_need_key">Voice reply needs the ASR key of AI Speech-to-Text first (Entertainment → AI Speech-to-Text)</string>
+    <string name="ai_reply_voice_transcribing">Transcribing voice…</string>
+    <string name="ai_reply_voice_unavailable">This voice message has no readable audio yet; try again after it finishes downloading</string>
+    <string name="ai_reply_voice_empty">No text recognized in this voice message</string>
+    <string name="ai_reply_voice_failed">Voice transcription failed: %1$s</string>
     <string name="ai_reply_no_text">This message has no text to reply to</string>
     <string name="ai_reply_generation_title">Generation</string>
     <string name="ai_reply_count">Candidates per run</string>
