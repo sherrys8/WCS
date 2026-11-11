@@ -119,8 +119,8 @@ jobs:
             gradle-${{ runner.os }}-
 
       - name: Install system dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y gcc-multilib
+        # 单独抽成脚本：runner 偶尔整体解析不了 *.ubuntu.com，直接 apt-get 会空转十几分钟
+        run: bash .github/scripts/apt-install.sh gcc-multilib
 
       - name: Validate build tools, DEX reader, and i18n catalogs
         run: |
@@ -208,9 +208,10 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
 
       - name: Install system dependencies
+        run: bash .github/scripts/apt-install.sh gcc-multilib jq unzip
+
+      - name: Install htmlq
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-multilib jq unzip
           mkdir -p "$RUNNER_TEMP/bin"
           curl --fail --location --retry 3 \
             https://github.com/mgdm/htmlq/releases/download/v0.4.0/htmlq-x86_64-linux.tar.gz \
@@ -429,8 +430,7 @@ jobs:
 
       - name: Install system dependencies
         # glslc compiles the llama.cpp Vulkan shaders for the llama-native pack.
-        run: |
-          sudo apt-get update && sudo apt-get install -y gcc-multilib glslc
+        run: bash .github/scripts/apt-install.sh gcc-multilib glslc
 
       - name: Free disk space and report
         # This job is much heavier than a plain APK build (cold PRoot build,
