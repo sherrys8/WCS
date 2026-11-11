@@ -68,13 +68,13 @@ object TtsProfiles {
 
     fun providerOf(backend: Int): String = when (backend) {
         TextToSpeech.BACKEND_DOUBAO -> TTS_PROVIDER_DOUBAO
-        TextToSpeech.BACKEND_MOFANG -> TTS_PROVIDER_MOFANG
+        TextToSpeech.BACKEND_MOFA -> TTS_PROVIDER_MOFANG
         else -> TTS_PROVIDER_BREEZE
     }
 
     fun backendOf(profile: ApiProfile?): Int = when (profile?.provider) {
         TTS_PROVIDER_DOUBAO -> TextToSpeech.BACKEND_DOUBAO
-        TTS_PROVIDER_MOFANG -> TextToSpeech.BACKEND_MOFANG
+        TTS_PROVIDER_MOFANG -> TextToSpeech.BACKEND_MOFA
         else -> TextToSpeech.BACKEND_BREEZE
     }
 
@@ -132,7 +132,7 @@ object TtsProfiles {
 
         val mofangKey = legacy(LEGACY_MOFANG_KEY, LEGACY_REPLY_MOFANG_KEY)
         if (mofangKey.isNotBlank()) {
-            val profile = createFor(TextToSpeech.BACKEND_MOFANG, TTS_PROVIDER_MOFANG, "魔方")
+            val profile = createFor(TextToSpeech.BACKEND_MOFA, TTS_PROVIDER_MOFANG, "魔方")
             ApiProfiles.save(profile.copy(apiKey = mofangKey))
         }
 
