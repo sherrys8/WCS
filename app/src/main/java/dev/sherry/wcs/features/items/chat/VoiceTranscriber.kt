@@ -4,6 +4,7 @@ import dev.sherry.wcs.features.api.core.WeMessageApi
 import dev.sherry.wcs.features.api.core.models.MessageInfo
 import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.utils.AudioUtils
+import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.fs.KnownPaths
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.absolutePathString
@@ -25,6 +26,8 @@ import org.json.JSONObject
  * 凭据与模型沿用 `ai_stt_*` 这组键，设置入口仍在「AI 语音转文字」，避免两个功能各填一次 Key。
  */
 object VoiceTranscriber {
+
+    private const val TAG = "VoiceTranscriber"
 
     private const val ASR_ENDPOINT = "https://api.siliconflow.cn/v1/audio/transcriptions"
 
@@ -60,14 +63,35 @@ object VoiceTranscriber {
         val stamp = System.currentTimeMillis()
         val pcm = KnownPaths.moduleCache.resolve("ai_stt_$stamp.pcm")
         val mp3 = KnownPaths.moduleCache.resolve("ai_stt_$stamp.mp3")
+        val silk = KnownPaths.moduleCache.resolve("ai_stt_$stamp.silk")
         try {
-            check(AudioUtils.silkToPcm(voicePath, pcm.absolutePathString())) { "silk decode failed" }
-            check(AudioUtils.pcmToMp3(pcm.absolutePathString(), mp3.absolutePathString())) { "mp3 encode failed" }
+            decodeToPcm(voicePath, pcm.absolutePathString(), silk.absolutePathString())
+            check(AudioUtils.pcmToMp3(pcm.absolutePathString(), mp3.absolutePathString())) {
+                "mp3 encode failed"
+            }
             post(mp3.readBytes())
         } finally {
             pcm.deleteIfExists()
             mp3.deleteIfExists()
+            silk.deleteIfExists()
         }
+    }
+
+    /**
+     * 解成 24 kHz 单声道 PCM。
+     *
+     * 微信落盘的语音不一定是 silk：8.0.76 上抓到的是 `msg_xxx.amr`，直接丢给 silk 解码器会
+     * 报 `Invalid Silk Header`，请求根本发不出去。所以先按 silk 试；不是 silk（或结构坏了）
+     * 就用 [AudioUtils.anyToSilk] 归一——它内部先解成任意采样率的 PCM，再重采样到 24 kHz
+     * 写回标准 silk，于是后面 `silkToPcm → pcmToMp3` 这条固定 24 kHz 的链路仍然成立。
+     */
+    private fun decodeToPcm(source: String, pcmPath: String, silkPath: String) {
+        if (AudioUtils.silkToPcm(source, pcmPath)) return
+
+        WeLogger.i(TAG, "not a silk voice, converting: $source")
+        val ext = source.substringAfterLast('.', "").ifBlank { "未知" }
+        check(AudioUtils.anyToSilk(source, silkPath)) { "音频解码失败（$ext 不被系统解码器支持）" }
+        check(AudioUtils.silkToPcm(silkPath, pcmPath)) { "silk 二次解码失败" }
     }
 
     private fun post(mp3: ByteArray): String {

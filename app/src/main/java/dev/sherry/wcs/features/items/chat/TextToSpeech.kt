@@ -42,7 +42,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Chevron_right
-import com.composables.icons.materialsymbols.outlined.Compare_arrows
 import com.composables.icons.materialsymbols.outlined.Graphic_eq
 import com.composables.icons.materialsymbols.outlined.Pause
 import com.composables.icons.materialsymbols.outlined.Play_arrow
@@ -61,7 +60,6 @@ import dev.sherry.wcs.ui.content.AlertDialogContent
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
-import dev.sherry.wcs.ui.content.m3.RadioButtonWidget
 import dev.sherry.wcs.ui.content.m3.SegmentedColumn
 import dev.sherry.wcs.ui.content.m3.SwitchWidget
 import dev.sherry.wcs.ui.content.m3.TextFieldDialogWidget
@@ -111,20 +109,6 @@ object TextToSpeech :
     const val BACKEND_DOUBAO = 1
     const val BACKEND_BREEZE = 2
 
-    /** 后端顺序与文案：默认 Breeze，其次豆包，最后魔方。切换弹窗与设置弹窗都按这个排。 */
-    private val BACKEND_LABELS = listOf(
-        BACKEND_BREEZE to R.string.tts_backend_breeze,
-        BACKEND_DOUBAO to R.string.tts_backend_doubao,
-        BACKEND_MOFA to R.string.tts_backend_mofa,
-    )
-
-    /** 切换弹窗里每个后端的一行说明：要什么凭据、能做什么 */
-    private val BACKEND_TIPS = mapOf(
-        BACKEND_MOFA to R.string.tts_backend_tip_mofa,
-        BACKEND_DOUBAO to R.string.tts_backend_tip_doubao,
-        BACKEND_BREEZE to R.string.tts_backend_tip_breeze,
-    )
-
     // 豆包网页端逆向协议: 鉴权在 WebSocket 握手阶段完成, 依赖登录态 Cookie
     private const val DOUBAO_WS = "wss://ws-samantha.doubao.com/samantha/audio/tts"
     private const val DOUBAO_ORIGIN = "https://www.doubao.com"
@@ -138,20 +122,43 @@ object TextToSpeech :
     private const val DOUBAO_IDLE_GAP_MS = 2500L
     private const val DOUBAO_MAX_WAIT_MS = 30000L
 
-    var apiKey by prefOption("tts_api_key", "")
     var selectedVoice by prefOption("tts_voice_id", "琅琊榜-梅长苏")
     var selectedEmotion by prefOption("tts_emotion", "平静")
 
-    /** 默认后端是 Breeze；老设备上已存过这一项的，仍按存着的值走。 */
-    private var backend by prefOption("tts_backend", BACKEND_BREEZE)
-    private var doubaoCookie by prefOption("tts_doubao_cookie", "")
+    /**
+     * 凭据与模型不再存在功能自己这边：统一从「娱乐 → API配置 → 语音合成」那条档里取。
+     *
+     * 本功能只记「用哪一条」（[TtsProfiles.activeId]），换 Key 去配置页改，改一处两边都生效。
+     * 这里保持同名属性，是为了让合成、音色选择器那些调用点不用改签名。
+     */
+    private val activeProfile: ApiProfile? get() = TtsProfiles.active()
+
+    /** 当前档的后端。没配过任何档时回落 Breeze，与老默认一致。 */
+    val backend: Int get() = TtsProfiles.backendOf(activeProfile)
+
+    /** 魔方用的 Key。当前档不是魔方就是空，合成前的校验会拦下。 */
+    val apiKey: String
+        get() = activeProfile?.takeIf { it.provider == TTS_PROVIDER_MOFANG }?.apiKey.orEmpty()
+
+    /** 豆包的登录 Cookie。 */
+    private val doubaoCookie: String
+        get() = activeProfile?.takeIf { it.provider == TTS_PROVIDER_DOUBAO }?.cookie.orEmpty()
+
+    /** Breeze 的 API Key（`xi-api-key`），与签到用的 Cookie 是两套凭据。 */
+    private val breezeKey: String
+        get() = activeProfile?.takeIf { it.provider == TTS_PROVIDER_BREEZE }?.apiKey.orEmpty()
+
+    /** Breeze 的合成模型，来自配置档；空着用客户端默认值。 */
+    private val breezeModel: String get() = TtsProfiles.modelOf(activeProfile)
+
     private var doubaoSpeaker by prefOption("tts_doubao_speaker", "zh_female_shuangkuai_emo_v3_wvae_bigtts")
     private var doubaoSpeakerName by prefOption("tts_doubao_speaker_name", "爽快 · 女声")
 
-    private var breezeKey by prefOption("tts_breeze_api_key", "")
-    /** 网页侧积分接口用的登录会话 cookie，与 API Key 是两套凭据。 */
+    /**
+     * 网页侧积分接口用的登录会话 cookie，与 API Key 是两套凭据。
+     * 它只服务于「签到领积分」这一件事，不算合成配置，所以留在功能侧而不进配置档。
+     */
     private var breezeCookie by prefOption("tts_breeze_cookie", "")
-    private var breezeModel by prefOption("tts_breeze_model_id", BreezeTtsClient.DEFAULT_MODEL)
     private var breezeVoice by prefOption("tts_breeze_voice", "")
     private var breezeVoiceName by prefOption("tts_breeze_voice_name", "")
 
@@ -317,10 +324,12 @@ object TextToSpeech :
         // 点弹窗外面不关（避免误触丢掉已生成的语音），但返回键仍可关；显式出口是底部「关闭」
         showComposeDialog(context, dismissOnTouchOutside = false) {
             var inputText by remember { mutableStateOf(initialText) }
-            var backendMode by remember { mutableIntStateOf(backend) }
+            // 后端来自「当前选中的语音合成配置」，整个弹窗生命周期内不变
+            val backendMode = backend
             val isDoubao = backendMode == BACKEND_DOUBAO
             val isBreeze = backendMode == BACKEND_BREEZE
-            var voiceId by remember {
+            // 换配置档（= 换后端）后音色必须重选：音色 id 跨服务商无效，静默带过去会发出错误音色
+            var voiceId by remember(backendMode) {
                 mutableStateOf(
                     when (backendMode) {
                         BACKEND_DOUBAO -> doubaoSpeaker
@@ -674,54 +683,22 @@ object TextToSpeech :
 
                         Row(
                             Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.End,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            TextButton(onClick = {
-                                showBackendPickerDialog(
-                                    context,
-                                    backendMode,
-                                    apiKey.isNotBlank(),
-                                    doubaoCookie.isNotBlank(),
-                                    breezeKey.isNotBlank(),
-                                ) { mode ->
-                                    if (mode == backendMode) return@showBackendPickerDialog
-                                    // 离开前把当前选中写回原后端，切回来才不串台
-                                    when (backendMode) {
-                                        BACKEND_DOUBAO -> doubaoSpeaker = voiceId
-                                        BACKEND_BREEZE -> breezeVoice = voiceId
-                                        else -> selectedVoice = voiceId
-                                    }
-                                    backendMode = mode
-                                    voiceId = when (mode) {
-                                        BACKEND_DOUBAO -> doubaoSpeaker
-                                        BACKEND_BREEZE -> breezeVoice
-                                        else -> selectedVoice
-                                    }
-                                    backend = mode
-                                }
-                            }) {
+                            // 用哪一家由「设置 → 选择合成配置」决定：选的就是配置档，
+                            // 所以这里不再单独放一个切后端的按钮，两个入口会互相打脸
+                            TextButton(onClick = { showSettingsDialog(context) { credentialsRevision++ } }) {
                                 Icon(
-                                    MaterialSymbols.Outlined.Compare_arrows,
-                                    contentDescription = stringResource(R.string.tts_cd_switch_backend),
+                                    MaterialSymbols.Outlined.Settings,
+                                    contentDescription = stringResource(R.string.tts_cd_settings),
                                     modifier = Modifier.size(18.dp),
                                 )
                                 Spacer(Modifier.width(4.dp))
-                                Text(stringResource(BACKEND_LABELS.first { it.first == backendMode }.second))
+                                Text(stringResource(R.string.tts_btn_open_settings))
                             }
-                            Row {
-                                TextButton(onClick = { showSettingsDialog(context) { credentialsRevision++ } }) {
-                                    Icon(
-                                        MaterialSymbols.Outlined.Settings,
-                                        contentDescription = stringResource(R.string.tts_cd_settings),
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(stringResource(R.string.tts_btn_open_settings))
-                                }
-                                TextButton(onClick = { onDismiss() }) {
-                                    Text(stringResource(R.string.dialog_close))
-                                }
+                            TextButton(onClick = { onDismiss() }) {
+                                Text(stringResource(R.string.dialog_close))
                             }
                         }
                     }
@@ -731,105 +708,18 @@ object TextToSpeech :
     }
 
     /**
-     * 后端选择弹窗。三选一、选中即切并关闭（没有「保存」这一步）；
-     * 描述里写清各自要什么凭据，没填的当场标出来，省得切过去才发现生成不了。
+     * 设置只有两行：选哪条合成配置、以及 Breeze 的每日积分签到。
+     *
+     * 凭据与模型搬进配置档后，这里不再填 Key / Cookie / 模型 —— 那些在「娱乐 → API配置」
+     * 里改，改一处所有引用方一起生效。签到依赖的是网页登录 Cookie（跟合成用的 Key
+     * 是两套东西），所以它留在功能侧：点一下领积分，没填 Cookie 时先补一个。
      */
-    private fun showBackendPickerDialog(
-        context: android.content.Context,
-        current: Int,
-        mofangReady: Boolean,
-        doubaoReady: Boolean,
-        breezeReady: Boolean,
-        onPicked: (Int) -> Unit,
-    ) {
-        showComposeDialog(context) {
-            AlertDialogContent(
-                title = { Text(stringResource(R.string.tts_dlg_switch_backend)) },
-                text = {
-                    Column {
-                        Text(
-                            stringResource(R.string.tts_switch_backend_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        SegmentedColumn(title = stringResource(R.string.tts_group_service)) {
-                            BACKEND_LABELS.forEach { (mode, labelRes) ->
-                                val ready = when (mode) {
-                                    BACKEND_DOUBAO -> doubaoReady
-                                    BACKEND_BREEZE -> breezeReady
-                                    else -> mofangReady
-                                }
-                                item {
-                                    RadioButtonWidget(
-                                        title = stringResource(labelRes),
-                                        description = stringResource(BACKEND_TIPS.getValue(mode)) +
-                                            if (ready) "" else " " + stringResource(R.string.tts_backend_not_ready),
-                                        selected = mode == current,
-                                        onSelect = {
-                                            onPicked(mode)
-                                            onDismiss()
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                },
-                dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.dialog_cancel)) } },
-            )
-        }
-    }
-
     private fun showSettingsDialog(context: android.content.Context, onApiKeySaved: () -> Unit = {}) {
         showComposeDialog(context) {
-            var apiKeyState by remember { mutableStateOf(apiKey) }
-            var cookieState by remember { mutableStateOf(doubaoCookie) }
-            var breezeKeyState by remember { mutableStateOf(breezeKey) }
-            var breezeModelState by remember { mutableStateOf(breezeModel) }
-            // DropDownMenuWidget 内部是 options.first { it.value == value }，当前值必须在选项里
-            var modelOptions by remember {
-                mutableStateOf(listOf(DropdownOption(breezeModel, breezeModel)))
-            }
-            var quotaText by remember {
-                mutableStateOf(context.localizedChatString(R.string.tts_state_none))
-            }
-
-            fun loadBreezeAccount() {
-                if (breezeKeyState.isBlank()) {
-                    quotaText = context.localizedChatString(R.string.tts_state_need_key)
-                    return
-                }
-                quotaText = context.localizedChatString(R.string.tts_state_loading)
-                Thread {
-                    val quota = runCatching { BreezeTtsClient.quota(breezeKeyState) }.getOrNull()
-                    val models = runCatching { BreezeTtsClient.models(breezeKeyState) }.getOrNull()
-                    mh.post {
-                        quotaText = quota?.let {
-                            context.localizedChatString(
-                                R.string.tts_quota_summary,
-                                it.balance,
-                                it.plan.ifBlank { context.localizedChatString(R.string.tts_unknown) },
-                                it.monthlyCredits,
-                                it.savedVoiceLimit,
-                                context.localizedChatString(
-                                    if (it.commercialUseAllowed) R.string.tts_commercial_yes
-                                    else R.string.tts_commercial_no,
-                                ),
-                            )
-                        } ?: context.localizedChatString(R.string.tts_state_none)
-                        if (!models.isNullOrEmpty()) {
-                            val list = models.map { DropdownOption(it.id, it.name) }
-                            modelOptions = if (list.any { it.value == breezeModelState }) list
-                                else listOf(DropdownOption(breezeModelState, breezeModelState)) + list
-                        }
-                    }
-                }.start()
-            }
-
-            LaunchedEffect(breezeKeyState) {
-                if (breezeKeyState.isNotBlank()) loadBreezeAccount()
-            }
+            var profileId by remember { mutableStateOf(TtsProfiles.active()?.id.orEmpty()) }
+            val profile = remember(profileId) { TtsProfiles.byId(profileId) }
+            // 只有 Breeze 有积分可领；豆包/魔方不显示这一行，也就不留一个点了会报错的按钮
+            val isBreeze = profile == null || profile.provider == TTS_PROVIDER_BREEZE
 
             var breezeCookieState by remember { mutableStateOf(breezeCookie) }
             var creditsText by remember {
@@ -911,9 +801,10 @@ object TextToSpeech :
                 }.start()
             }
 
-            LaunchedEffect(breezeCookieState) {
-                if (breezeCookieState.isNotBlank()) loadCredits()
+            LaunchedEffect(isBreeze, breezeCookieState) {
+                if (isBreeze && breezeCookieState.isNotBlank()) loadCredits()
             }
+
             AlertDialogContent(
                 title = { Text(stringResource(R.string.tts_cfg_title)) },
                 text = {
@@ -923,118 +814,97 @@ object TextToSpeech :
                             .heightIn(max = 420.dp)
                             .verticalScroll(rememberScrollState()),
                     ) {
-                        SegmentedColumn(title = stringResource(R.string.tts_group_breeze)) {
+                        SegmentedColumn {
                             item {
-                                TextFieldDialogWidget(
-                                    title = stringResource(R.string.tts_cfg_api_key),
-                                    value = breezeKeyState,
-                                    onValueChange = {
-                                        breezeKeyState = it
-                                        breezeKey = it
-                                    },
-                                    dialogTitle = stringResource(R.string.tts_dlg_set_breeze_key),
-                                    confirmLabel = stringResource(R.string.tts_confirm),
-                                    dismissLabel = stringResource(R.string.dialog_cancel),
-                                    valueHint = stringResource(R.string.tts_breeze_key_hint),
-                                    password = true,
-                                )
-                            }
-                            item {
-                                TextFieldDialogWidget(
-                                    title = stringResource(R.string.tts_cfg_login_cookie),
-                                    value = breezeCookieState,
-                                    onValueChange = {
-                                        breezeCookieState = it
-                                        breezeCookie = it
-                                    },
-                                    dialogTitle = stringResource(R.string.tts_dlg_set_breeze_cookie),
-                                    confirmLabel = stringResource(R.string.tts_confirm),
-                                    dismissLabel = stringResource(R.string.dialog_cancel),
-                                    valueHint = stringResource(R.string.tts_breeze_cookie_hint),
-                                    password = true,
-                                )
-                            }
-                            item {
-                                DropDownMenuWidget(
-                                    title = stringResource(R.string.tts_cfg_model),
-                                    description = null,
-                                    value = breezeModelState,
-                                    options = modelOptions,
-                                    onValueChange = {
-                                        breezeModelState = it
-                                        breezeModel = it
-                                    },
-                                )
-                            }
-                            item {
+                                // 选配置等于选后端：一条档就代表一家服务商，所以不需要再单独切后端
                                 BaseWidget(
-                                    title = stringResource(R.string.tts_cfg_balance),
-                                    description = quotaText,
-                                    onClick = { loadBreezeAccount() },
-                                )
-                            }
-                            item {
-                                BaseWidget(
-                                    title = stringResource(R.string.tts_cfg_daily_credits),
-                                    description = creditsText,
-                                    enabled = !claiming,
-                                    onClick = { claimCredits() },
-                                )
-                            }
-                        }
-                        Text(
-                            stringResource(R.string.tts_breeze_note),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        SegmentedColumn(title = stringResource(R.string.tts_group_doubao)) {
-                            item {
-                                TextFieldDialogWidget(
-                                    title = stringResource(R.string.tts_cfg_cookie),
-                                    value = cookieState,
-                                    onValueChange = {
-                                        cookieState = it
-                                        doubaoCookie = it
+                                    iconPlaceholder = false,
+                                    title = stringResource(R.string.tts_settings_profile),
+                                    description = profile?.let {
+                                        context.getString(TtsProfiles.providerLabelRes(it.provider)) +
+                                            " · " + it.name
+                                    } ?: stringResource(R.string.api_profile_none),
+                                    onClick = {
+                                        showApiProfilePicker(context, profileId, CAP_TTS) { picked ->
+                                            profileId = picked.id
+                                            TtsProfiles.activeId = picked.id
+                                            onApiKeySaved()
+                                        }
                                     },
-                                    dialogTitle = stringResource(R.string.tts_dlg_set_doubao_cookie),
-                                    confirmLabel = stringResource(R.string.tts_confirm),
-                                    dismissLabel = stringResource(R.string.dialog_cancel),
-                                    valueHint = stringResource(R.string.tts_doubao_cookie_hint),
-                                    password = true,
-                                )
-                            }
-                        }
-                        Text(
-                            stringResource(R.string.tts_doubao_note),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        SegmentedColumn(title = stringResource(R.string.tts_group_mofang)) {
-                            item {
-                                TextFieldDialogWidget(
-                                    title = "API Key",
-                                    value = apiKeyState,
-                                    onValueChange = {
-                                        apiKeyState = it
-                                        apiKey = it
-                                        onApiKeySaved()
+                                    trailingContent = {
+                                        Icon(
+                                            imageVector = MaterialSymbols.Outlined.Chevron_right,
+                                            contentDescription = null,
+                                        )
                                     },
-                                    dialogTitle = stringResource(R.string.tts_dlg_set_mofang_key),
-                                    confirmLabel = stringResource(R.string.tts_confirm),
-                                    dismissLabel = stringResource(R.string.dialog_cancel),
-                                    valueHint = stringResource(R.string.tts_mofang_key_hint),
-                                    password = true,
                                 )
+                            }
+                            if (isBreeze) {
+                                item {
+                                    BaseWidget(
+                                        iconPlaceholder = false,
+                                        title = stringResource(R.string.tts_cfg_daily_credits),
+                                        description = creditsText,
+                                        enabled = !claiming,
+                                        onClick = {
+                                            if (breezeCookieState.isBlank()) {
+                                                // 签到要的是网页登录态，与合成用的 Key 无关，所以按需补一次
+                                                showBreezeCookieDialog(context) { saved ->
+                                                    breezeCookieState = saved
+                                                    claimCredits()
+                                                }
+                                            } else {
+                                                claimCredits()
+                                            }
+                                        },
+                                    )
+                                }
                             }
                         }
                         Text(
-                            stringResource(R.string.tts_mofang_note),
+                            text = stringResource(R.string.tts_settings_note),
                             style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 },
-                confirmButton = { Button(onDismiss) { Text(stringResource(R.string.tts_btn_done)) } }
+                confirmButton = { Button(onDismiss) { Text(stringResource(R.string.tts_btn_done)) } },
+            )
+        }
+    }
+
+    /** 签到专用的 Cookie 输入。只是一个会话，不写进配置档，也不参与合成。 */
+    private fun showBreezeCookieDialog(context: android.content.Context, onSaved: (String) -> Unit) {
+        showComposeDialog(context) {
+            var value by remember { mutableStateOf(breezeCookie) }
+            AlertDialogContent(
+                title = { Text(stringResource(R.string.tts_dlg_set_breeze_cookie)) },
+                text = {
+                    Column(Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { value = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3,
+                            maxLines = 5,
+                            placeholder = { Text(stringResource(R.string.tts_breeze_cookie_hint)) },
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val saved = value.trim()
+                            breezeCookie = saved
+                            onSaved(saved)
+                            onDismiss()
+                        },
+                    ) { Text(stringResource(R.string.tts_confirm)) }
+                },
+                dismissButton = {
+                    TextButton(onDismiss) { Text(stringResource(R.string.dialog_cancel)) }
+                },
             )
         }
     }
@@ -1320,6 +1190,19 @@ object TextToSpeech :
             }.getOrDefault(false)
             mh.post { cb(ok) }
         }.start()
+    }
+
+    /**
+     * 配置页「测试连接」用：只探一次音色列表接口。
+     *
+     * 不能复用 [fetchVoices] 判断——它失败时回落内置列表，永远非空，探不出 Key 错没错。
+     */
+    fun probeMofangKey(key: String): Boolean {
+        if (key.isBlank()) return false
+        return runCatching {
+            val resp = httpGet("$API_BASE/api/open/v1/voices", key)
+            resp.isNotEmpty() && JSONObject(resp).optJSONArray("data") != null
+        }.getOrDefault(false)
     }
 
     fun fetchVoices(key: String = apiKey): List<TtsVoice> {

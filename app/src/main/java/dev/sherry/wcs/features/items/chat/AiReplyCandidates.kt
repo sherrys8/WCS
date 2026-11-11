@@ -148,21 +148,18 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
     private var candidateCount by prefOption("ai_reply_count", DEFAULT_CANDIDATES)
     private var lastStyle by prefOption("ai_reply_style", STYLES.first().first)
 
-    // 语音回复只复用文字转语音的合成/发送/试听实现，凭据与音色设置各自独立一套键。
+    // 语音回复只复用文字转语音的合成/发送/试听实现。
+    // 凭据与模型不在这里存第二份：按后端去「娱乐 → API配置 → 语音合成」里找回同服务商那条档。
     private var ttsEnabled by prefOption("ai_reply_tts_enabled", false)
     private var ttsBackend by prefOption("ai_reply_tts_backend", TextToSpeech.BACKEND_BREEZE)
-    private var ttsApiKey by prefOption("ai_reply_tts_api_key", "")
-    private var ttsDoubaoCookie by prefOption("ai_reply_tts_doubao_cookie", "")
     private var ttsVoiceId by prefOption("ai_reply_tts_voice_id", "")
     private var ttsDoubaoSpeaker by prefOption("ai_reply_tts_doubao_speaker", "")
     private var ttsDoubaoSpeakerName by prefOption("ai_reply_tts_doubao_speaker_name", "")
     private var ttsEmotion by prefOption("ai_reply_tts_emotion", TextToSpeech.EMOTIONS.first().first)
 
-    // Breeze 的凭据与音色同样是本功能独立一套，不回退到文字转语音那套
-    private var ttsBreezeKey by prefOption("ai_reply_tts_breeze_key", "")
+    // 音色与语气指令仍然各存一套：音色跟语言、情绪绑，不属于连接配置
     private var ttsBreezeVoice by prefOption("ai_reply_tts_breeze_voice", "")
     private var ttsBreezeVoiceName by prefOption("ai_reply_tts_breeze_voice_name", "")
-    private var ttsBreezeModel by prefOption("ai_reply_tts_breeze_model", BreezeTtsClient.DEFAULT_MODEL)
     private var ttsBreezeInstructions by prefOption("ai_reply_tts_breeze_instructions", "")
 
     /** 后端展示顺序与文字转语音一致：Breeze → 豆包 → 魔方 */
@@ -178,6 +175,12 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
         TextToSpeech.BACKEND_DOUBAO -> R.string.ai_reply_tts_backend_doubao
         else -> R.string.ai_reply_tts_backend_mofang
     }
+
+    /**
+     * 这个后端对应的语音合成配置档。AI 回复只选「哪一家」，具体用哪个 Key / 哪个模型
+     * 由配置档决定 —— 同一个 Key 不再需要在两个功能里各填一遍。
+     */
+    private fun ttsProfile(mode: Int = ttsBackend): ApiProfile? = TtsProfiles.forBackend(mode)
 
     private fun effectiveVoiceId(): String = when (ttsBackend) {
         // Breeze 没有离线兜底表，没选过就是空，由 ttsCredentialsReady 拦下
@@ -196,10 +199,11 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
         TextToSpeech.EMOTIONS.firstOrNull { it.first == ttsEmotion }?.second
             ?: TextToSpeech.EMOTIONS.first().second
 
-    private fun ttsCredentialsReady(): Boolean = when (ttsBackend) {
-        TextToSpeech.BACKEND_BREEZE -> ttsBreezeKey.isNotBlank() && ttsBreezeVoice.isNotBlank()
-        TextToSpeech.BACKEND_DOUBAO -> ttsDoubaoCookie.isNotBlank()
-        else -> ttsApiKey.isNotBlank()
+    private fun ttsCredentialsReady(): Boolean {
+        val profile = ttsProfile() ?: return false
+        if (!profile.hasCredential) return false
+        // Breeze 除了 Key 还得先选过音色，否则合成出来的是个空 voice id
+        return ttsBackend != TextToSpeech.BACKEND_BREEZE || ttsBreezeVoice.isNotBlank()
     }
 
     private fun defaultPromptFor(style: String): String =
@@ -334,10 +338,11 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
             }
         }
 
-        // 语音合成走文字转语音的实现，但凭据/音色/语气用的是本功能自己那套偏好
+        // 语音合成走文字转语音的实现；凭据与模型取配置档，音色与语气用本功能自己的偏好
         fun synthesize(text: String) {
             if (voiceBusy || text.isEmpty()) return
-            if (!ttsCredentialsReady()) {
+            val profile = ttsProfile()
+            if (profile == null || !ttsCredentialsReady()) {
                 error = localizedChatString(R.string.ai_reply_tts_missing_credentials)
                 return
             }
@@ -358,15 +363,15 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                     text,
                     effectiveVoiceId(),
                     ttsBreezeInstructions,
-                    key = ttsBreezeKey,
-                    model = ttsBreezeModel,
+                    key = profile.apiKey,
+                    model = TtsProfiles.modelOf(profile),
                     cb = callback,
                 )
 
                 TextToSpeech.BACKEND_DOUBAO -> TextToSpeech.generateVoiceDoubao(
                     text,
                     effectiveVoiceId(),
-                    cookie = ttsDoubaoCookie,
+                    cookie = profile.cookie,
                     cb = callback,
                 )
 
@@ -374,7 +379,7 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                     text,
                     effectiveVoiceId(),
                     emotionVector(),
-                    key = ttsApiKey,
+                    key = profile.apiKey,
                     cb = callback,
                 )
             }
@@ -866,14 +871,10 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
 
         var ttsOn by remember { mutableStateOf(ttsEnabled) }
         var ttsBackendState by remember { mutableStateOf(ttsBackend) }
-        var ttsApiKeyState by remember { mutableStateOf(ttsApiKey) }
-        var ttsCookieState by remember { mutableStateOf(ttsDoubaoCookie) }
         var ttsDoubaoNameState by remember { mutableStateOf(ttsDoubaoSpeakerName) }
-        var ttsBreezeKeyState by remember { mutableStateOf(ttsBreezeKey) }
         var ttsBreezeVoiceState by remember { mutableStateOf(ttsBreezeVoice) }
         // 行里显示的就是这个本地值；MMKV 委托读起来不是可观察状态，选完音色只写委托不会触发重组
         var ttsBreezeLabelState by remember { mutableStateOf(ttsBreezeVoiceName.ifBlank { ttsBreezeVoice }) }
-        var ttsBreezeModelState by remember { mutableStateOf(ttsBreezeModel) }
         var ttsBreezeInstrState by remember { mutableStateOf(ttsBreezeInstructions) }
         var ttsVoiceState by remember { mutableStateOf(effectiveVoiceId()) }
         var ttsEmotionState by remember { mutableStateOf(ttsEmotion) }
@@ -881,11 +882,14 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
         var mofangCustomVoices by remember { mutableStateOf<List<TextToSpeech.TtsVoice>>(emptyList()) }
         val doubaoTts = ttsBackendState == TextToSpeech.BACKEND_DOUBAO
         val breezeTts = ttsBackendState == TextToSpeech.BACKEND_BREEZE
+        // 凭据与模型都来自配置档：这一屏只显示「用哪一家」，不再重复存 Key/Cookie/模型
+        val ttsProfileState = remember(ttsBackendState) { TtsProfiles.forBackend(ttsBackendState) }
 
-        // 魔方音色要按这套独立凭据现拉；失败就保留内置列表，与文字转语音的降级一致
-        LaunchedEffect(ttsOn, ttsBackendState, ttsApiKeyState) {
-            if (!ttsOn || doubaoTts || breezeTts || ttsApiKeyState.isBlank()) return@LaunchedEffect
-            val key = ttsApiKeyState
+        // 魔方音色要按配置档里的 Key 现拉；失败就保留内置列表，与文字转语音的降级一致
+        LaunchedEffect(ttsOn, ttsBackendState, ttsProfileState?.id, ttsProfileState?.apiKey) {
+            if (!ttsOn || doubaoTts || breezeTts) return@LaunchedEffect
+            val key = ttsProfileState?.apiKey.orEmpty()
+            if (key.isBlank()) return@LaunchedEffect
             val loaded = withContext(Dispatchers.IO) {
                 runCatching { TextToSpeech.fetchVoices(key) to TextToSpeech.fetchUserVoices(key) }.getOrNull()
             } ?: return@LaunchedEffect
@@ -898,22 +902,6 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
             DropdownOption(ttsVoiceState, ttsVoiceState)).distinctBy { it.value }
         val customVoiceOptions = mofangCustomVoices.map { DropdownOption(it.voiceId, it.label) }
         val emotionOptions = TextToSpeech.EMOTIONS.map { DropdownOption(it.first, it.first) }
-        // 模型列表跟文字转语音一样从 /v1/models 现拉，以后平台加模型不用改代码；
-        // 拉不到就只剩当前值这一项，DropDownMenuWidget 要求选中项必须在列表里。
-        var breezeModelOptions by remember {
-            mutableStateOf(listOf(DropdownOption(ttsBreezeModelState, ttsBreezeModelState)))
-        }
-        LaunchedEffect(ttsOn, breezeTts, ttsBreezeKeyState) {
-            if (!ttsOn || !breezeTts || ttsBreezeKeyState.isBlank()) return@LaunchedEffect
-            val key = ttsBreezeKeyState
-            val models = withContext(Dispatchers.IO) {
-                runCatching { BreezeTtsClient.models(key) }.getOrNull()
-            }.orEmpty()
-            if (models.isEmpty()) return@LaunchedEffect
-            val options = models.map { DropdownOption(it.id, it.name) }
-            breezeModelOptions = if (options.any { it.value == ttsBreezeModelState }) options
-            else listOf(DropdownOption(ttsBreezeModelState, ttsBreezeModelState)) + options
-        }
 
         AlertDialogContent(
             title = {
@@ -937,7 +925,7 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                                 description = currentProfile?.let { "${it.name} · ${it.protocol.label}" }
                                     ?: stringResource(R.string.api_profile_none),
                                 onClick = {
-                                    showApiProfilePicker(context, profileIdState) { picked ->
+                                    showApiProfilePicker(context, profileIdState, CAP_LLM) { picked ->
                                         profileIdState = picked.id
                                         AiReplyApiConfig.profileId = picked.id
                                     }
@@ -1066,43 +1054,16 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                                     },
                                 )
                             }
-                            // 凭据：只留一行，标题与键随后端走；三套凭据各自独立、互不回退
-                            item {
-                                if (doubaoTts) {
-                                    TextFieldDialogWidget(
-                                        title = stringResource(R.string.ai_reply_tts_cookie),
-                                        value = ttsCookieState,
-                                        onValueChange = {
-                                            ttsCookieState = it.trim()
-                                            ttsDoubaoCookie = ttsCookieState
-                                        },
-                                        dialogTitle = stringResource(R.string.ai_reply_tts_cookie),
-                                        confirmLabel = stringResource(R.string.dialog_confirm),
-                                        dismissLabel = stringResource(R.string.dialog_cancel),
-                                        valueHint = stringResource(R.string.ai_reply_tts_cookie_hint),
-                                        password = true,
-                                    )
-                                } else {
-                                    TextFieldDialogWidget(
-                                        title = stringResource(R.string.ai_reply_tts_api_key),
-                                        value = if (breezeTts) ttsBreezeKeyState else ttsApiKeyState,
-                                        onValueChange = {
-                                            if (breezeTts) {
-                                                ttsBreezeKeyState = it.trim()
-                                                ttsBreezeKey = ttsBreezeKeyState
-                                            } else {
-                                                ttsApiKeyState = it.trim()
-                                                ttsApiKey = ttsApiKeyState
-                                            }
-                                        },
-                                        dialogTitle = stringResource(R.string.ai_reply_tts_api_key),
-                                        confirmLabel = stringResource(R.string.dialog_confirm),
-                                        dismissLabel = stringResource(R.string.dialog_cancel),
-                                        valueHint = stringResource(
-                                            if (breezeTts) R.string.ai_reply_tts_breeze_key_hint
-                                            else R.string.ai_reply_tts_api_key_hint,
+                            // 凭据不在这里填：Key/Cookie 都在「娱乐 → API配置 → 语音合成」那条档里
+                            if (ttsProfileState == null || !ttsProfileState.hasCredential) {
+                                item {
+                                    Text(
+                                        text = stringResource(
+                                            R.string.ai_reply_tts_profile_missing,
+                                            stringResource(backendLabelRes(ttsBackendState)),
                                         ),
-                                        password = true,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
                                     )
                                 }
                             }
@@ -1120,7 +1081,7 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                                                     showBreezeVoicePicker(
                                                         context,
                                                         ttsBreezeVoiceState,
-                                                        ttsBreezeKeyState,
+                                                        ttsProfileState?.apiKey.orEmpty(),
                                                     ) { id, name ->
                                                         ttsBreezeVoiceState = id
                                                         ttsBreezeVoice = id
@@ -1143,7 +1104,7 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                                                     showDoubaoVoicePicker(
                                                         context,
                                                         ttsVoiceState,
-                                                        ttsCookieState,
+                                                        ttsProfileState?.cookie.orEmpty(),
                                                     ) { id, name ->
                                                         ttsVoiceState = id
                                                         ttsDoubaoSpeaker = id
@@ -1191,21 +1152,7 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                                     }
                                 }
                             }
-                            // 模型：与文字转语音一致，整行下拉，选项现拉
-                            if (breezeTts) {
-                                item {
-                                    DropDownMenuWidget(
-                                        title = stringResource(R.string.ai_reply_tts_breeze_model),
-                                        description = null,
-                                        value = ttsBreezeModelState,
-                                        options = breezeModelOptions,
-                                        onValueChange = {
-                                            ttsBreezeModelState = it
-                                            ttsBreezeModel = it
-                                        },
-                                    )
-                                }
-                            }
+                            // 模型不在这里选：Breeze 的合成模型属于配置档，去「API配置」改
                             // 语气 / 指令：豆包两样都没有，整行不出现（不再置灰）
                             if (!doubaoTts) {
                                 item {

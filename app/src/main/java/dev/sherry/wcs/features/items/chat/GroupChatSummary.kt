@@ -656,7 +656,7 @@ object GroupChatSummary : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItem
                                 description = currentProfile?.let { "${it.name} · ${it.protocol.label}" }
                                     ?: stringResource(R.string.api_profile_none),
                                 onClick = {
-                                    showApiProfilePicker(context, profileIdState) { picked ->
+                                    showApiProfilePicker(context, profileIdState, CAP_LLM) { picked ->
                                         profileIdState = picked.id
                                         AiModelConfig.profileId = picked.id
                                     }

@@ -74,9 +74,21 @@ enum class ApiProtocol(
     }
 }
 
+/** 配置档的两类能力：对话模型与语音合成。同一张表、同一个编辑入口，字段随能力变。 */
+const val CAP_LLM = "llm"
+const val CAP_TTS = "tts"
+
+/** 语音合成的三家服务商。凭据形态各不相同：Breeze/魔方是 Key，豆包是登录 Cookie。 */
+const val TTS_PROVIDER_BREEZE = "breeze"
+const val TTS_PROVIDER_DOUBAO = "doubao"
+const val TTS_PROVIDER_MOFANG = "mofang"
+
 /**
- * 一条可复用的接口配置。**只描述连接**（地址、路径、密钥、协议）和**出厂模型**，
- * 不持有任何功能私有的参数——候选条数、取样条数之类留在功能自己那边。
+ * 一条可复用的接口配置。**只描述连接**（地址、路径、凭据、协议）和**出厂模型**，
+ * 不持有任何功能私有的参数——候选条数、音色、语气指令之类留在功能自己那边。
+ *
+ * 语音合成同样走这张表：[capability] 区分能力，[provider] 选服务商。
+ * Breeze 的模型放 [defaultModelId]，音色不放这里（音色跟语言、情绪绑，属于功能侧选择）。
  */
 data class ApiProfile(
     val id: String,
@@ -86,7 +98,17 @@ data class ApiProfile(
     val apiPath: String = "",
     val apiKey: String = "",
     val defaultModelId: String = "",
-)
+    val capability: String = CAP_LLM,
+    val provider: String = "",
+    /** 登录态凭据（豆包）。Breeze 的签到 Cookie 不算配置，留在功能侧。 */
+    val cookie: String = "",
+) {
+    val isTts: Boolean get() = capability == CAP_TTS
+
+    /** 这条档是不是已经填了能用的凭据。豆包看 Cookie，其余看 API Key。 */
+    val hasCredential: Boolean
+        get() = if (provider == TTS_PROVIDER_DOUBAO) cookie.isNotBlank() else apiKey.isNotBlank()
+}
 
 /**
  * 配置档仓库：整表以 JSON 存在 MMKV 单键里。
@@ -108,6 +130,9 @@ object ApiProfiles {
     private const val KEY_GROUP_PROFILE = "ai_reply_profile_id"
     private const val KEY_REPLY_PROFILE = "ai_reply_cand_profile_id"
 
+    /** 文字转语音引用的那一条。放在这里是为了让 [usageCount] 能一起算上它。 */
+    const val KEY_TTS_PROFILE = "tts_profile_id"
+
     private const val LEGACY_GROUP_PREFIX = "ai_reply_"
     private const val LEGACY_REPLY_PREFIX = "ai_reply_cand_"
 
@@ -121,6 +146,10 @@ object ApiProfiles {
         return all().firstOrNull { it.id == id }
     }
 
+    /** 按能力过滤。对话模型与语音合成共用一张表，但各自的入口只该看到自己那类。 */
+    fun ofCapability(capability: String): List<ApiProfile> =
+        all().filter { it.capability == capability }
+
     fun save(profile: ApiProfile) {
         val list = readAll().toMutableList()
         val index = list.indexOfFirst { it.id == profile.id }
@@ -132,15 +161,24 @@ object ApiProfiles {
         writeAll(readAll().filterNot { it.id == id })
     }
 
-    fun create(name: String = nextName()): ApiProfile {
-        val profile = ApiProfile(id = nextId(), name = name)
+    fun create(
+        name: String = nextName(),
+        capability: String = CAP_LLM,
+        provider: String = "",
+    ): ApiProfile {
+        val profile = ApiProfile(
+            id = nextId(),
+            name = name,
+            capability = capability,
+            provider = provider,
+        )
         save(profile)
         return profile
     }
 
     /** 有多少个功能正引用这条配置。删除前用它拦截，避免「删完功能静默失效」。 */
     fun usageCount(id: String): Int =
-        listOf(KEY_GROUP_PROFILE, KEY_REPLY_PROFILE).count {
+        listOf(KEY_GROUP_PROFILE, KEY_REPLY_PROFILE, KEY_TTS_PROFILE).count {
             WePrefs.getStringOrDef(it, "") == id
         }
 
@@ -227,6 +265,10 @@ object ApiProfiles {
         apiPath = json.optString("apiPath"),
         apiKey = json.optString("apiKey"),
         defaultModelId = json.optString("defaultModelId"),
+        // 老表里没有这几个字段：缺省就是一条对话模型配置，行为和升级前一致
+        capability = json.optString("capability", CAP_LLM),
+        provider = json.optString("provider", ""),
+        cookie = json.optString("cookie", ""),
     )
 
     private fun encode(profile: ApiProfile): JSONObject = JSONObject()
@@ -237,4 +279,7 @@ object ApiProfiles {
         .put("apiPath", profile.apiPath)
         .put("apiKey", profile.apiKey)
         .put("defaultModelId", profile.defaultModelId)
+        .put("capability", profile.capability)
+        .put("provider", profile.provider)
+        .put("cookie", profile.cookie)
 }

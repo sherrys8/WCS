@@ -46,13 +46,16 @@ private const val LIST_ITEM_MIN_HEIGHT_DP = 56
  *
  * 这里只能「选」，不能改：地址、密钥这些属于配置档本身，改一处会同时影响所有引用方，
  * 所以编辑入口只放在「娱乐 → API配置」的管理页里。
+ *
+ * [capability] 传了就只列这一类（语音合成不该在对话模型的列表里出现）。
  */
 fun showApiProfilePicker(
     context: Context,
     selectedId: String,
+    capability: String? = null,
     onPick: (ApiProfile) -> Unit,
 ) {
-    showComposeDialog(context) { ApiProfilePickerContent(selectedId, onPick) }
+    showComposeDialog(context) { ApiProfilePickerContent(selectedId, capability, onPick) }
 }
 
 /**
@@ -78,9 +81,12 @@ fun showApiModelPicker(
 @Composable
 private fun ShowComposeDialogScope.ApiProfilePickerContent(
     selectedId: String,
+    capability: String?,
     onPick: (ApiProfile) -> Unit,
 ) {
-    val profiles = ApiProfiles.all()
+    val profiles = remember(capability) {
+        if (capability == null) ApiProfiles.all() else ApiProfiles.ofCapability(capability)
+    }
 
     AlertDialogContent(
         title = {
@@ -107,7 +113,12 @@ private fun ShowComposeDialogScope.ApiProfilePickerContent(
                                 BaseWidget(
                                     iconPlaceholder = false,
                                     title = profile.name,
-                                    description = "${profile.protocol.label} · ${profile.baseUrl}",
+                                    description = if (profile.isTts) {
+                                        stringResource(R.string.api_profile_capability_tts) + " · " +
+                                            stringResource(TtsProfiles.providerLabelRes(profile.provider))
+                                    } else {
+                                        "${profile.protocol.label} · ${profile.baseUrl}"
+                                    },
                                     selected = profile.id == selectedId,
                                     onClick = {
                                         onPick(profile)
