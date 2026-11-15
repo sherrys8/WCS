@@ -771,8 +771,22 @@ private fun ImportModelsDialog(
         mutableStateListOf<String>().apply { addAll(candidates.filter { it !in existingRemoteIds }) }
     }
 
+    var query by remember(show, candidates) { mutableStateOf("") }
+    val filteredCandidates = candidates.filter { it.contains(query.trim(), ignoreCase = true) }
+
     WcSBasicDialog(show = show, title = stringResource(R.string.agent_import_models_title, candidates.size), onDismissRequest = onDismiss) {
         Column {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text(stringResource(R.string.search_hint)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            if (candidates.isNotEmpty() && filteredCandidates.isEmpty()) {
+                Text(stringResource(R.string.nuke_no_matching_results))
+            }
             if (candidates.isEmpty()) {
                 Text(stringResource(R.string.agent_provider_returned_no_models))
             } else {
@@ -783,7 +797,7 @@ private fun ImportModelsDialog(
                 )
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
-                    lazySegmentedItems(candidates, key = { it }) { id ->
+                    lazySegmentedItems(filteredCandidates, key = { it }) { id ->
                         val already = id in existingRemoteIds
                         val checked = id in selected
                         // The whole row toggles; the checkbox is a pure indicator with no semantics of its own.

@@ -820,6 +820,17 @@ object ApiProfileManager : ClickableFeature() {
                     },
                 )
             }
+            item {
+                TextFieldDialogWidget(
+                    title = stringResource(R.string.api_profile_model_manual),
+                    value = draft.defaultModelId,
+                    onValueChange = { persist(draft.copy(defaultModelId = it.trim())) },
+                    dialogTitle = stringResource(R.string.api_profile_model_manual),
+                    confirmLabel = stringResource(R.string.dialog_confirm),
+                    dismissLabel = stringResource(R.string.dialog_cancel),
+                    valueHint = stringResource(R.string.api_profile_default_model_hint),
+                )
+            }
         }
         Text(
             text = stringResource(R.string.api_profile_asr_endpoint, AsrProfiles.ASR_ENDPOINT),
@@ -875,6 +886,17 @@ object ApiProfileManager : ClickableFeature() {
                     trailingContent = {
                         Icon(MaterialSymbols.Outlined.Chevron_right, contentDescription = null)
                     },
+                )
+            }
+            item {
+                TextFieldDialogWidget(
+                    title = stringResource(R.string.api_profile_model_manual),
+                    value = draft.defaultModelId,
+                    onValueChange = { persist(draft.copy(defaultModelId = it.trim())) },
+                    dialogTitle = stringResource(R.string.api_profile_model_manual),
+                    confirmLabel = stringResource(R.string.dialog_confirm),
+                    dismissLabel = stringResource(R.string.dialog_cancel),
+                    valueHint = stringResource(R.string.api_profile_default_model_hint),
                 )
             }
         }

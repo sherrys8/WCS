@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +67,10 @@ private fun ShowComposeDialogScope.BreezeModelPickerContent(
     var fetching by remember { mutableStateOf(false) }
     var fetchError by remember { mutableStateOf<String?>(null) }
     var picked by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf("") }
+    val filteredModels = models.filter { (id, name) ->
+        id.contains(query.trim(), ignoreCase = true) || name.contains(query.trim(), ignoreCase = true)
+    }
 
     fun fetch() {
         if (fetching) return
@@ -98,6 +103,21 @@ private fun ShowComposeDialogScope.BreezeModelPickerContent(
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text(stringResource(R.string.search_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                if (models.isNotEmpty() && filteredModels.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.nuke_no_matching_results),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (models.isEmpty()) {
                     if (fetching) {
                         Row(
@@ -141,7 +161,7 @@ private fun ShowComposeDialogScope.BreezeModelPickerContent(
                             .heightIn(max = (LIST_ITEM_MIN_HEIGHT_DP * MODEL_ROWS_VISIBLE).dp)
                             .verticalScroll(rememberScrollState()),
                     ) {
-                        models.forEach { (id, name) ->
+                        filteredModels.forEach { (id, name) ->
                             BaseWidget(
                                 iconPlaceholder = false,
                                 title = name,
