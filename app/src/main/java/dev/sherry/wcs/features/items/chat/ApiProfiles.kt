@@ -74,14 +74,29 @@ enum class ApiProtocol(
     }
 }
 
-/** 配置档的两类能力：对话模型与语音合成。同一张表、同一个编辑入口，字段随能力变。 */
+/** 配置档的能力：对话模型 / 语音模型 / 语音合成 / 视觉模型。同一张表、同一个编辑入口，字段随能力变。 */
 const val CAP_LLM = "llm"
 const val CAP_TTS = "tts"
+const val CAP_ASR = "asr"
+const val CAP_VISION = "vision"
 
 /** 语音合成的三家服务商。凭据形态各不相同：Breeze/魔方是 Key，豆包是登录 Cookie。 */
 const val TTS_PROVIDER_BREEZE = "breeze"
 const val TTS_PROVIDER_DOUBAO = "doubao"
 const val TTS_PROVIDER_MOFANG = "mofang"
+
+/** 语音模型（ASR）与视觉模型的服务商。 */
+const val ASR_PROVIDER_SILICONFLOW = "siliconflow"
+const val VISION_PROVIDER_ZHIPU = "zhipu"
+
+/**
+ * 视觉模型的固定地址与出厂模型（智谱 GLM）。
+ *
+ * 端点由协议固定、不让填（同语音合成），这里只放常量供编辑页只读展示。
+ * 默认取 `glm-4v-plus`：支持图片理解、非流式 `messages` 一次返回，最适合「看图回一句」。
+ */
+const val VISION_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
+const val VISION_DEFAULT_MODEL = "glm-4v-plus"
 
 /**
  * 一条可复用的接口配置。**只描述连接**（地址、路径、凭据、协议）和**出厂模型**，

@@ -3,6 +3,7 @@ package dev.sherry.wcs.features.items.entertain
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -16,6 +17,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Chevron_right
 import dev.sherry.wcs.R
@@ -25,13 +27,19 @@ import dev.sherry.wcs.features.items.chat.AiModelConnection
 import dev.sherry.wcs.features.items.chat.ApiProfile
 import dev.sherry.wcs.features.items.chat.ApiProfiles
 import dev.sherry.wcs.features.items.chat.ApiProtocol
+import dev.sherry.wcs.features.items.chat.ASR_PROVIDER_SILICONFLOW
+import dev.sherry.wcs.features.items.chat.AsrProfiles
+import dev.sherry.wcs.features.items.chat.CAP_ASR
 import dev.sherry.wcs.features.items.chat.CAP_LLM
 import dev.sherry.wcs.features.items.chat.CAP_TTS
+import dev.sherry.wcs.features.items.chat.CAP_VISION
 import dev.sherry.wcs.features.items.chat.TTS_PROVIDER_BREEZE
 import dev.sherry.wcs.features.items.chat.TTS_PROVIDER_DOUBAO
 import dev.sherry.wcs.features.items.chat.TTS_PROVIDER_MOFANG
 import dev.sherry.wcs.features.items.chat.TextToSpeech
 import dev.sherry.wcs.features.items.chat.TtsProfiles
+import dev.sherry.wcs.features.items.chat.VISION_BASE_URL
+import dev.sherry.wcs.features.items.chat.VISION_PROVIDER_ZHIPU
 import dev.sherry.wcs.features.items.chat.asConfig
 import dev.sherry.wcs.features.items.chat.localizedChatString
 import dev.sherry.wcs.features.items.chat.pathSuffixMismatch
@@ -57,9 +65,11 @@ import kotlinx.coroutines.withContext
 /**
  * 「娱乐 → API配置」：统一管理 AI 功能共用的接口配置。
  *
- * 配置档是资产，功能是消费者，分两类能力：
+ * 配置档是资产，功能是消费者，分四类能力：
  * - **对话模型**：地址 / 路径 / 协议 / Key / 默认模型
+ * - **语音模型**： SiliconFlow ASR 的 Key + 模型（语音转文字用），地址协议固定
  * - **语音合成**：服务商 / 凭据（Breeze、魔方是 Key，豆包是 Cookie）/ 模型
+ * - **视觉模型**：智谱 GLM 的 Key + 模型（图片理解用），地址协议固定
  *
  * 语音合成这边**只管连接**：凭据与模型放这里，音色、语气指令、签到仍留在文字转语音里。
  * 签到不算配置（它要的是网页登录 Cookie，和合成用的 Key 是两套东西），所以这里没有签到。
@@ -107,8 +117,10 @@ object ApiProfileManager : ClickableFeature() {
             return
         }
 
-        val llmProfiles = profiles.filter { !it.isTts }
-        val ttsProfiles = profiles.filter { it.isTts }
+        val llmProfiles = profiles.filter { it.capability == CAP_LLM }
+        val asrProfiles = profiles.filter { it.capability == CAP_ASR }
+        val ttsProfiles = profiles.filter { it.capability == CAP_TTS }
+        val visionProfiles = profiles.filter { it.capability == CAP_VISION }
 
         AlertDialogContent(
             title = {
@@ -121,6 +133,7 @@ object ApiProfileManager : ClickableFeature() {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(max = 460.dp)
                         .verticalScroll(rememberScrollState()),
                 ) {
                     if (profiles.isEmpty()) {
@@ -129,16 +142,15 @@ object ApiProfileManager : ClickableFeature() {
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    if (llmProfiles.isNotEmpty()) {
-                        SegmentedColumn(title = stringResource(R.string.api_profile_capability_llm)) {
-                            llmProfiles.forEach { profile ->
-                                item { ProfileRow(profile) { editingId = profile.id } }
-                            }
-                        }
-                    }
-                    if (ttsProfiles.isNotEmpty()) {
-                        SegmentedColumn(title = stringResource(R.string.api_profile_capability_tts)) {
-                            ttsProfiles.forEach { profile ->
+                    listOf(
+                        R.string.api_profile_capability_llm to llmProfiles,
+                        R.string.api_profile_capability_asr to asrProfiles,
+                        R.string.api_profile_capability_tts to ttsProfiles,
+                        R.string.api_profile_capability_vision to visionProfiles,
+                    ).forEach { (titleRes, group) ->
+                        if (group.isEmpty()) return@forEach
+                        SegmentedColumn(title = stringResource(titleRes)) {
+                            group.forEach { profile ->
                                 item { ProfileRow(profile) { editingId = profile.id } }
                             }
                         }
@@ -161,20 +173,22 @@ object ApiProfileManager : ClickableFeature() {
         BaseWidget(
             iconPlaceholder = false,
             title = profile.name,
-            description = if (profile.isTts) {
-                stringResource(TtsProfiles.providerLabelRes(profile.provider)) + " · " +
-                    stringResource(
-                        if (profile.hasCredential) R.string.api_profile_cred_ready
-                        else R.string.api_profile_cred_missing,
-                    )
-            } else {
-                buildString {
-                    append(profile.protocol.label)
-                    if (profile.baseUrl.isNotBlank()) {
-                        append(" · ")
-                        append(profile.baseUrl)
+            description = when (profile.capability) {
+                CAP_TTS, CAP_ASR, CAP_VISION ->
+                    stringResource(providerLabelRes(profile)) + " · " +
+                        stringResource(
+                            if (profile.hasCredential) R.string.api_profile_cred_ready
+                            else R.string.api_profile_cred_missing,
+                        )
+
+                else ->
+                    buildString {
+                        append(profile.protocol.label)
+                        if (profile.baseUrl.isNotBlank()) {
+                            append(" · ")
+                            append(profile.baseUrl)
+                        }
                     }
-                }
             },
             onClick = onClick,
             trailingContent = {
@@ -186,7 +200,14 @@ object ApiProfileManager : ClickableFeature() {
         )
     }
 
-    /** 新建时先问一句「哪一类」：两类字段完全不同，不能建完再猜。 */
+    /** 列表行副标题里的服务商名：语音合成看 provider，语音/视觉模型各只有一家。 */
+    private fun providerLabelRes(profile: ApiProfile): Int = when (profile.capability) {
+        CAP_ASR -> R.string.api_profile_provider_siliconflow
+        CAP_VISION -> R.string.api_profile_provider_zhipu
+        else -> TtsProfiles.providerLabelRes(profile.provider)
+    }
+
+    /** 新建时先问一句「哪一类」：四类字段完全不同，不能建完再猜。 */
     @Composable
     private fun ShowComposeDialogScope.NewProfilePicker(
         onCreated: (ApiProfile) -> Unit,
@@ -195,7 +216,12 @@ object ApiProfileManager : ClickableFeature() {
         AlertDialogContent(
             title = { Text(stringResource(R.string.api_profile_new_capability)) },
             text = {
-                Column(Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
                     SegmentedColumn {
                         item {
                             BaseWidget(
@@ -203,6 +229,22 @@ object ApiProfileManager : ClickableFeature() {
                                 title = stringResource(R.string.api_profile_capability_llm),
                                 description = stringResource(R.string.api_profile_capability_llm_hint),
                                 onClick = { onCreated(ApiProfiles.create(capability = CAP_LLM)) },
+                            )
+                        }
+                        item {
+                            BaseWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(R.string.api_profile_capability_asr),
+                                description = stringResource(R.string.api_profile_capability_asr_hint),
+                                onClick = {
+                                    onCreated(
+                                        ApiProfiles.create(
+                                            name = nextNamedFor("SiliconFlow", CAP_ASR),
+                                            capability = CAP_ASR,
+                                            provider = ASR_PROVIDER_SILICONFLOW,
+                                        ),
+                                    )
+                                },
                             )
                         }
                         item {
@@ -217,6 +259,22 @@ object ApiProfileManager : ClickableFeature() {
                                             name = name,
                                             capability = CAP_TTS,
                                             provider = TTS_PROVIDER_BREEZE,
+                                        ),
+                                    )
+                                },
+                            )
+                        }
+                        item {
+                            BaseWidget(
+                                iconPlaceholder = false,
+                                title = stringResource(R.string.api_profile_capability_vision),
+                                description = stringResource(R.string.api_profile_capability_vision_hint),
+                                onClick = {
+                                    onCreated(
+                                        ApiProfiles.create(
+                                            name = nextNamedFor("智谱 GLM", CAP_VISION),
+                                            capability = CAP_VISION,
+                                            provider = VISION_PROVIDER_ZHIPU,
                                         ),
                                     )
                                 },
@@ -237,7 +295,12 @@ object ApiProfileManager : ClickableFeature() {
             TTS_PROVIDER_MOFANG -> "魔方"
             else -> "Breeze"
         }
-        val existing = ApiProfiles.ofCapability(CAP_TTS).map { it.name }.toSet()
+        return nextNamedFor(base, CAP_TTS)
+    }
+
+    /** 同能力组内不重名：`base`、`base 2`、`base 3`…… */
+    private fun nextNamedFor(base: String, capability: String): String {
+        val existing = ApiProfiles.ofCapability(capability).map { it.name }.toSet()
         if (!existing.contains(base)) return base
         var index = 2
         while (existing.contains("$base $index")) index++
@@ -278,6 +341,7 @@ object ApiProfileManager : ClickableFeature() {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(max = 460.dp)
                         .verticalScroll(rememberScrollState()),
                 ) {
                     SegmentedColumn {
@@ -293,7 +357,12 @@ object ApiProfileManager : ClickableFeature() {
                         }
                     }
 
-                    if (draft.isTts) TtsFields(draft) { persist(it) } else LlmFields(draft) { persist(it) }
+                    when (draft.capability) {
+                        CAP_TTS -> TtsFields(draft) { persist(it) }
+                        CAP_ASR -> AsrFields(draft) { persist(it) }
+                        CAP_VISION -> VisionFields(draft) { persist(it) }
+                        else -> LlmFields(draft) { persist(it) }
+                    }
 
                     testOutcome?.let { ok ->
                         Text(
@@ -344,10 +413,10 @@ object ApiProfileManager : ClickableFeature() {
                         testOutcome = null
                         testError = null
                         scope.launch {
-                            val result = if (draft.isTts) {
-                                testTtsConnection(draft)
-                            } else {
-                                AiModelConnection.testConnection(draft.asConfig())
+                            val result = when (draft.capability) {
+                                CAP_TTS -> testTtsConnection(draft)
+                                CAP_ASR, CAP_VISION -> testCredential(draft)
+                                else -> AiModelConnection.testConnection(draft.asConfig())
                             }
                             testing = false
                             result.fold(
@@ -641,6 +710,100 @@ object ApiProfileManager : ClickableFeature() {
                     check(models.isNotEmpty()) { localizedChatString(R.string.tts_err_no_response) }
                 }
             }
+            "ok"
+        }
+    }
+
+    // ---- 语音模型（ASR）----
+
+    /**
+     * 语音模型只有 SiliconFlow 一家，转写端点由协议固定、只读展示；这里只填 Key 与模型。
+     * AI 语音转文字与 AI 回复的上下文语音都读这一条档，不再各存一份凭据。
+     */
+    @Composable
+    private fun ShowComposeDialogScope.AsrFields(draft: ApiProfile, persist: (ApiProfile) -> Unit) {
+        SegmentedColumn {
+            item {
+                TextFieldDialogWidget(
+                    title = stringResource(R.string.ui_group_ai_settings_api_key),
+                    value = draft.apiKey,
+                    onValueChange = { persist(draft.copy(apiKey = it.trim())) },
+                    dialogTitle = stringResource(R.string.ui_group_ai_settings_api_key),
+                    confirmLabel = stringResource(R.string.dialog_confirm),
+                    dismissLabel = stringResource(R.string.dialog_cancel),
+                    valueHint = stringResource(R.string.api_profile_asr_key_hint),
+                    password = true,
+                )
+            }
+            item {
+                TextFieldDialogWidget(
+                    title = stringResource(R.string.api_profile_default_model),
+                    value = draft.defaultModelId,
+                    onValueChange = { persist(draft.copy(defaultModelId = it.trim())) },
+                    dialogTitle = stringResource(R.string.api_profile_default_model),
+                    confirmLabel = stringResource(R.string.dialog_confirm),
+                    dismissLabel = stringResource(R.string.dialog_cancel),
+                    valueHint = stringResource(R.string.api_profile_asr_model_hint),
+                )
+            }
+        }
+        Text(
+            text = stringResource(R.string.api_profile_asr_endpoint, AsrProfiles.ASR_ENDPOINT),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+
+    // ---- 视觉模型 ----
+
+    /**
+     * 视觉模型只有智谱 GLM 一家，地址固定、只读展示；填 Key 与模型。
+     * 目前只提供配置档，还没有功能消费它——建好档随时可被后续「看图回复」之类接走。
+     */
+    @Composable
+    private fun ShowComposeDialogScope.VisionFields(draft: ApiProfile, persist: (ApiProfile) -> Unit) {
+        SegmentedColumn {
+            item {
+                TextFieldDialogWidget(
+                    title = stringResource(R.string.ui_group_ai_settings_api_key),
+                    value = draft.apiKey,
+                    onValueChange = { persist(draft.copy(apiKey = it.trim())) },
+                    dialogTitle = stringResource(R.string.ui_group_ai_settings_api_key),
+                    confirmLabel = stringResource(R.string.dialog_confirm),
+                    dismissLabel = stringResource(R.string.dialog_cancel),
+                    valueHint = stringResource(R.string.api_profile_vision_key_hint),
+                    password = true,
+                )
+            }
+            item {
+                TextFieldDialogWidget(
+                    title = stringResource(R.string.api_profile_default_model),
+                    value = draft.defaultModelId,
+                    onValueChange = { persist(draft.copy(defaultModelId = it.trim())) },
+                    dialogTitle = stringResource(R.string.api_profile_default_model),
+                    confirmLabel = stringResource(R.string.dialog_confirm),
+                    dismissLabel = stringResource(R.string.dialog_cancel),
+                    valueHint = stringResource(R.string.api_profile_vision_model_hint),
+                )
+            }
+        }
+        Text(
+            text = stringResource(R.string.api_profile_vision_endpoint, VISION_BASE_URL),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+
+    /**
+     * 语音模型 / 视觉模型的连通性检查：这两家都没有可白嫖的免费列表端点，真跑一次要么产生费用、
+     * 要么依赖各家不稳定的额外接口，所以只做本地校验——Key 填了就算通过（豆包同款处理）。
+     * 能不能真用，以功能实际调用为准。
+     */
+    private suspend fun testCredential(profile: ApiProfile): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            check(profile.apiKey.isNotBlank()) { localizedChatString(R.string.api_profile_need_key) }
             "ok"
         }
     }

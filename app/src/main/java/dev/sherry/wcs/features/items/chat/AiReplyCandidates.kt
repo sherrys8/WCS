@@ -1259,17 +1259,20 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
             displayName = AiReplyApiConfig.modelId.trim(),
         )
 
+        val context = loadContext(talker)
         val systemPrompt = buildString {
             append("你是微信聊天助手。语气要求：")
             append(stylePrompt.ifBlank { defaultPromptFor(style) })
             append("\n\n针对对方最后一条消息，生成")
             append(count)
             append("条风格不同的候选回复。每条回复单独一行，用「1. 」「2. 」这样的数字序号开头，序号之外不要任何前缀或解释。")
-            loadContext(talker).takeIf { it.isNotBlank() }?.let {
+            if (context.isNotBlank()) {
                 append("\n\n最近聊天记录参考：\n")
-                append(it)
+                append(context)
             }
         }
+        WeLogger.i(TAG, "reply source: $sourceForModel")
+        WeLogger.i(TAG, "reply system prompt:\n$systemPrompt")
 
         val request = ModelProviderManager.buildRequest(
             model = model,

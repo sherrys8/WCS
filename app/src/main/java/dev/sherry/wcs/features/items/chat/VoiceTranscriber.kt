@@ -2,7 +2,6 @@ package dev.sherry.wcs.features.items.chat
 
 import dev.sherry.wcs.features.api.core.WeMessageApi
 import dev.sherry.wcs.features.api.core.models.MessageInfo
-import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.utils.AudioUtils
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.fs.KnownPaths
@@ -27,7 +26,8 @@ import org.json.JSONObject
  * 语音消息 → 文本。AI 语音转文字与 AI 回复共用这一条云端 ASR 通道。
  *
  * 三步都在这里：解析真实文件（新旧接口 + 落地校验）、silk → pcm → mp3、POST 到 SiliconFlow。
- * 凭据与模型沿用 `ai_stt_*` 这组键，设置入口仍在「AI 语音转文字」，避免两个功能各填一次 Key。
+ * 凭据与模型来自「娱乐 → API配置 → 语音模型」的配置档，转写结果按 msgSvrId
+ * 落到 `cache/WcS/ai_stt_cache.json` 缓存，同一条语音不重复计费。
  */
 object VoiceTranscriber {
 
@@ -37,13 +37,13 @@ object VoiceTranscriber {
 
     const val DEFAULT_MODEL = "FunAudioLLM/SenseVoiceSmall"
 
-    /** ASR Key，配置页由「AI 语音转文字」读写。 */
-    var apiKey by prefOption("ai_stt_api_key", "")
+    /** ASR 凭据与模型都在「娱乐 → API配置 → 语音模型」里，这里只读。 */
+    private val apiKey: String get() = AsrProfiles.active()?.apiKey.orEmpty()
 
-    /** ASR 模型，配置页由「AI 语音转文字」读写。 */
-    var model by prefOption("ai_stt_model", DEFAULT_MODEL)
+    private val model: String get() = AsrProfiles.active()?.defaultModelId
+        ?.takeIf { it.isNotBlank() } ?: DEFAULT_MODEL
 
-    val isConfigured: Boolean get() = apiKey.isNotBlank()
+    val isConfigured: Boolean get() = AsrProfiles.active()?.hasCredential == true
 
     /** 转写文本缓存：msgSvrId → 文本，放在 moduleCache（文件管理器可见、可手动删）。 */
     private const val CACHE_MAX = 200
