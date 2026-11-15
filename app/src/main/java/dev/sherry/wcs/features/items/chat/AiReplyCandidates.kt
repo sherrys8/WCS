@@ -1302,20 +1302,23 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
         if (limit == 0 || talker.isEmpty()) return ""
         return runCatching {
             val now = System.currentTimeMillis()
-            WeDatabaseApi.getMessagesInRangeDesc(talker, now - CONTEXT_WINDOW_MS, now, limit)
+            val rows = WeDatabaseApi.getMessagesInRangeDesc(talker, now - CONTEXT_WINDOW_MS, now, limit)
                 .reversed()
                 // 文本之外也留语音：先转写再拼进上下文，转不出才退回占位
                 .filter { it.typeCode == 1 || it.type == MessageType.VOICE }
-                .joinToString("\n") { msg ->
-                    val who = if (msg.isSend != 0) "我" else "对方"
-                    val body = if (msg.type == MessageType.VOICE) {
-                        voiceBody(msg)
-                    } else {
-                        // Group messages store "sender:\ntext"; the payload is the last line.
-                        msg.content.lineSequence().last().trim().take(MAX_CONTEXT_LINE_CHARS)
-                    }
-                    "$who：$body"
+            val sb = StringBuilder()
+            for (msg in rows) {
+                val who = if (msg.isSend != 0) "我" else "对方"
+                val body = if (msg.type == MessageType.VOICE) {
+                    voiceBody(msg)
+                } else {
+                    // Group messages store "sender:\ntext"; the payload is the last line.
+                    msg.content.lineSequence().last().trim().take(MAX_CONTEXT_LINE_CHARS)
                 }
+                if (sb.isNotEmpty()) sb.append('\n')
+                sb.append(who).append("：").append(body)
+            }
+            sb.toString()
         }.getOrElse {
             WeLogger.w(TAG, "failed to load reply context", it)
             ""
