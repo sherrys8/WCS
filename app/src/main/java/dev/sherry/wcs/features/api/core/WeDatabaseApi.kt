@@ -791,7 +791,8 @@ object WeDatabaseApi : ApiFeature(), IResolveDex {
                 content = row.str("content"),
                 typeCode = row.int("type"),
                 createTime = row.long("createTime"),
-                isSend = row.int("isSend")
+                isSend = row.int("isSend"),
+                imgPath = row["imgPath"]?.toString()?.takeIf { it.isNotBlank() },
             )
         }.reversed()
     }

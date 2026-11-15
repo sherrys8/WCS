@@ -6,10 +6,14 @@ import dev.sherry.wcs.preferences.WePrefs.Companion.prefOption
 import dev.sherry.wcs.utils.AudioUtils
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.fs.KnownPaths
+import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.deleteIfExists
+import kotlin.io.path.exists
 import kotlin.io.path.readBytes
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -41,6 +45,10 @@ object VoiceTranscriber {
 
     val isConfigured: Boolean get() = apiKey.isNotBlank()
 
+    /** 转写文本缓存：msgSvrId → 文本，放在 moduleCache（文件管理器可见、可手动删）。 */
+    private const val CACHE_MAX = 200
+    private val cacheFile get() = KnownPaths.moduleCache.resolve("ai_stt_cache.json")
+
     private val http by lazy {
         OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
@@ -49,17 +57,40 @@ object VoiceTranscriber {
     }
 
     /**
-     * 转写一条语音消息。
+     * 转写一条语音消息（有 native MsgInfo，路径走新旧接口 + 落地校验）。
      *
-     * 返回 null 表示这条语音目前**取不到可用文件**（未下载完、路径解析失败），调用方应提示
+     * 返回 null 表示这条语音目前取不到可用文件（未下载完、路径解析失败），调用方应提示
      * 「没有可读取的语音」而不是「识别失败」；网络、解码、服务端错误一律抛异常。
-     * 临时 pcm/mp3 落在缓存目录，用完即删。
      */
     suspend fun transcribe(msgInfo: MessageInfo): String? = withContext(Dispatchers.IO) {
+        cacheGet(msgInfo.serverId)?.let { return@withContext it }
         val encPath = msgInfo.imagePath
         if (encPath.isNullOrBlank()) return@withContext null
         val voicePath = WeMessageApi.resolveVoicePath(msgInfo, encPath) ?: return@withContext null
+        val text = runAsr(voicePath)
+        cachePut(msgInfo.serverId, text)
+        text
+    }
 
+    /**
+     * 只有加密路径、没有 native MsgInfo 的转写入口，给 AI 回复的上下文语音用。
+     * 路径解析只走「按名称」那条（getVoiceFullPath），并在本地校验文件确实存在。
+     * 返回 null 表示取不到文件；解码/网络/服务端错误仍抛异常。
+     */
+    suspend fun transcribeByEncPath(msgSvrId: Long, encPath: String): String? =
+        withContext(Dispatchers.IO) {
+            cacheGet(msgSvrId)?.let { return@withContext it }
+            if (encPath.isBlank()) return@withContext null
+            val voicePath = WeMessageApi.getVoiceFullPath(encPath)
+                .takeIf { it.isNotBlank() && File(it).let { f -> f.isFile && f.length() > 0L } }
+                ?: return@withContext null
+            val text = runAsr(voicePath)
+            cachePut(msgSvrId, text)
+            text
+        }
+
+    /** 解码 + 转 mp3 + POST；临时 pcm/mp3/silk 落在缓存目录，用完即删。 */
+    private fun runAsr(voicePath: String): String {
         val stamp = System.currentTimeMillis()
         val pcm = KnownPaths.moduleCache.resolve("ai_stt_$stamp.pcm")
         val mp3 = KnownPaths.moduleCache.resolve("ai_stt_$stamp.mp3")
@@ -69,7 +100,7 @@ object VoiceTranscriber {
             check(AudioUtils.pcmToMp3(pcm.absolutePathString(), mp3.absolutePathString())) {
                 "mp3 encode failed"
             }
-            post(mp3.readBytes())
+            return post(mp3.readBytes())
         } finally {
             pcm.deleteIfExists()
             mp3.deleteIfExists()
@@ -110,5 +141,26 @@ object VoiceTranscriber {
             if (!response.isSuccessful) error("HTTP ${response.code}: $payload")
             return JSONObject(payload).optString("text")
         }
+    }
+
+    private fun cacheGet(msgSvrId: Long): String? = runCatching {
+        val file = cacheFile
+        if (!file.exists()) return null
+        JSONObject(file.readText()).optString(msgSvrId.toString(), "").ifBlank { null }
+    }.onFailure { WeLogger.w(TAG, "read stt cache failed", it) }.getOrNull()
+
+    private fun cachePut(msgSvrId: Long, text: String) {
+        if (text.isBlank()) return
+        runCatching {
+            val file = cacheFile
+            val map = LinkedHashMap<String, String>()
+            if (file.exists()) {
+                val existing = JSONObject(file.readText())
+                existing.keys().forEach { key -> map[key] = existing.optString(key, "") }
+            }
+            map[msgSvrId.toString()] = text
+            while (map.size > CACHE_MAX) map.remove(map.keys.first())
+            file.writeText(JSONObject(map).toString())
+        }.onFailure { WeLogger.w(TAG, "write stt cache failed", it) }
     }
 }

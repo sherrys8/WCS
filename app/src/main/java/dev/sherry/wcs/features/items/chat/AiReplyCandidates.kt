@@ -66,6 +66,7 @@ import dev.sherry.wcs.agent.model.ModelProviderManager
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.core.WeMessageApi
 import dev.sherry.wcs.features.api.core.models.MessageType
+import dev.sherry.wcs.features.api.core.models.WeMessage
 import dev.sherry.wcs.features.api.ui.WeChatMessageContextMenuApi
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.core.SwitchFeature
@@ -114,9 +115,9 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
     private const val MENU_ITEM_ID = 777030
     private const val STYLE_PROMPT_PREFIX = "ai_reply_style_prompt_"
     private const val CONTEXT_WINDOW_MS = 7L * 24 * 3600 * 1000
-    private const val MAX_CANDIDATES = 20
+    private const val MAX_CANDIDATES = 6
     private const val DEFAULT_CANDIDATES = 3
-    private const val MAX_CONTEXT_LINES = 50
+    private const val MAX_CONTEXT_LINES = 20
     private const val MAX_CONTEXT_LINE_CHARS = 300
     private const val SOURCE_MAX_LINES = 4
     private const val MAX_SOURCE_CHARS = 300
@@ -1295,21 +1296,20 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
         parseNumbered(text).take(count)
     }
 
-    /** Recent text lines, oldest first, prefixed by who sent them. */
-    private fun loadContext(talker: String): String {
+    /** Recent lines, oldest first, prefixed by who sent them. Voice messages are transcribed. */
+    private suspend fun loadContext(talker: String): String {
         val limit = contextLimit.coerceIn(0, MAX_CONTEXT_LINES)
         if (limit == 0 || talker.isEmpty()) return ""
         return runCatching {
             val now = System.currentTimeMillis()
             WeDatabaseApi.getMessagesInRangeDesc(talker, now - CONTEXT_WINDOW_MS, now, limit)
                 .reversed()
-                // 文本（typeCode==1）之外也留语音：不求把每条都转写（那就是按条计费），
-                // 但至少让模型知道对方发过语音，否则语音连成一片的对话在上下文里会凭空断档
+                // 文本之外也留语音：先转写再拼进上下文，转不出才退回占位
                 .filter { it.typeCode == 1 || it.type == MessageType.VOICE }
                 .joinToString("\n") { msg ->
                     val who = if (msg.isSend != 0) "我" else "对方"
                     val body = if (msg.type == MessageType.VOICE) {
-                        voicePlaceholder(msg.content)
+                        voiceBody(msg)
                     } else {
                         // Group messages store "sender:\ntext"; the payload is the last line.
                         msg.content.lineSequence().last().trim().take(MAX_CONTEXT_LINE_CHARS)
@@ -1320,6 +1320,18 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
             WeLogger.w(TAG, "failed to load reply context", it)
             ""
         }
+    }
+
+    /** 上下文里的语音：转写成功给 `[语音] 文字`，取不到文件/转写失败退回 `[语音 N 秒]` 占位。 */
+    private suspend fun voiceBody(msg: WeMessage): String {
+        val imgPath = msg.imgPath
+        if (imgPath == null) return voicePlaceholder(msg.content)
+        val text = runCatching { VoiceTranscriber.transcribeByEncPath(msg.msgSvrId, imgPath) }
+            .onFailure { WeLogger.w(TAG, "context voice transcribe failed", it) }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: return voicePlaceholder(msg.content)
+        return "[语音] ${text.take(MAX_CONTEXT_LINE_CHARS)}"
     }
 
     /** `[语音 5 秒]`。时长取 `voicemsg` 里的 `voicelength`（毫秒），取不到就只写「语音」。 */
