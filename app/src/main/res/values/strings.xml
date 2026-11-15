@@ -818,7 +818,7 @@
     <string name="tts_toast_need_breeze_key">Fill in the Breeze API Key in settings first</string>
     <string name="tts_toast_need_breeze_voice">Choose a Breeze voice first</string>
     <string name="tts_toast_need_mofang_key">Fill in the API Key in settings first</string>
-    <string name="tts_toast_need_breeze_cookie">Fill in the breezeblue.ai login Cookie first</string>
+    <string name="tts_toast_need_breeze_cookie">Enter the login Cookie below the Breeze API key in API Profiles first</string>
     <string name="tts_toast_generate_failed">Generation failed: %1$s</string>
     <string name="tts_toast_need_audio">Generate a voice first</string>
     <string name="tts_toast_voice_sent">Voice sent</string>
@@ -2139,7 +2139,7 @@
     <string name="feature_ai_reply_candidates_name">AI reply candidates</string>
     <string name="feature_ai_reply_candidates_description">Long-press a message to generate reply drafts in a chosen tone and send one</string>
     <string name="ai_reply_menu">AI reply</string>
-    <string name="ai_reply_voice_need_key">Voice reply needs the ASR key of AI Speech-to-Text first (Entertainment → AI Speech-to-Text)</string>
+    <string name="ai_reply_voice_need_key">Set the API key and fetch a model in Entertainment → API Profiles → Speech Models first</string>
     <string name="ai_reply_voice_transcribing">Transcribing voice…</string>
     <string name="ai_reply_voice_unavailable">This voice message has no readable audio yet; try again after it finishes downloading</string>
     <string name="ai_reply_voice_empty">No text recognized in this voice message</string>
@@ -2256,10 +2256,8 @@
     <string name="api_profile_provider_siliconflow">SiliconFlow</string>
     <string name="api_profile_provider_zhipu">Zhipu GLM</string>
     <string name="api_profile_asr_key_hint">SiliconFlow API key (sk-…)</string>
-    <string name="api_profile_asr_model_hint">Leave blank to use SenseVoiceSmall</string>
     <string name="api_profile_asr_endpoint">Endpoint: %1$s</string>
     <string name="api_profile_vision_key_hint">Zhipu API key</string>
-    <string name="api_profile_vision_model_hint">Leave blank to use glm-4v-plus</string>
     <string name="api_profile_vision_endpoint">Base URL: %1$s</string>
     <string name="api_profile_need_key">API key is not set</string>
     <string name="api_profile_new_capability">Which kind of profile?</string>
@@ -4658,4 +4656,15 @@ Time: {time}</string>
     <string name="qq_music_order_reply_voice_failed">Failed to send the song voice</string>
     <string name="qq_music_order_reply_both_failed">Both the card and the voice failed</string>
     <string name="qq_music_order_lyric_none">No lyrics</string>
+    <string name="ai_image_name">AI Image Recognition</string>
+    <string name="ai_image_description">Long-press an image to recognize its content with a vision model, then copy or send the result</string>
+    <string name="ai_image_profile">Vision model profile</string>
+    <string name="ai_image_start">Recognize image</string>
+    <string name="ai_image_loading">Recognizing image…</string>
+    <string name="ai_image_need_config">Set the vision API key and fetch a model in API Profiles, then select the profile</string>
+    <string name="ai_image_prompt">Describe this image in detail in Chinese. Extract visible text accurately. State what cannot be read and do not invent details.</string>
+    <string name="ai_image_empty">No recognition result received</string>
+    <string name="ai_image_failed">Recognition failed: %1$s</string>
+    <string name="ai_image_copied">Recognition result copied</string>
+    <string name="ai_image_send_failed">Failed to send the recognition result</string>
 </resources>

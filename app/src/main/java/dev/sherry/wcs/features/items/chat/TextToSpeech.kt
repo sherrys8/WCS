@@ -154,11 +154,6 @@ object TextToSpeech :
     private var doubaoSpeaker by prefOption("tts_doubao_speaker", "zh_female_shuangkuai_emo_v3_wvae_bigtts")
     private var doubaoSpeakerName by prefOption("tts_doubao_speaker_name", "爽快 · 女声")
 
-    /**
-     * 网页侧积分接口用的登录会话 cookie，与 API Key 是两套凭据。
-     * 它只服务于「签到领积分」这一件事，不算合成配置，所以留在功能侧而不进配置档。
-     */
-    private var breezeCookie by prefOption("tts_breeze_cookie", "")
     private var breezeVoice by prefOption("tts_breeze_voice", "")
     private var breezeVoiceName by prefOption("tts_breeze_voice_name", "")
 
@@ -711,8 +706,8 @@ object TextToSpeech :
      * 设置只有两行：选哪条合成配置、以及 Breeze 的每日积分签到。
      *
      * 凭据与模型搬进配置档后，这里不再填 Key / Cookie / 模型 —— 那些在「娱乐 → API配置」
-     * 里改，改一处所有引用方一起生效。签到依赖的是网页登录 Cookie（跟合成用的 Key
-     * 是两套东西），所以它留在功能侧：点一下领积分，没填 Cookie 时先补一个。
+     * 里改，改一处所有引用方一起生效。签到使用当前 Breeze 配置档里的网页登录 Cookie，
+     * 与合成用的 API Key 分开填写。
      */
     private fun showSettingsDialog(context: android.content.Context, onApiKeySaved: () -> Unit = {}) {
         showComposeDialog(context) {
@@ -721,8 +716,8 @@ object TextToSpeech :
             // 只有 Breeze 有积分可领；豆包/魔方不显示这一行，也就不留一个点了会报错的按钮
             val isBreeze = profile == null || profile.provider == TTS_PROVIDER_BREEZE
 
-            var breezeCookieState by remember { mutableStateOf(breezeCookie) }
-            var creditsText by remember {
+            val breezeCookie = profile?.takeIf { it.provider == TTS_PROVIDER_BREEZE }?.cookie.orEmpty()
+            var creditsText by remember(profileId, breezeCookie) {
                 mutableStateOf(
                     context.localizedChatString(
                         if (breezeCookie.isBlank()) R.string.tts_state_need_cookie
@@ -730,16 +725,16 @@ object TextToSpeech :
                     ),
                 )
             }
-            var claiming by remember { mutableStateOf(false) }
+            var claiming by remember(profileId, breezeCookie) { mutableStateOf(false) }
 
             fun loadCredits() {
-                if (breezeCookieState.isBlank()) {
+                if (breezeCookie.isBlank()) {
                     creditsText = context.localizedChatString(R.string.tts_state_need_cookie)
                     return
                 }
                 creditsText = context.localizedChatString(R.string.tts_state_loading)
                 Thread {
-                    val outcome = runCatching { BreezeCreditsClient.summary(breezeCookieState) }
+                    val outcome = runCatching { BreezeCreditsClient.summary(breezeCookie) }
                     mh.post {
                         val s = outcome.getOrNull()
                         creditsText = if (s == null) {
@@ -769,13 +764,16 @@ object TextToSpeech :
 
             fun claimCredits() {
                 if (claiming) return
-                if (breezeCookieState.isBlank()) {
-                    showToast(context, context.localizedChatString(R.string.tts_toast_need_breeze_cookie))
+                if (breezeCookie.isBlank()) {
+                    showToast(
+                        context,
+                        context.localizedChatString(R.string.tts_toast_need_breeze_cookie),
+                    )
                     return
                 }
                 claiming = true
                 Thread {
-                    val outcome = runCatching { BreezeCreditsClient.claim(breezeCookieState) }
+                    val outcome = runCatching { BreezeCreditsClient.claim(breezeCookie) }
                     mh.post {
                         claiming = false
                         val c = outcome.getOrNull()
@@ -801,8 +799,8 @@ object TextToSpeech :
                 }.start()
             }
 
-            LaunchedEffect(isBreeze, breezeCookieState) {
-                if (isBreeze && breezeCookieState.isNotBlank()) loadCredits()
+            LaunchedEffect(profileId, breezeCookie) {
+                if (isBreeze && breezeCookie.isNotBlank()) loadCredits()
             }
 
             AlertDialogContent(
@@ -846,17 +844,7 @@ object TextToSpeech :
                                         title = stringResource(R.string.tts_cfg_daily_credits),
                                         description = creditsText,
                                         enabled = !claiming,
-                                        onClick = {
-                                            if (breezeCookieState.isBlank()) {
-                                                // 签到要的是网页登录态，与合成用的 Key 无关，所以按需补一次
-                                                showBreezeCookieDialog(context) { saved ->
-                                                    breezeCookieState = saved
-                                                    claimCredits()
-                                                }
-                                            } else {
-                                                claimCredits()
-                                            }
-                                        },
+                                        onClick = { claimCredits() },
                                     )
                                 }
                             }
@@ -870,41 +858,6 @@ object TextToSpeech :
                     }
                 },
                 confirmButton = { Button(onDismiss) { Text(stringResource(R.string.tts_btn_done)) } },
-            )
-        }
-    }
-
-    /** 签到专用的 Cookie 输入。只是一个会话，不写进配置档，也不参与合成。 */
-    private fun showBreezeCookieDialog(context: android.content.Context, onSaved: (String) -> Unit) {
-        showComposeDialog(context) {
-            var value by remember { mutableStateOf(breezeCookie) }
-            AlertDialogContent(
-                title = { Text(stringResource(R.string.tts_dlg_set_breeze_cookie)) },
-                text = {
-                    Column(Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = value,
-                            onValueChange = { value = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 3,
-                            maxLines = 5,
-                            placeholder = { Text(stringResource(R.string.tts_breeze_cookie_hint)) },
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val saved = value.trim()
-                            breezeCookie = saved
-                            onSaved(saved)
-                            onDismiss()
-                        },
-                    ) { Text(stringResource(R.string.tts_confirm)) }
-                },
-                dismissButton = {
-                    TextButton(onDismiss) { Text(stringResource(R.string.dialog_cancel)) }
-                },
             )
         }
     }

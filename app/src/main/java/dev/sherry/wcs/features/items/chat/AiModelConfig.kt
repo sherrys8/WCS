@@ -164,7 +164,11 @@ abstract class ProfileBackedConfig(
 
 /** 把一条配置档包成 [AiApiConfig]，供「管理页里当场测试」这类不经过功能引用的场景使用。 */
 fun ApiProfile.asConfig(modelOverride: String = ""): AiApiConfig = object : AiApiConfig {
-    override val baseUrl: String get() = this@asConfig.baseUrl
+    override val baseUrl: String get() = when (capability) {
+        CAP_ASR -> AsrProfiles.ASR_ENDPOINT.removeSuffix("/audio/transcriptions")
+        CAP_VISION -> VISION_BASE_URL
+        else -> this@asConfig.baseUrl
+    }
     override val apiPath: String get() = this@asConfig.apiPath
     override val apiKey: String get() = this@asConfig.apiKey
     override val protocol: ApiProtocol get() = this@asConfig.protocol

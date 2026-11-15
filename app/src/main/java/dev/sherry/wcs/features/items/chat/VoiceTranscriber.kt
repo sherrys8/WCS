@@ -35,15 +35,14 @@ object VoiceTranscriber {
 
     private const val ASR_ENDPOINT = "https://api.siliconflow.cn/v1/audio/transcriptions"
 
-    const val DEFAULT_MODEL = "FunAudioLLM/SenseVoiceSmall"
-
     /** ASR 凭据与模型都在「娱乐 → API配置 → 语音模型」里，这里只读。 */
     private val apiKey: String get() = AsrProfiles.active()?.apiKey.orEmpty()
 
-    private val model: String get() = AsrProfiles.active()?.defaultModelId
-        ?.takeIf { it.isNotBlank() } ?: DEFAULT_MODEL
+    private val model: String get() = AsrProfiles.active()?.defaultModelId.orEmpty()
 
-    val isConfigured: Boolean get() = AsrProfiles.active()?.hasCredential == true
+    val isConfigured: Boolean get() = AsrProfiles.active()?.let {
+        it.hasCredential && it.defaultModelId.isNotBlank()
+    } == true
 
     /** 转写文本缓存：msgSvrId → 文本，放在 moduleCache（文件管理器可见、可手动删）。 */
     private const val CACHE_MAX = 200

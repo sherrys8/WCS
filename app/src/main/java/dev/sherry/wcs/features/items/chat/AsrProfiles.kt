@@ -16,17 +16,18 @@ object AsrProfiles {
     private const val LEGACY_MODEL = "ai_stt_model"
 
     const val ASR_ENDPOINT = "https://api.siliconflow.cn/v1/audio/transcriptions"
-    const val DEFAULT_MODEL = "FunAudioLLM/SenseVoiceSmall"
 
     fun all(): List<ApiProfile> {
         ensureMigrated()
         return ApiProfiles.ofCapability(CAP_ASR)
     }
 
-    /** 当前生效的那条：第一条填了 Key 的；都没有就退回任意一条（此时未配置）。 */
+    /** 优先使用已填写凭据并选择模型的配置。 */
     fun active(): ApiProfile? {
         val list = all()
-        return list.firstOrNull { it.hasCredential } ?: list.firstOrNull()
+        return list.firstOrNull { it.hasCredential && it.defaultModelId.isNotBlank() }
+            ?: list.firstOrNull { it.hasCredential }
+            ?: list.firstOrNull()
     }
 
     fun ensureMigrated() {
@@ -44,8 +45,7 @@ object AsrProfiles {
             ApiProfiles.save(
                 profile.copy(
                     apiKey = key,
-                    defaultModelId = WePrefs.getStringOrDef(LEGACY_MODEL, "").trim()
-                        .ifBlank { DEFAULT_MODEL },
+                    defaultModelId = WePrefs.getStringOrDef(LEGACY_MODEL, "").trim(),
                 ),
             )
         }

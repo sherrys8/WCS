@@ -1,6 +1,11 @@
 package dev.sherry.wcs.features.items.entertain
 
+import android.view.MotionEvent
+import android.view.Window
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -72,7 +77,7 @@ import kotlinx.coroutines.withContext
  * - **视觉模型**：智谱 GLM 的 Key + 模型（图片理解用），地址协议固定
  *
  * 语音合成这边**只管连接**：凭据与模型放这里，音色、语气指令、签到仍留在文字转语音里。
- * 签到不算配置（它要的是网页登录 Cookie，和合成用的 Key 是两套东西），所以这里没有签到。
+ * Breeze 签到 Cookie 与合成 API Key 独立填写，签到操作仍在文字转语音中。
  *
  * 纯配置页，没有实际 hook，所以 `noSwitchWidget = true` —— 整行点开管理界面，不带开关。
  */
@@ -91,10 +96,47 @@ object ApiProfileManager : ClickableFeature() {
     @Composable
     private fun ShowComposeDialogScope.ProfileListContent() {
         // 老设备第一次打开：把「文字转语音」里三套老凭据搬成语音合成档，列表里当场能看到
-        remember { TtsProfiles.ensureMigrated() }
+        remember {
+            TtsProfiles.ensureMigrated()
+            AsrProfiles.ensureMigrated()
+        }
         var profiles by remember { mutableStateOf(ApiProfiles.all()) }
         var editingId by remember { mutableStateOf<String?>(null) }
         var creating by remember { mutableStateOf(false) }
+
+        val nested = editingId != null || creating
+        val returnToList by rememberUpdatedState<() -> Unit>({
+            editingId = null
+            creating = false
+        })
+        val isNested by rememberUpdatedState(nested)
+        BackHandler(enabled = nested) { returnToList() }
+        DisposableEffect(window) {
+            val original = window.callback
+            window.callback = object : Window.Callback by original {
+                private var returning = false
+
+                override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                    if (returning) {
+                        if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+                            returning = false
+                        }
+                        return true
+                    }
+                    val decor = window.decorView
+                    val outside = event.action == MotionEvent.ACTION_OUTSIDE ||
+                        ((event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_UP) &&
+                            (event.x < 0 || event.y < 0 || event.x > decor.width || event.y > decor.height))
+                    if (isNested && outside) {
+                        returning = event.action == MotionEvent.ACTION_DOWN
+                        returnToList()
+                        return true
+                    }
+                    return original.dispatchTouchEvent(event)
+                }
+            }
+            onDispose { window.callback = original }
+        }
 
         val editing = editingId?.let { id -> profiles.firstOrNull { it.id == id } }
         if (editing != null) {
@@ -598,7 +640,7 @@ object ApiProfileManager : ClickableFeature() {
                             draft.copy(
                                 provider = picked,
                                 apiKey = if (picked == TTS_PROVIDER_DOUBAO) "" else draft.apiKey,
-                                cookie = if (picked == TTS_PROVIDER_DOUBAO) draft.cookie else "",
+                                cookie = if (picked == draft.provider) draft.cookie else "",
                                 defaultModelId = if (picked == TTS_PROVIDER_BREEZE) {
                                     draft.defaultModelId
                                 } else {
@@ -644,6 +686,18 @@ object ApiProfileManager : ClickableFeature() {
             }
             // 模型只对 Breeze 有意义（魔方的音色自己就是模型，豆包没有模型可选）
             if (draft.provider == TTS_PROVIDER_BREEZE) {
+                item {
+                    TextFieldDialogWidget(
+                        title = stringResource(R.string.tts_dlg_set_breeze_cookie),
+                        value = draft.cookie,
+                        onValueChange = { persist(draft.copy(cookie = it.trim())) },
+                        dialogTitle = stringResource(R.string.tts_dlg_set_breeze_cookie),
+                        confirmLabel = stringResource(R.string.dialog_confirm),
+                        dismissLabel = stringResource(R.string.dialog_cancel),
+                        valueHint = stringResource(R.string.tts_breeze_cookie_hint),
+                        password = true,
+                    )
+                }
                 item {
                     BaseWidget(
                         iconPlaceholder = false,
@@ -724,6 +778,20 @@ object ApiProfileManager : ClickableFeature() {
     private fun ShowComposeDialogScope.AsrFields(draft: ApiProfile, persist: (ApiProfile) -> Unit) {
         SegmentedColumn {
             item {
+                DropDownMenuWidget(
+                    title = stringResource(R.string.api_profile_provider),
+                    description = null,
+                    value = draft.provider.ifBlank { ASR_PROVIDER_SILICONFLOW },
+                    options = listOf(
+                        DropdownOption(
+                            ASR_PROVIDER_SILICONFLOW,
+                            stringResource(R.string.api_profile_provider_siliconflow),
+                        ),
+                    ),
+                    onValueChange = { persist(draft.copy(provider = it)) },
+                )
+            }
+            item {
                 TextFieldDialogWidget(
                     title = stringResource(R.string.ui_group_ai_settings_api_key),
                     value = draft.apiKey,
@@ -736,14 +804,20 @@ object ApiProfileManager : ClickableFeature() {
                 )
             }
             item {
-                TextFieldDialogWidget(
+                BaseWidget(
+                    iconPlaceholder = false,
                     title = stringResource(R.string.api_profile_default_model),
-                    value = draft.defaultModelId,
-                    onValueChange = { persist(draft.copy(defaultModelId = it.trim())) },
-                    dialogTitle = stringResource(R.string.api_profile_default_model),
-                    confirmLabel = stringResource(R.string.dialog_confirm),
-                    dismissLabel = stringResource(R.string.dialog_cancel),
-                    valueHint = stringResource(R.string.api_profile_asr_model_hint),
+                    description = draft.defaultModelId.ifBlank {
+                        stringResource(R.string.api_profile_default_model_hint)
+                    },
+                    onClick = {
+                        showApiModelPicker(context, draft.asConfig(), draft.defaultModelId, autoFetch = true) {
+                            persist(draft.copy(defaultModelId = it))
+                        }
+                    },
+                    trailingContent = {
+                        Icon(MaterialSymbols.Outlined.Chevron_right, contentDescription = null)
+                    },
                 )
             }
         }
@@ -758,12 +832,22 @@ object ApiProfileManager : ClickableFeature() {
     // ---- 视觉模型 ----
 
     /**
-     * 视觉模型只有智谱 GLM 一家，地址固定、只读展示；填 Key 与模型。
-     * 目前只提供配置档，还没有功能消费它——建好档随时可被后续「看图回复」之类接走。
+     * 视觉模型使用智谱 GLM，地址固定、只读展示。
      */
     @Composable
     private fun ShowComposeDialogScope.VisionFields(draft: ApiProfile, persist: (ApiProfile) -> Unit) {
         SegmentedColumn {
+            item {
+                DropDownMenuWidget(
+                    title = stringResource(R.string.api_profile_provider),
+                    description = null,
+                    value = draft.provider.ifBlank { VISION_PROVIDER_ZHIPU },
+                    options = listOf(
+                        DropdownOption(VISION_PROVIDER_ZHIPU, stringResource(R.string.api_profile_provider_zhipu)),
+                    ),
+                    onValueChange = { persist(draft.copy(provider = it)) },
+                )
+            }
             item {
                 TextFieldDialogWidget(
                     title = stringResource(R.string.ui_group_ai_settings_api_key),
@@ -777,14 +861,20 @@ object ApiProfileManager : ClickableFeature() {
                 )
             }
             item {
-                TextFieldDialogWidget(
+                BaseWidget(
+                    iconPlaceholder = false,
                     title = stringResource(R.string.api_profile_default_model),
-                    value = draft.defaultModelId,
-                    onValueChange = { persist(draft.copy(defaultModelId = it.trim())) },
-                    dialogTitle = stringResource(R.string.api_profile_default_model),
-                    confirmLabel = stringResource(R.string.dialog_confirm),
-                    dismissLabel = stringResource(R.string.dialog_cancel),
-                    valueHint = stringResource(R.string.api_profile_vision_model_hint),
+                    description = draft.defaultModelId.ifBlank {
+                        stringResource(R.string.api_profile_default_model_hint)
+                    },
+                    onClick = {
+                        showApiModelPicker(context, draft.asConfig(), draft.defaultModelId, autoFetch = true) {
+                            persist(draft.copy(defaultModelId = it))
+                        }
+                    },
+                    trailingContent = {
+                        Icon(MaterialSymbols.Outlined.Chevron_right, contentDescription = null)
+                    },
                 )
             }
         }
@@ -796,15 +886,6 @@ object ApiProfileManager : ClickableFeature() {
         )
     }
 
-    /**
-     * 语音模型 / 视觉模型的连通性检查：这两家都没有可白嫖的免费列表端点，真跑一次要么产生费用、
-     * 要么依赖各家不稳定的额外接口，所以只做本地校验——Key 填了就算通过（豆包同款处理）。
-     * 能不能真用，以功能实际调用为准。
-     */
-    private suspend fun testCredential(profile: ApiProfile): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            check(profile.apiKey.isNotBlank()) { localizedChatString(R.string.api_profile_need_key) }
-            "ok"
-        }
-    }
+    private suspend fun testCredential(profile: ApiProfile): Result<String> =
+        AiModelConnection.fetchModels(profile.asConfig()).map { "ok" }
 }

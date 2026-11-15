@@ -89,14 +89,7 @@ const val TTS_PROVIDER_MOFANG = "mofang"
 const val ASR_PROVIDER_SILICONFLOW = "siliconflow"
 const val VISION_PROVIDER_ZHIPU = "zhipu"
 
-/**
- * 视觉模型的固定地址与出厂模型（智谱 GLM）。
- *
- * 端点由协议固定、不让填（同语音合成），这里只放常量供编辑页只读展示。
- * 默认取 `glm-4v-plus`：支持图片理解、非流式 `messages` 一次返回，最适合「看图回一句」。
- */
 const val VISION_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
-const val VISION_DEFAULT_MODEL = "glm-4v-plus"
 
 /**
  * 一条可复用的接口配置。**只描述连接**（地址、路径、凭据、协议）和**出厂模型**，
@@ -115,7 +108,7 @@ data class ApiProfile(
     val defaultModelId: String = "",
     val capability: String = CAP_LLM,
     val provider: String = "",
-    /** 登录态凭据（豆包）。Breeze 的签到 Cookie 不算配置，留在功能侧。 */
+    /** 豆包登录态或 Breeze 签到 Cookie。 */
     val cookie: String = "",
 ) {
     val isTts: Boolean get() = capability == CAP_TTS
@@ -193,7 +186,7 @@ object ApiProfiles {
 
     /** 有多少个功能正引用这条配置。删除前用它拦截，避免「删完功能静默失效」。 */
     fun usageCount(id: String): Int =
-        listOf(KEY_GROUP_PROFILE, KEY_REPLY_PROFILE, KEY_TTS_PROFILE).count {
+        listOf(KEY_GROUP_PROFILE, KEY_REPLY_PROFILE, KEY_TTS_PROFILE, "ai_image_profile_id").count {
             WePrefs.getStringOrDef(it, "") == id
         }
 

@@ -14,6 +14,8 @@ import dev.sherry.wcs.utils.BreezeTtsClient
 object TtsProfiles {
 
     private const val KEY_MIGRATED = "tts_profile_migrated"
+    private const val KEY_BREEZE_COOKIE_MIGRATED = "tts_breeze_cookie_profile_migrated"
+    private const val LEGACY_BREEZE_COOKIE = "tts_breeze_cookie"
 
     private const val LEGACY_BACKEND = "tts_backend"
     private const val LEGACY_BREEZE_KEY = "tts_breeze_api_key"
@@ -91,13 +93,25 @@ object TtsProfiles {
         else -> R.string.tts_backend_breeze
     }
 
-    /**
-     * 首次启动把老的三套凭据搬成配置档，并让文字转语音指过去。
-     *
-     * 只在「一条语音合成档都没有」时迁移：用户自己建过就不动。
-     * 老 key 不删，留回滚余地；迁移完成后功能侧不再读它们。
-     */
+    /** 两次迁移独立执行；老 key 保留供回滚，功能侧只读配置档。 */
     fun ensureMigrated() {
+        migrateLegacyProfiles()
+        if (WePrefs.getBoolOrFalse(KEY_BREEZE_COOKIE_MIGRATED)) return
+
+        val cookie = WePrefs.getStringOrDef(LEGACY_BREEZE_COOKIE, "").trim()
+        if (cookie.isNotBlank()) {
+            // 直接读仓库，不能调用会再次触发 ensureMigrated 的 all / active / byId。
+            val profiles = ApiProfiles.ofCapability(CAP_TTS).filter { it.provider == TTS_PROVIDER_BREEZE }
+            val profile = profiles.firstOrNull { it.id == activeId }
+                ?: profiles.firstOrNull()
+                ?: ApiProfiles.create(name = "Breeze", capability = CAP_TTS, provider = TTS_PROVIDER_BREEZE)
+            if (profile.cookie.isBlank()) ApiProfiles.save(profile.copy(cookie = cookie))
+        }
+        WePrefs.putBool(KEY_BREEZE_COOKIE_MIGRATED, true)
+    }
+
+    /** 首次把三套合成凭据搬成配置档；已有语音合成档时不动。 */
+    private fun migrateLegacyProfiles() {
         if (WePrefs.getBoolOrFalse(KEY_MIGRATED)) return
         WePrefs.putBool(KEY_MIGRATED, true)
         if (ApiProfiles.ofCapability(CAP_TTS).isNotEmpty()) return

@@ -116,6 +116,10 @@ private fun ShowComposeDialogScope.ApiProfilePickerContent(
                                     description = if (profile.isTts) {
                                         stringResource(R.string.api_profile_capability_tts) + " · " +
                                             stringResource(TtsProfiles.providerLabelRes(profile.provider))
+                                    } else if (profile.capability == CAP_ASR) {
+                                        stringResource(R.string.api_profile_provider_siliconflow)
+                                    } else if (profile.capability == CAP_VISION) {
+                                        stringResource(R.string.api_profile_provider_zhipu)
                                     } else {
                                         "${profile.protocol.label} · ${profile.baseUrl}"
                                     },
