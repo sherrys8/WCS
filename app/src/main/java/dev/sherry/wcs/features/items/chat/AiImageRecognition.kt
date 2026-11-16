@@ -25,6 +25,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,7 @@ import com.github.penfeizhou.animation.loader.FileLoader
 import com.github.penfeizhou.animation.webp.decode.WebPDecoder
 import dev.sherry.wcs.R
 import dev.sherry.wcs.features.api.core.WeMessageApi
+import dev.sherry.wcs.features.api.core.WeServiceApi
 import dev.sherry.wcs.features.api.core.models.MessageInfo
 import dev.sherry.wcs.features.api.core.models.MessageType
 import dev.sherry.wcs.features.api.ui.WeChatMessageContextMenuApi
@@ -57,6 +59,7 @@ import dev.sherry.wcs.ui.utils.ReplyIcon
 import dev.sherry.wcs.ui.utils.ShowComposeDialogScope
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.fs.KnownPaths
+import dev.sherry.wcs.utils.fs.asPath
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -82,13 +85,16 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuItemsProvider {
-    override val technicalId = "AI识图"
+    override val technicalId = "AI识别"
     override val nameRes = R.string.ai_image_name
     override val descriptionRes = R.string.ai_image_description
     override val categoryIds = listOf(FeatureCategoryIds.CHAT)
     override val defaultEnabled = false
 
     private const val PROFILE_KEY = "ai_image_profile_id"
+    private const val PROMPT_KEY = "ai_image_prompt"
+    private const val DEFAULT_PROMPT = "请用中文一句话概括这个图片/视频的主要内容，只输出概括结果。"
+    private const val MAX_VIDEO_SIZE = 20L * 1024 * 1024
 
     override fun onEnable() {
         WeChatMessageContextMenuApi.addProvider(this)
@@ -104,10 +110,13 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
             text = localizedChatString(R.string.ai_image_name),
             drawable = ReplyIcon,
             imageVector = MaterialSymbols.Outlined.Auto_awesome,
-            isSupported = { it.type == MessageType.IMAGE || it.type?.isSticker == true },
+            isSupported = {
+                it.type == MessageType.IMAGE || it.type == MessageType.VIDEO ||
+                    it.type == MessageType.MICRO_VIDEO || it.type?.isSticker == true
+            },
             multiSelect = WeChatMessageContextMenuApi.MultiSelectSupport.Unsupported,
         ) { _, chattingContext, message ->
-            showComposeDialog(chattingContext.activity) {
+            showComposeDialog(chattingContext.activity, dismissOnTouchOutside = false) {
                 RecognitionDialog(message)
             }
         },
@@ -120,26 +129,49 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
         val localizedContext = LocalWcSLocalizedContext.current
         val scope = rememberCoroutineScope()
         var profileId by remember { mutableStateOf(WePrefs.getStringOrDef(PROFILE_KEY, "")) }
+        var instruction by remember {
+            mutableStateOf(WePrefs.getStringOrDef(PROMPT_KEY, DEFAULT_PROMPT))
+        }
         var busy by remember { mutableStateOf(false) }
         var job by remember { mutableStateOf<Job?>(null) }
         var result by remember { mutableStateOf("") }
         var feedback by remember { mutableStateOf("") }
         var failed by remember { mutableStateOf(false) }
         val profile = ApiProfiles.get(profileId)
-        val prompt = stringResource(R.string.ai_image_prompt)
+        val promptLabel = stringResource(R.string.ai_image_instruction)
+        val recognizingVideo = message.type == MessageType.VIDEO || message.type == MessageType.MICRO_VIDEO
         val needConfig = stringResource(R.string.ai_image_need_config)
         val emptyResult = stringResource(R.string.ai_image_empty)
+        val videoMissing = stringResource(R.string.ai_image_video_missing)
+        val videoTooLarge = stringResource(R.string.ai_image_video_too_large)
         val animationPrompt = stringResource(R.string.ai_image_animation_prompt)
         val unsupportedAnimation = stringResource(R.string.ai_image_animation_unsupported)
 
         AlertDialogContent(
-            title = { Text(stringResource(R.string.ai_image_name)) },
+            title = {
+                Text(
+                    stringResource(R.string.ai_image_name) +
+                        if (recognizingVideo) " · ${stringResource(R.string.message_type_video)}" else "",
+                )
+            },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth().heightIn(max = 460.dp)
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    TextField(
+                        value = instruction,
+                        onValueChange = {
+                            instruction = it
+                            WePrefs.putString(PROMPT_KEY, it)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(promptLabel) },
+                        minLines = 2,
+                        maxLines = 5,
+                        enabled = !busy,
+                    )
                     SegmentedColumn {
                         item {
                             BaseWidget(
@@ -175,7 +207,8 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                                 job = scope.launch {
                                     try {
                                         result = recognize(
-                                            message, snapshot, prompt, emptyResult,
+                                            message, snapshot, instruction, emptyResult,
+                                            videoMissing, videoTooLarge,
                                             animationPrompt, unsupportedAnimation,
                                         )
                                     } catch (e: CancellationException) {
@@ -277,12 +310,32 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
         profile: ApiProfile,
         prompt: String,
         emptyResult: String,
+        videoMissing: String,
+        videoTooLarge: String,
         animationPrompt: String,
         unsupportedAnimation: String,
     ): String = withContext(Dispatchers.IO) {
         val cacheDirectory = (KnownPaths.moduleCache / "ai-image-recognition").createDirectories()
         val temporary = cacheDirectory / "media-${UUID.randomUUID()}.tmp"
+        val isVideo = message.type == MessageType.VIDEO || message.type == MessageType.MICRO_VIDEO
         try {
+            if (isVideo) {
+                if (message.imagePath.isNullOrBlank()) throw IOException(videoMissing)
+                val videoPath = runInterruptible {
+                    WeServiceApi.getVideoMp4PathFromMsgInfo(message)
+                }
+                val video = videoPath.asPath
+                if (!video.toFile().isFile || video.fileSize() <= 0L) {
+                    throw IOException(videoMissing)
+                }
+                if (video.fileSize() > MAX_VIDEO_SIZE) {
+                    throw IOException(videoTooLarge)
+                }
+                currentCoroutineContext().ensureActive()
+                return@withContext requestRecognition(
+                    profile, prompt, null, emptyResult, videoPath = video,
+                )
+            }
             val media = runInterruptible {
                 val deadline = SystemClock.elapsedRealtime() + 120_000L
                 if (message.type?.isSticker == true) {
@@ -619,8 +672,9 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
     private suspend fun requestRecognition(
         profile: ApiProfile,
         prompt: String,
-        dataUri: String,
+        imageDataUri: String?,
         emptyResult: String,
+        videoPath: Path? = null,
     ): String = coroutineScope {
         val connection = URL(profile.asConfig().requestEndpoint()).openConnection() as HttpURLConnection
         val cancellation = launch(Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) {
@@ -641,10 +695,17 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                     setRequestProperty("Authorization", "Bearer ${profile.apiKey}")
                     setRequestProperty("Content-Type", "application/json")
                 }
-                val content = JSONArray()
-                    .put(JSONObject().put("type", "text").put("text", prompt))
-                    .put(JSONObject().put("type", "image_url")
-                        .put("image_url", JSONObject().put("url", dataUri)))
+                val content = JSONArray().put(JSONObject().put("type", "text").put("text", prompt))
+                val video = videoPath
+                if (video != null) {
+                    val encoded = Base64.encodeToString(video.readBytes(), Base64.NO_WRAP)
+                    content.put(JSONObject().put("type", "video_url")
+                        .put("video_url", JSONObject().put("url", "data:video/mp4;base64,$encoded")))
+                } else {
+                    val image = imageDataUri ?: throw IOException(emptyResult)
+                    content.put(JSONObject().put("type", "image_url")
+                        .put("image_url", JSONObject().put("url", image)))
+                }
                 val body = JSONObject()
                     .put("model", profile.defaultModelId)
                     .put("stream", false)
