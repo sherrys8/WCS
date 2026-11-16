@@ -60,6 +60,7 @@ import dev.sherry.wcs.ui.utils.ShowComposeDialogScope
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.fs.KnownPaths
 import dev.sherry.wcs.utils.fs.asPath
+import dev.sherry.wcs.utils.WeLogger
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -77,6 +78,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
@@ -95,6 +97,7 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
     private const val PROMPT_KEY = "ai_image_prompt"
     private const val DEFAULT_PROMPT = "请用中文一句话概括这个图片/视频的主要内容，只输出概括结果。"
     private const val MAX_VIDEO_SIZE = 20L * 1024 * 1024
+    private const val TAG = "AiImageRecognition"
 
     override fun onEnable() {
         WeChatMessageContextMenuApi.addProvider(this)
@@ -320,14 +323,14 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
         val isVideo = message.type == MessageType.VIDEO || message.type == MessageType.MICRO_VIDEO
         try {
             if (isVideo) {
-                if (message.imagePath.isNullOrBlank()) throw IOException(videoMissing)
-                val videoPath = runInterruptible {
+                val rawPath = message.imagePath
+                WeLogger.i(TAG, "视频识别: imagePath=$rawPath")
+                if (rawPath.isNullOrBlank()) throw IOException(videoMissing)
+                val restored = runInterruptible {
                     WeServiceApi.getVideoMp4PathFromMsgInfo(message)
                 }
-                val video = videoPath.asPath
-                if (!video.toFile().isFile || video.fileSize() <= 0L) {
-                    throw IOException(videoMissing)
-                }
+                WeLogger.i(TAG, "视频识别: restoreMp4Path=$restored")
+                val video = resolveVideoFile(restored, rawPath, videoMissing)
                 if (video.fileSize() > MAX_VIDEO_SIZE) {
                     throw IOException(videoTooLarge)
                 }
@@ -353,6 +356,27 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
             requestRecognition(profile, instruction, dataUri, emptyResult)
         } finally {
             temporary.toFile().delete()
+        }
+    }
+
+    private suspend fun resolveVideoFile(restored: String, rawPath: String, missing: String): Path {
+        val deadline = SystemClock.elapsedRealtime() + 15_000L
+        val candidates = linkedSetOf(restored, rawPath, "$rawPath.mp4")
+        while (true) {
+            for (candidate in candidates) {
+                val path = candidate.asPath
+                val file = path.toFile()
+                if (file.isFile && file.length() > 0L) {
+                    WeLogger.i(TAG, "视频识别: 采用 $candidate (${file.length()} bytes)")
+                    return path
+                }
+            }
+            currentCoroutineContext().ensureActive()
+            if (SystemClock.elapsedRealtime() >= deadline) {
+                WeLogger.w(TAG, "视频识别: 等待落盘超时, candidates=$candidates")
+                throw IOException(missing)
+            }
+            delay(200L)
         }
     }
 
