@@ -5,6 +5,11 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Movie
+import android.graphics.Paint
+import android.graphics.Rect
 import android.os.SystemClock
 import android.util.Base64
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +39,7 @@ import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Auto_awesome
 import dev.sherry.wcs.R
 import dev.sherry.wcs.features.api.core.WeMessageApi
+import dev.sherry.wcs.features.api.core.models.MessageInfo
 import dev.sherry.wcs.features.api.core.models.MessageType
 import dev.sherry.wcs.features.api.ui.WeChatMessageContextMenuApi
 import dev.sherry.wcs.features.core.FeatureCategoryIds
@@ -54,6 +60,8 @@ import java.net.URL
 import java.nio.file.Path
 import java.util.UUID
 import kotlin.io.path.div
+import kotlin.io.path.fileSize
+import kotlin.io.path.readBytes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -91,17 +99,18 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
             text = localizedChatString(R.string.ai_image_name),
             drawable = ReplyIcon,
             imageVector = MaterialSymbols.Outlined.Auto_awesome,
-            isSupported = { it.type == MessageType.IMAGE },
+            isSupported = { it.type == MessageType.IMAGE || it.type?.isSticker == true },
             multiSelect = WeChatMessageContextMenuApi.MultiSelectSupport.Unsupported,
         ) { _, chattingContext, message ->
             showComposeDialog(chattingContext.activity) {
-                RecognitionDialog(message.serverId, message.talker)
+                RecognitionDialog(message)
             }
         },
     )
 
     @Composable
-    private fun ShowComposeDialogScope.RecognitionDialog(serverId: Long, talker: String) {
+    private fun ShowComposeDialogScope.RecognitionDialog(message: MessageInfo) {
+        val talker = message.talker
         val platformContext = LocalContext.current
         val localizedContext = LocalWcSLocalizedContext.current
         val scope = rememberCoroutineScope()
@@ -115,6 +124,8 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
         val prompt = stringResource(R.string.ai_image_prompt)
         val needConfig = stringResource(R.string.ai_image_need_config)
         val emptyResult = stringResource(R.string.ai_image_empty)
+        val animationPrompt = stringResource(R.string.ai_image_animation_prompt)
+        val unsupportedAnimation = stringResource(R.string.ai_image_animation_unsupported)
 
         AlertDialogContent(
             title = { Text(stringResource(R.string.ai_image_name)) },
@@ -158,7 +169,10 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                                 result = ""
                                 job = scope.launch {
                                     try {
-                                        result = recognize(serverId, snapshot, prompt, emptyResult)
+                                        result = recognize(
+                                            message, snapshot, prompt, emptyResult,
+                                            animationPrompt, unsupportedAnimation,
+                                        )
                                     } catch (e: CancellationException) {
                                         throw e
                                     } catch (e: Exception) {
@@ -254,26 +268,202 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
     }
 
     private suspend fun recognize(
-        serverId: Long,
+        message: MessageInfo,
         profile: ApiProfile,
         prompt: String,
         emptyResult: String,
+        animationPrompt: String,
+        unsupportedAnimation: String,
     ): String = withContext(Dispatchers.IO) {
         val temporary = KnownPaths.moduleCache / "ai-image-${UUID.randomUUID()}.tmp"
         try {
             val media = runInterruptible {
-                WeMessageApi.materializeNotificationLargeImage(
-                    serverId, temporary, SystemClock.elapsedRealtime() + 120_000L,
-                )
+                val deadline = SystemClock.elapsedRealtime() + 120_000L
+                if (message.type?.isSticker == true) {
+                    val md5 = message.stickerMd5 ?: throw IOException(emptyResult)
+                    WeMessageApi.materializeNotificationSticker(md5, temporary, deadline, wait = true)
+                } else {
+                    WeMessageApi.materializeNotificationLargeImage(message.serverId, temporary, deadline)
+                }
             } ?: throw IOException(emptyResult)
             currentCoroutineContext().ensureActive()
-            val dataUri = encodeImage(media.path, emptyResult)
+            val animation = encodeAnimation(media.path, emptyResult, unsupportedAnimation)
+            val dataUri = animation ?: encodeImage(media.path, emptyResult)
             currentCoroutineContext().ensureActive()
-            requestRecognition(profile, prompt, dataUri, emptyResult)
+            val instruction = if (animation == null) prompt else "$prompt\n$animationPrompt"
+            requestRecognition(profile, instruction, dataUri, emptyResult)
         } finally {
             temporary.toFile().delete()
         }
     }
+
+    @Suppress("DEPRECATION")
+    private suspend fun encodeAnimation(path: Path, emptyResult: String, unsupported: String): String? {
+        val header = ByteArray(12)
+        val size = path.toFile().inputStream().use { it.read(header) }
+        val signature = if (size >= 6) String(header, 0, 6, Charsets.US_ASCII) else ""
+        val gif = signature == "GIF87a" || signature == "GIF89a"
+        val png = size >= 8 && header.take(8) ==
+            listOf(0x89.toByte(), 0x50.toByte(), 0x4e.toByte(), 0x47.toByte(),
+                0x0d.toByte(), 0x0a.toByte(), 0x1a.toByte(), 0x0a.toByte())
+        val webp = size >= 12 && String(header, 0, 4, Charsets.US_ASCII) == "RIFF" &&
+            String(header, 8, 4, Charsets.US_ASCII) == "WEBP"
+        if (!gif && !png && !webp) return null
+        if (path.fileSize() > 20L * 1024 * 1024) throw IOException(unsupported)
+        val bytes = path.readBytes()
+        if (!gif) {
+            var offset = if (png) 8 else 12
+            while (offset + 8 <= bytes.size) {
+                val typeOffset = if (png) offset + 4 else offset
+                val type = String(bytes, typeOffset, 4, Charsets.US_ASCII)
+                if (type == "acTL" || type == "ANIM" || type == "ANMF") throw IOException(unsupported)
+                val length = if (png) {
+                    (0..3).fold(0L) { value, index ->
+                        (value shl 8) or (bytes[offset + index].toLong() and 255)
+                    }
+                } else {
+                    (0..3).fold(0L) { value, index ->
+                        value or ((bytes[offset + 4 + index].toLong() and 255) shl (index * 8))
+                    }
+                }
+                val next = offset.toLong() + 8 + length + if (png) 4 else length % 2
+                if (next > bytes.size || next <= offset) throw IOException(emptyResult)
+                offset = next.toInt()
+            }
+            return null
+        }
+        val timeline = gifFrameTimes(bytes, emptyResult)
+        if (timeline.isEmpty()) throw IOException(emptyResult)
+        if (timeline.size == 1) return null
+        val movie = Movie.decodeByteArray(bytes, 0, bytes.size) ?: throw IOException(unsupported)
+        if (movie.width() <= 0 || movie.height() <= 0 || movie.duration() <= 0) {
+            throw IOException(unsupported)
+        }
+        val total = timeline.last().second
+        val indices = if (timeline.size <= 6) timeline.indices.toList() else {
+            (0 until 6).map { sample ->
+                val time = (total - 1) * sample / 5
+                timeline.indexOfFirst { time < it.second }
+            }.distinct()
+        }
+        val scale = minOf(1.0, 960.0 / maxOf(movie.width(), movie.height()))
+        val width = (movie.width() * scale).toInt().coerceAtLeast(1)
+        val height = (movie.height() * scale).toInt().coerceAtLeast(1)
+        val frames = mutableListOf<Bitmap>()
+        try {
+            for (index in indices) {
+                currentCoroutineContext().ensureActive()
+                val frame = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                try {
+                    val canvas = Canvas(frame)
+                    canvas.drawColor(Color.WHITE)
+                    canvas.scale(scale.toFloat(), scale.toFloat())
+                    val midpoint = (timeline[index].first + timeline[index].second) / 2
+                    val time = midpoint * movie.duration() / total
+                    movie.setTime(time.toInt())
+                    movie.draw(canvas, 0f, 0f)
+                    if (frames.any { it.sameAs(frame) }) frame.recycle() else frames.add(frame)
+                } catch (error: Throwable) {
+                    frame.recycle()
+                    throw error
+                }
+            }
+            val columns = minOf(2, frames.size)
+            val sheet = Bitmap.createBitmap(
+                columns * 480, ((frames.size + 1) / 2) * 512, Bitmap.Config.ARGB_8888,
+            )
+            try {
+                val canvas = Canvas(sheet)
+                canvas.drawColor(Color.WHITE)
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                    color = Color.BLACK
+                    textSize = 24f
+                }
+                frames.forEachIndexed { index, frame ->
+                    val x = index % 2 * 480
+                    val y = index / 2 * 512
+                    canvas.drawText("${index + 1}", x + 12f, y + 26f, paint)
+                    val ratio = minOf(464.0 / width, 464.0 / height)
+                    val w = (width * ratio).toInt().coerceAtLeast(1)
+                    val h = (height * ratio).toInt().coerceAtLeast(1)
+                    val left = x + (480 - w) / 2
+                    val top = y + 32 + (480 - h) / 2
+                    canvas.drawBitmap(frame, null, Rect(left, top, left + w, top + h), paint)
+                }
+                return encodeBitmap(sheet, emptyResult)
+            } finally {
+                sheet.recycle()
+            }
+        } finally {
+            frames.forEach { it.recycle() }
+        }
+    }
+
+    private fun gifFrameTimes(bytes: ByteArray, emptyResult: String): List<Pair<Long, Long>> {
+        var offset = 6
+        fun readByte(): Int {
+            if (offset >= bytes.size) throw IOException(emptyResult)
+            return bytes[offset++].toInt() and 255
+        }
+        fun readShort(): Int = readByte() or (readByte() shl 8)
+        fun skip(length: Int) {
+            if (length < 0 || length > bytes.size - offset) throw IOException(emptyResult)
+            offset += length
+        }
+        fun skipBlocks() {
+            while (true) {
+                val length = readByte()
+                if (length == 0) return
+                skip(length)
+            }
+        }
+        val width = readShort()
+        val height = readShort()
+        if (width <= 0 || height <= 0 || width.toLong() * height > 16_000_000L) {
+            throw IOException(emptyResult)
+        }
+        val packed = readByte()
+        skip(2)
+        if (packed and 128 != 0) skip(3 * (1 shl ((packed and 7) + 1)))
+        val frames = mutableListOf<Pair<Long, Long>>()
+        var time = 0L
+        var delay = 100L
+        while (true) {
+            when (readByte()) {
+                0x3b -> return frames
+                0x21 -> {
+                    if (readByte() == 0xf9) {
+                        if (readByte() != 4) throw IOException(emptyResult)
+                        readByte()
+                        val ticks = readShort()
+                        delay = if (ticks < 2) 100L else ticks * 10L
+                        readByte()
+                        if (readByte() != 0) throw IOException(emptyResult)
+                    } else skipBlocks()
+                }
+                0x2c -> {
+                    skip(8)
+                    val flags = readByte()
+                    if (flags and 128 != 0) skip(3 * (1 shl ((flags and 7) + 1)))
+                    readByte()
+                    skipBlocks()
+                    if (frames.size >= 10_000 || time + delay > Int.MAX_VALUE) {
+                        throw IOException(emptyResult)
+                    }
+                    frames.add(time to time + delay)
+                    time += delay
+                    delay = 100L
+                }
+                else -> throw IOException(emptyResult)
+            }
+        }
+    }
+
+    private fun encodeBitmap(bitmap: Bitmap, emptyResult: String): String =
+        ByteArrayOutputStream().use { output ->
+            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 85, output)) throw IOException(emptyResult)
+            "data:image/jpeg;base64," + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+        }
 
     private fun encodeImage(path: Path, emptyResult: String): String {
         val filename = path.toString()
@@ -296,9 +486,14 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                     (bitmap.height * scale).toInt().coerceAtLeast(1), true,
                 ).also { scaled = it }
             } else bitmap
-            return ByteArrayOutputStream().use { output ->
-                if (!image.compress(Bitmap.CompressFormat.JPEG, 85, output)) throw IOException(emptyResult)
-                "data:image/jpeg;base64," + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+            val opaque = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888)
+            try {
+                val canvas = Canvas(opaque)
+                canvas.drawColor(Color.WHITE)
+                canvas.drawBitmap(image, 0f, 0f, null)
+                return encodeBitmap(opaque, emptyResult)
+            } finally {
+                opaque.recycle()
             }
         } finally {
             scaled?.takeIf { it !== bitmap }?.recycle()

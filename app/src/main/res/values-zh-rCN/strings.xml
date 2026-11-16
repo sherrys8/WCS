@@ -4688,7 +4688,9 @@
     <string name="qq_music_order_reply_both_failed">音乐卡片和歌曲语音发送失败</string>
     <string name="qq_music_order_lyric_none">暂无歌词</string>
     <string name="ai_image_name">AI识图</string>
-    <string name="ai_image_description">长按图片消息，使用视觉模型识别内容，可复制或发送识别结果</string>
+    <string name="ai_image_description">长按图片或表情消息，使用视觉模型识别内容，可复制或发送识别结果</string>
+    <string name="ai_image_animation_prompt">这是一张从动态表情中抽取最多六幅不同画面组成的分镜图，按时间顺序从左到右、从上到下编号。请结合这些画面描述文字、动作及表达的情绪，只根据抽取画面判断，并明确说明这是根据抽取画面的判断，可能遗漏短暂变化。编号仅为帧标记，不属于表情原文。</string>
+    <string name="ai_image_animation_unsupported">当前动画的格式、大小或时长无法可靠抽帧，已停止识别，避免仅用首帧描述整个动画。</string>
     <string name="ai_image_profile">视觉模型配置</string>
     <string name="ai_image_start">开始识别</string>
     <string name="ai_image_loading">正在识别图片…</string>
