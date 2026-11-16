@@ -100,6 +100,7 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
     // 另外整包还要过一次内存, 这里压到 10 MB。
     private const val MAX_VIDEO_SIZE = 10L * 1024 * 1024
     private const val VIDEO_WAIT_TIMEOUT_MS = 15_000L
+    private const val VIDEO_REQUEST_SUFFIX = "\"}}]}]}"
     private const val TAG = "AiImageRecognition"
 
     override fun onEnable() {
@@ -217,9 +218,15 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                                             videoMissing, videoTooLarge,
                                             animationPrompt, unsupportedAnimation,
                                         )
+                                        WeLogger.i(TAG, "识别完成: model=${snapshot.defaultModelId}, ${result.length} 字")
                                     } catch (e: CancellationException) {
                                         throw e
                                     } catch (e: Exception) {
+                                        WeLogger.w(
+                                            TAG,
+                                            "识别失败: model=${snapshot.defaultModelId}, message=${message.type}",
+                                            e,
+                                        )
                                         failed = true
                                         feedback = localizedContext.getString(
                                             R.string.ai_image_failed,
@@ -741,7 +748,17 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                 }
                 val video = videoPath
                 if (video != null) {
-                    writeVideoRequest(connection.outputStream.buffered(), profile.defaultModelId, prompt, video)
+                    val prefix = videoRequestPrefix(profile.defaultModelId, prompt)
+                    val bodyLength = prefix.toByteArray(Charsets.UTF_8).size.toLong() +
+                        base64Length(video.fileSize()) +
+                        VIDEO_REQUEST_SUFFIX.toByteArray(Charsets.UTF_8).size
+                    // 固定长度上传: 避免 chunked, 也让服务端能判断请求体是否完整
+                    connection.setFixedLengthStreamingMode(bodyLength)
+                    // 必须 use 关掉缓冲流, 否则最后一块连同结尾的 JSON 都发不出去, 服务端报
+                    // "JSON parse error: Unexpected end-of-input"
+                    connection.outputStream.buffered().use { output ->
+                        writeVideoRequest(output, prefix, video)
+                    }
                 } else {
                     val image = imageDataUri ?: throw IOException(emptyResult)
                     val content = JSONArray().put(JSONObject().put("type", "text").put("text", prompt))
@@ -784,11 +801,7 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
      * 流式写视频请求体。base64 分块输出, 避免把整段 mp4 读进内存再拼成字符串
      * (readBytes + encodeToString 会同时压着原始字节、编码串和最终 JSON 串)。
      */
-    private fun writeVideoRequest(output: OutputStream, model: String, prompt: String, video: Path) {
-        val prefix = "{\"model\":" + JSONObject.quote(model) +
-            ",\"stream\":false,\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":" +
-            JSONObject.quote(prompt) +
-            "},{\"type\":\"video_url\",\"video_url\":{\"url\":\"data:video/mp4;base64,"
+    private fun writeVideoRequest(output: OutputStream, prefix: String, video: Path) {
         output.write(prefix.toByteArray(Charsets.UTF_8))
         video.toFile().inputStream().use { input ->
             // 12 KiB 是 3 的倍数, 保证块边界落在 base64 的 3 字节组上, 中间块无需填充
@@ -809,6 +822,17 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                 output.write(Base64.encodeToString(chunk, 0, length, flags).toByteArray(Charsets.US_ASCII))
             }
         }
-        output.write("\"}}]}]}".toByteArray(Charsets.UTF_8))
+        output.write(VIDEO_REQUEST_SUFFIX.toByteArray(Charsets.UTF_8))
+        output.flush()
     }
+
+    /** 视频请求体的 JSON 前缀, 后面紧跟 base64, 再接 [VIDEO_REQUEST_SUFFIX] */
+    private fun videoRequestPrefix(model: String, prompt: String): String =
+        "{\"model\":" + JSONObject.quote(model) +
+            ",\"stream\":false,\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":" +
+            JSONObject.quote(prompt) +
+            "},{\"type\":\"video_url\",\"video_url\":{\"url\":\"data:video/mp4;base64,"
+
+    /** 不换行的标准 base64 长度 */
+    private fun base64Length(size: Long): Long = ((size + 2) / 3) * 4
 }
