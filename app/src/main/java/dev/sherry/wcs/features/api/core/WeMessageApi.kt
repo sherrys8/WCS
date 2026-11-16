@@ -2301,6 +2301,112 @@ object WeMessageApi : ApiFeature(), IResolveDex {
         return materializeImageBytes(sourceBytes, destination, deadlineElapsedRealtime)
     }
 
+    /** 视频落地结果 */
+    sealed interface VideoSource {
+        /** path 已经是可以直接读的本地文件 */
+        class Ready(val path: Path) : VideoSource
+
+        /** 文件在, 但超过调用方给的上限 */
+        object TooLarge : VideoSource
+
+        /** 磁盘上没有, VFS 里也取不到 */
+        object Missing : VideoSource
+    }
+
+    /**
+     * 把视频消息的 mp4 解析成可读文件。
+     *
+     * 消息里带的通常是外部存储镜像路径 (`…/MicroMsg/<hash>/video/xx/yy/<name>.mp4`), 真机上并不存在;
+     * 真文件在账号目录 (`…/MicroMsg/<32位hash>/video/xx/yy/<name>.mp4`)。依次尝试:
+     * 原路径直读 → 镜像路径映射到账号目录直读 → 走微信 VFS 流式拷到 destination。
+     *
+     * 等待下载落盘由调用方按 deadline 轮询本函数实现 (缺文件时本函数不阻塞)。
+     */
+    fun materializeVideoSource(rawPath: String, destination: Path, maxBytes: Long): VideoSource {
+        val candidates = videoPathCandidates(rawPath)
+        for (candidate in candidates) {
+            val file = File(candidate)
+            if (!file.isFile || file.length() <= 0L) continue
+            if (file.length() > maxBytes) return VideoSource.TooLarge
+            WeLogger.i(TAG, "video source: $candidate (${file.length()} bytes)")
+            return VideoSource.Ready(file.toPath())
+        }
+        for (candidate in candidates) {
+            val result = copyVideoFromVfs(candidate, destination, maxBytes)
+            if (result != null) return result
+        }
+        return VideoSource.Missing
+    }
+
+    /** 原路径 + 映射到账号目录后的路径 (去重保序) */
+    private fun videoPathCandidates(rawPath: String): List<String> {
+        val candidates = linkedSetOf(rawPath)
+        val account = runCatching { accountDirectory() }.getOrNull()
+        val marker = "/MicroMsg/"
+        val index = rawPath.indexOf(marker)
+        if (account != null && index >= 0) {
+            // …/MicroMsg/<任意hash>/video/xx/yy/<name>.mp4 → <账号目录>/video/xx/yy/<name>.mp4
+            val rest = rawPath.substring(index + marker.length)
+            val slash = rest.indexOf('/')
+            if (slash > 0 && slash < rest.lastIndex) {
+                val relative = rest.substring(slash + 1)
+                runCatching { (account / relative).absolutePathString() }.getOrNull()?.let { candidates += it }
+            }
+        }
+        return candidates.toList()
+    }
+
+    /** files/MicroMsg/<32 位 hash> 里最近修改的账号目录 */
+    private fun accountDirectory(): Path? =
+        (HostInfo.application.filesDir.asPath.parent / "MicroMsg").listDirectoryEntries()
+            .filter { it.isDirectory() && it.fileName.toString().length == 32 }
+            .maxByOrNull { it.getLastModifiedTime().toMillis() }
+
+    /**
+     * 用微信 VFS 读流拷到 destination。
+     * @return Ready=已落盘, TooLarge=超限, null=VFS 里没有这个文件
+     */
+    private fun copyVideoFromVfs(source: String, destination: Path, maxBytes: Long): VideoSource? {
+        val input = runCatching {
+            vfsReadMethod.invoke(null, source) as? InputStream
+        }.getOrNull() ?: return null
+        var copied = 0L
+        var tooLarge = false
+        try {
+            destination.toFile().parentFile?.mkdirs()
+            input.use { stream ->
+                destination.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val read = stream.read(buffer)
+                        if (read < 0) break
+                        copied += read
+                        if (copied > maxBytes) {
+                            tooLarge = true
+                            break
+                        }
+                        output.write(buffer, 0, read)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            WeLogger.w(TAG, "video vfs copy failed: $source", e)
+            destination.deleteIfExists()
+            return null
+        }
+        if (tooLarge) {
+            destination.deleteIfExists()
+            return VideoSource.TooLarge
+        }
+        val written = runCatching { destination.fileSize() }.getOrDefault(0L)
+        if (copied <= 0L || written != copied) {
+            WeLogger.w(TAG, "video vfs copy incomplete: $source copied=$copied written=$written")
+            destination.deleteIfExists()
+            return null
+        }
+        return VideoSource.Ready(destination)
+    }
+
     /**
      * 解析 ImgInfo2 行对应的、已真正落地到 image2/ 的大图文件。
      * 微信可能把大图存为 bigImgPath / hevcPath / midImgPath 其中之一 (原图/HEVC 场景),

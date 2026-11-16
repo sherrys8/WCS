@@ -59,10 +59,10 @@ import dev.sherry.wcs.ui.utils.ReplyIcon
 import dev.sherry.wcs.ui.utils.ShowComposeDialogScope
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.fs.KnownPaths
-import dev.sherry.wcs.utils.fs.asPath
 import dev.sherry.wcs.utils.WeLogger
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Path
@@ -96,7 +96,10 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
     private const val PROFILE_KEY = "ai_image_profile_id"
     private const val PROMPT_KEY = "ai_image_prompt"
     private const val DEFAULT_PROMPT = "请用中文一句话概括这个图片/视频的主要内容，只输出概括结果。"
-    private const val MAX_VIDEO_SIZE = 20L * 1024 * 1024
+    // base64 后请求体会膨胀约 4/3, 20 MB 的视频会顶到 ~27 MB, 多数网关直接拒;
+    // 另外整包还要过一次内存, 这里压到 10 MB。
+    private const val MAX_VIDEO_SIZE = 10L * 1024 * 1024
+    private const val VIDEO_WAIT_TIMEOUT_MS = 15_000L
     private const val TAG = "AiImageRecognition"
 
     override fun onEnable() {
@@ -320,20 +323,24 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
     ): String = withContext(Dispatchers.IO) {
         val cacheDirectory = (KnownPaths.moduleCache / "ai-image-recognition").createDirectories()
         val temporary = cacheDirectory / "media-${UUID.randomUUID()}.tmp"
+        val videoCache = cacheDirectory / "video-${UUID.randomUUID()}.mp4"
         val isVideo = message.type == MessageType.VIDEO || message.type == MessageType.MICRO_VIDEO
         try {
             if (isVideo) {
                 val rawPath = message.imagePath
                 WeLogger.i(TAG, "视频识别: imagePath=$rawPath")
                 if (rawPath.isNullOrBlank()) throw IOException(videoMissing)
-                val restored = runInterruptible {
-                    WeServiceApi.getVideoMp4PathFromMsgInfo(message)
+                val restored = try {
+                    runInterruptible { WeServiceApi.getVideoMp4PathFromMsgInfo(message) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // 还原失败不影响后面按镜像路径/VFS 兜底
+                    WeLogger.w(TAG, "视频识别: 还原 mp4 路径失败", e)
+                    ""
                 }
                 WeLogger.i(TAG, "视频识别: restoreMp4Path=$restored")
-                val video = resolveVideoFile(restored, rawPath, videoMissing)
-                if (video.fileSize() > MAX_VIDEO_SIZE) {
-                    throw IOException(videoTooLarge)
-                }
+                val video = awaitVideoSource(restored, rawPath, videoCache, videoMissing, videoTooLarge)
                 currentCoroutineContext().ensureActive()
                 return@withContext requestRecognition(
                     profile, prompt, null, emptyResult, videoPath = video,
@@ -356,24 +363,37 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
             requestRecognition(profile, instruction, dataUri, emptyResult)
         } finally {
             temporary.toFile().delete()
+            videoCache.toFile().delete()
         }
     }
 
-    private suspend fun resolveVideoFile(restored: String, rawPath: String, missing: String): Path {
-        val deadline = SystemClock.elapsedRealtime() + 15_000L
-        val candidates = linkedSetOf(restored, rawPath, "$rawPath.mp4")
+    /**
+     * 等到视频文件可用。微信给的镜像路径和真文件位置常常不同,
+     * 具体解析交给 [WeMessageApi.materializeVideoSource], 这里只负责按 deadline 轮询。
+     */
+    private suspend fun awaitVideoSource(
+        restored: String,
+        rawPath: String,
+        destination: Path,
+        missing: String,
+        tooLarge: String,
+    ): Path {
+        val deadline = SystemClock.elapsedRealtime() + VIDEO_WAIT_TIMEOUT_MS
+        val searched = linkedSetOf(restored, rawPath, "$rawPath.mp4").filter { it.isNotBlank() }
         while (true) {
-            for (candidate in candidates) {
-                val path = candidate.asPath
-                val file = path.toFile()
-                if (file.isFile && file.length() > 0L) {
-                    WeLogger.i(TAG, "视频识别: 采用 $candidate (${file.length()} bytes)")
-                    return path
+            for (candidate in searched) {
+                when (val result = WeMessageApi.materializeVideoSource(candidate, destination, MAX_VIDEO_SIZE)) {
+                    is WeMessageApi.VideoSource.Ready -> {
+                        WeLogger.i(TAG, "视频识别: 采用 ${result.path} (${result.path.fileSize()} bytes)")
+                        return result.path
+                    }
+                    WeMessageApi.VideoSource.TooLarge -> throw IOException(tooLarge)
+                    WeMessageApi.VideoSource.Missing -> Unit
                 }
             }
             currentCoroutineContext().ensureActive()
             if (SystemClock.elapsedRealtime() >= deadline) {
-                WeLogger.w(TAG, "视频识别: 等待落盘超时, candidates=$candidates")
+                WeLogger.w(TAG, "视频识别: 未找到视频文件, searched=$searched")
                 throw IOException(missing)
             }
             delay(200L)
@@ -719,23 +739,21 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                     setRequestProperty("Authorization", "Bearer ${profile.apiKey}")
                     setRequestProperty("Content-Type", "application/json")
                 }
-                val content = JSONArray().put(JSONObject().put("type", "text").put("text", prompt))
                 val video = videoPath
                 if (video != null) {
-                    val encoded = Base64.encodeToString(video.readBytes(), Base64.NO_WRAP)
-                    content.put(JSONObject().put("type", "video_url")
-                        .put("video_url", JSONObject().put("url", "data:video/mp4;base64,$encoded")))
+                    writeVideoRequest(connection.outputStream.buffered(), profile.defaultModelId, prompt, video)
                 } else {
                     val image = imageDataUri ?: throw IOException(emptyResult)
-                    content.put(JSONObject().put("type", "image_url")
-                        .put("image_url", JSONObject().put("url", image)))
+                    val content = JSONArray().put(JSONObject().put("type", "text").put("text", prompt))
+                        .put(JSONObject().put("type", "image_url")
+                            .put("image_url", JSONObject().put("url", image)))
+                    val body = JSONObject()
+                        .put("model", profile.defaultModelId)
+                        .put("stream", false)
+                        .put("messages", JSONArray().put(JSONObject()
+                            .put("role", "user").put("content", content)))
+                    connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
                 }
-                val body = JSONObject()
-                    .put("model", profile.defaultModelId)
-                    .put("stream", false)
-                    .put("messages", JSONArray().put(JSONObject()
-                        .put("role", "user").put("content", content)))
-                connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
                 val status = connection.responseCode
                 if (status !in 200..299) {
                     val detail = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { reader ->
@@ -760,5 +778,37 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
             cancellation.cancel()
             connection.disconnect()
         }
+    }
+
+    /**
+     * 流式写视频请求体。base64 分块输出, 避免把整段 mp4 读进内存再拼成字符串
+     * (readBytes + encodeToString 会同时压着原始字节、编码串和最终 JSON 串)。
+     */
+    private fun writeVideoRequest(output: OutputStream, model: String, prompt: String, video: Path) {
+        val prefix = "{\"model\":" + JSONObject.quote(model) +
+            ",\"stream\":false,\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":" +
+            JSONObject.quote(prompt) +
+            "},{\"type\":\"video_url\",\"video_url\":{\"url\":\"data:video/mp4;base64,"
+        output.write(prefix.toByteArray(Charsets.UTF_8))
+        video.toFile().inputStream().use { input ->
+            // 12 KiB 是 3 的倍数, 保证块边界落在 base64 的 3 字节组上, 中间块无需填充
+            val chunk = ByteArray(12 * 1024)
+            while (true) {
+                var length = 0
+                while (length < chunk.size) {
+                    val read = input.read(chunk, length, chunk.size - length)
+                    if (read < 0) break
+                    length += read
+                }
+                if (length == 0) break
+                val flags = if (length == chunk.size) {
+                    Base64.NO_WRAP or Base64.NO_PADDING
+                } else {
+                    Base64.NO_WRAP
+                }
+                output.write(Base64.encodeToString(chunk, 0, length, flags).toByteArray(Charsets.US_ASCII))
+            }
+        }
+        output.write("\"}}]}]}".toByteArray(Charsets.UTF_8))
     }
 }
