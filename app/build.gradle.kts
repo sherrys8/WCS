@@ -330,6 +330,8 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
     implementation(libs.coil.network.okhttp)
+    implementation(libs.apng4android.apng)
+    implementation(libs.apng4android.awebp)
 
     implementation(libs.composablehorizons.material.symbols.filled)
     implementation(libs.composablehorizons.material.symbols.outlined)

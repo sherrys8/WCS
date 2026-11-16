@@ -37,6 +37,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Auto_awesome
+import com.github.penfeizhou.animation.apng.decode.APNGDecoder
+import com.github.penfeizhou.animation.decode.FrameSeqDecoder
+import com.github.penfeizhou.animation.loader.FileLoader
+import com.github.penfeizhou.animation.webp.decode.WebPDecoder
 import dev.sherry.wcs.R
 import dev.sherry.wcs.features.api.core.WeMessageApi
 import dev.sherry.wcs.features.api.core.models.MessageInfo
@@ -59,6 +63,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Path
 import java.util.UUID
+import kotlin.io.path.createDirectories
 import kotlin.io.path.div
 import kotlin.io.path.fileSize
 import kotlin.io.path.readBytes
@@ -275,7 +280,8 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
         animationPrompt: String,
         unsupportedAnimation: String,
     ): String = withContext(Dispatchers.IO) {
-        val temporary = KnownPaths.moduleCache / "ai-image-${UUID.randomUUID()}.tmp"
+        val cacheDirectory = (KnownPaths.moduleCache / "ai-image-recognition").createDirectories()
+        val temporary = cacheDirectory / "media-${UUID.randomUUID()}.tmp"
         try {
             val media = runInterruptible {
                 val deadline = SystemClock.elapsedRealtime() + 120_000L
@@ -311,12 +317,16 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
         if (!gif && !png && !webp) return null
         if (path.fileSize() > 20L * 1024 * 1024) throw IOException(unsupported)
         val bytes = path.readBytes()
+        var animated = false
+        val frameEnds = mutableListOf<Long>()
+        var animationDuration = 0L
         if (!gif) {
             var offset = if (png) 8 else 12
             while (offset + 8 <= bytes.size) {
+                currentCoroutineContext().ensureActive()
                 val typeOffset = if (png) offset + 4 else offset
                 val type = String(bytes, typeOffset, 4, Charsets.US_ASCII)
-                if (type == "acTL" || type == "ANIM" || type == "ANMF") throw IOException(unsupported)
+                if (type == "acTL" || type == "ANIM" || type == "ANMF") animated = true
                 val length = if (png) {
                     (0..3).fold(0L) { value, index ->
                         (value shl 8) or (bytes[offset + index].toLong() and 255)
@@ -328,9 +338,35 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                 }
                 val next = offset.toLong() + 8 + length + if (png) 4 else length % 2
                 if (next > bytes.size || next <= offset) throw IOException(emptyResult)
+                val duration = when {
+                    png && type == "fcTL" -> {
+                        if (length != 26L) throw IOException(emptyResult)
+                        val numerator = ((bytes[offset + 28].toInt() and 255) shl 8) or
+                            (bytes[offset + 29].toInt() and 255)
+                        val denominator = (((bytes[offset + 30].toInt() and 255) shl 8) or
+                            (bytes[offset + 31].toInt() and 255)).let { if (it == 0) 100 else it }
+                        (numerator * 1000L / denominator).coerceAtLeast(10L)
+                    }
+                    webp && type == "ANMF" -> {
+                        if (length < 16L) throw IOException(emptyResult)
+                        (0..2).fold(0L) { value, index ->
+                            value or ((bytes[offset + 20 + index].toLong() and 255) shl (index * 8))
+                        }.coerceAtLeast(10L)
+                    }
+                    else -> null
+                }
+                if (duration != null) {
+                    animationDuration += duration
+                    if (frameEnds.size >= 1000 || animationDuration > 600_000L) {
+                        throw IOException(unsupported)
+                    }
+                    frameEnds.add(animationDuration)
+                }
                 offset = next.toInt()
             }
-            return null
+            if (!animated) return null
+            if (frameEnds.isEmpty()) throw IOException(emptyResult)
+            return encodeFrameSequenceAnimation(path, png, frameEnds, emptyResult, unsupported)
         }
         val timeline = gifFrameTimes(bytes, emptyResult)
         if (timeline.isEmpty()) throw IOException(emptyResult)
@@ -368,32 +404,111 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                     throw error
                 }
             }
-            val columns = minOf(2, frames.size)
-            val sheet = Bitmap.createBitmap(
-                columns * 480, ((frames.size + 1) / 2) * 512, Bitmap.Config.ARGB_8888,
-            )
-            try {
-                val canvas = Canvas(sheet)
-                canvas.drawColor(Color.WHITE)
-                val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-                    color = Color.BLACK
-                    textSize = 24f
-                }
-                frames.forEachIndexed { index, frame ->
-                    val x = index % 2 * 480
-                    val y = index / 2 * 512
-                    canvas.drawText("${index + 1}", x + 12f, y + 26f, paint)
-                    val ratio = minOf(464.0 / width, 464.0 / height)
-                    val w = (width * ratio).toInt().coerceAtLeast(1)
-                    val h = (height * ratio).toInt().coerceAtLeast(1)
-                    val left = x + (480 - w) / 2
-                    val top = y + 32 + (480 - h) / 2
-                    canvas.drawBitmap(frame, null, Rect(left, top, left + w, top + h), paint)
-                }
-                return encodeBitmap(sheet, emptyResult)
-            } finally {
-                sheet.recycle()
+            return encodeStoryboard(frames, emptyResult)
+        } finally {
+            frames.forEach { it.recycle() }
+        }
+    }
+
+    private fun encodeStoryboard(frames: List<Bitmap>, emptyResult: String): String {
+        if (frames.isEmpty()) throw IOException(emptyResult)
+        val columns = minOf(2, frames.size)
+        val sheet = Bitmap.createBitmap(
+            columns * 480, ((frames.size + 1) / 2) * 512, Bitmap.Config.ARGB_8888,
+        )
+        try {
+            val canvas = Canvas(sheet)
+            canvas.drawColor(Color.WHITE)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                color = Color.BLACK
+                textSize = 24f
             }
+            frames.forEachIndexed { index, frame ->
+                val x = index % 2 * 480
+                val y = index / 2 * 512
+                canvas.drawText("${index + 1}", x + 12f, y + 26f, paint)
+                val ratio = minOf(464.0 / frame.width, 464.0 / frame.height)
+                val w = (frame.width * ratio).toInt().coerceAtLeast(1)
+                val h = (frame.height * ratio).toInt().coerceAtLeast(1)
+                val left = x + (480 - w) / 2
+                val top = y + 32 + (480 - h) / 2
+                canvas.drawBitmap(frame, null, Rect(left, top, left + w, top + h), paint)
+            }
+            return encodeBitmap(sheet, emptyResult)
+        } finally {
+            sheet.recycle()
+        }
+    }
+
+    private suspend fun encodeFrameSequenceAnimation(
+        path: Path,
+        png: Boolean,
+        ends: List<Long>,
+        emptyResult: String,
+        unsupported: String,
+    ): String {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path.toString(), bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
+            bounds.outWidth.toLong() * bounds.outHeight > 4_000_000L
+        ) throw IOException(unsupported)
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 960 &&
+            minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 1
+        ) sample *= 2
+        fun createDecoder(): FrameSeqDecoder<*, *> = if (png) {
+            object : APNGDecoder(FileLoader(path.toString()), null) {
+                init { sampleSize = sample }
+            }
+        } else {
+            object : WebPDecoder(FileLoader(path.toString()), null) {
+                init { sampleSize = sample }
+            }
+        }
+        val frames = mutableListOf<Bitmap>()
+        try {
+            val count = ends.size
+            val total = ends.last()
+            val indices = if (count <= 6) (0 until count).toList() else {
+                (0 until 6).map { sample ->
+                    val time = (total - 1) * sample / 5
+                    ends.indexOfFirst { time < it }
+                }.distinct()
+            }
+            val deadline = SystemClock.elapsedRealtime() + 30_000L
+            for (index in indices) {
+                currentCoroutineContext().ensureActive()
+                if (SystemClock.elapsedRealtime() >= deadline) throw IOException(unsupported)
+                val decoder = createDecoder()
+                val decoded = try {
+                    decoder.getFrameBitmap(index) ?: throw IOException(emptyResult)
+                } finally {
+                    decoder.stop()
+                }
+                try {
+                    currentCoroutineContext().ensureActive()
+                    if (SystemClock.elapsedRealtime() >= deadline) throw IOException(unsupported)
+                    val scale = minOf(1.0, 960.0 / maxOf(decoded.width, decoded.height))
+                    val frame = Bitmap.createBitmap(
+                        (decoded.width * scale).toInt().coerceAtLeast(1),
+                        (decoded.height * scale).toInt().coerceAtLeast(1),
+                        Bitmap.Config.ARGB_8888,
+                    )
+                    try {
+                        val canvas = Canvas(frame)
+                        canvas.drawColor(Color.WHITE)
+                        canvas.drawBitmap(decoded, null, Rect(0, 0, frame.width, frame.height),
+                            Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+                        if (frames.any { it.sameAs(frame) }) frame.recycle() else frames.add(frame)
+                    } catch (error: Throwable) {
+                        frame.recycle()
+                        throw error
+                    }
+                } finally {
+                    decoded.recycle()
+                }
+            }
+            return encodeStoryboard(frames, emptyResult)
         } finally {
             frames.forEach { it.recycle() }
         }

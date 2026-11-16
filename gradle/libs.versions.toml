@@ -1,6 +1,7 @@
 [versions]
 agp = "9.3.2"
 coil = "3.6.0"
+apng4android = "3.0.5"
 compose-bom = "2026.08.00"
 dexkit = "2.2.0"
 appcompat = "1.8.0"
@@ -105,6 +106,8 @@ coil = { module = "io.coil-kt.coil3:coil", version.ref = "coil" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-gif = { module = "io.coil-kt.coil3:coil-gif", version.ref = "coil" }
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
+apng4android-apng = { module = "com.github.penfeizhou.android.animation:apng", version.ref = "apng4android" }
+apng4android-awebp = { module = "com.github.penfeizhou.android.animation:awebp", version.ref = "apng4android" }
 
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junitJupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
