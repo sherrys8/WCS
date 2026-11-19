@@ -343,6 +343,9 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
         prompt: String,
         originalMessage: MessageInfo? = null,
         account: String = WeApi.selfWxId,
+        // 视频等本地文件的时长。手动识别可以慢慢等；自动回复有整批预算，
+        // 拿不到就该立刻放弃，所以由调用方压短。
+        videoWaitMs: Long = VIDEO_WAIT_TIMEOUT_MS,
         onStatus: (Int) -> Unit = {},
     ): String {
         check(profile.capability == CAP_VISION && profile.apiKey.isNotBlank() &&
@@ -367,7 +370,9 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                 localizedChatString(R.string.ai_image_video_too_large),
                 animationPrompt,
                 localizedChatString(R.string.ai_image_animation_unsupported),
-                originalMessage, onStatus,
+                originalMessage = originalMessage,
+                videoWaitMs = videoWaitMs,
+                onStatus = onStatus,
             )
         } ?: throw IOException(emptyResult)
     }
@@ -385,6 +390,8 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
         animationPrompt: String,
         unsupportedAnimation: String,
         originalMessage: MessageInfo? = null,
+        // 视频等本地文件的时长，默认沿用整段识别的上限。
+        videoWaitMs: Long = VIDEO_WAIT_TIMEOUT_MS,
         onStatus: (Int) -> Unit = {},
     ): String = withContext(Dispatchers.IO) {
         onStatus(R.string.ai_reply_media_preparing)
@@ -412,7 +419,9 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                     ""
                 }
                 WeLogger.i(TAG, "视频识别: restoreMp4Path=$restored")
-                val video = awaitVideoSource(restored, rawPath, videoCache, videoMissing, videoTooLarge)
+                val video = awaitVideoSource(
+                    restored, rawPath, videoCache, videoMissing, videoTooLarge, videoWaitMs,
+                )
                 currentCoroutineContext().ensureActive()
                 return@withContext requestRecognition(
                     profile, prompt, null, emptyResult, videoPath = video, onStatus = onStatus,
@@ -450,8 +459,9 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
         destination: Path,
         missing: String,
         tooLarge: String,
+        waitMs: Long,
     ): Path {
-        val deadline = SystemClock.elapsedRealtime() + VIDEO_WAIT_TIMEOUT_MS
+        val deadline = SystemClock.elapsedRealtime() + waitMs
         val searched = linkedSetOf(restored, rawPath, "$rawPath.mp4").filter { it.isNotBlank() }
         while (true) {
             for (candidate in searched) {

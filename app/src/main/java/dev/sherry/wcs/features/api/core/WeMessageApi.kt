@@ -2345,6 +2345,20 @@ object WeMessageApi : ApiFeature(), IResolveDex {
         return VideoSource.Missing
     }
 
+    /**
+     * 只看本地文件系统里有没有这个视频，**不做 VFS 拷贝**，所以是毫秒级。
+     *
+     * 自动回复据此决定要不要重试：文件已落盘时失败多半是网络/服务问题，值得重试；
+     * 还没落盘时重试也不会让文件凭空出现，只会把整批预算吃光。
+     */
+    fun isVideoLocallyAvailable(rawPath: String): Boolean {
+        if (rawPath.isBlank()) return false
+        return videoPathCandidates(rawPath).any { candidate ->
+            val file = File(candidate)
+            file.isFile && file.length() > 0L
+        }
+    }
+
     /** 原路径 + 映射到账号目录后的路径 (去重保序) */
     private fun videoPathCandidates(rawPath: String): List<String> {
         val candidates = linkedSetOf(rawPath)

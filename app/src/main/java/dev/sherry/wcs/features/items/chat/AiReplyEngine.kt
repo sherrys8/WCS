@@ -15,9 +15,17 @@ import dev.sherry.wcs.features.api.core.models.WeMessage
 import dev.sherry.wcs.utils.WeLogger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 生成引擎：把「一批待回复消息 + 一份设置快照」变成一条（或 N 条）回复正文。
@@ -32,6 +40,29 @@ object AiReplyEngine {
     private const val CONTEXT_WINDOW_MS = 7L * 24 * 3600 * 1000
     private const val MAX_CONTEXT_LINE_CHARS = 300
     private const val MAX_TARGET_CHARS = 300
+
+    /** 单条识别的重试次数。视觉/ASR 都是外部服务，偶发 5xx 与超时靠重试吃掉最划算。 */
+    private const val RECOGNIZE_ATTEMPTS = 3
+    private const val RECOGNIZE_RETRY_DELAY_MS = 700L
+
+    /** 单次识别上限：超过就当作这一条失败，不能让一条卡住整批。 */
+    private const val RECOGNIZE_TIMEOUT_MS = 12_000L
+
+    /** 历史媒体并发度。串行时 3 条媒体能拖到几分钟，并发后只受最慢那条约束。 */
+    private const val HISTORY_CONCURRENCY = 3
+
+    /** 从开始生成到产出正文的总预算。聊天的时效性过了这个点就没意义。 */
+    private const val GENERATE_TIMEOUT_MS = 60_000L
+
+    /**
+     * 自动回复里的视频：等本地文件 3s、单次识别 8s，**不重试**。
+     *
+     * 视频没下载时文件根本不存在，重试三次也不会出现，却会按 3×12s 的节奏把整批
+     * 预算吃光，连带同批的纯文字也回不出去。所以这里单独给一套短预算，拿不到就
+     * 打占位符，让文字照常发。
+     */
+    private const val AUTO_VIDEO_WAIT_MS = 3_000L
+    private const val AUTO_VIDEO_RECOGNIZE_TIMEOUT_MS = 8_000L
 
     /** 一条待回复的消息，已脱离宿主对象生命周期。 */
     data class Target(
@@ -144,17 +175,24 @@ object AiReplyEngine {
 
             ensureValid()
             val targetLines = StringBuilder()
+            // 单条媒体认不出来不该让整批哑掉：留占位符继续，只有全部目标都没内容才放弃。
+            val failedPlaceholder = localizedChatString(R.string.ai_reply_media_failed)
+            var usable = 0
             for (target in request.targets) {
                 currentCoroutineContext().ensureActive()
+                val label = labelOf(target.type)
+                var counted = true
                 val body = when {
                     target.type == MessageType.VOICE -> {
                         onProgress(Progress("asr", localizedChatString(R.string.ai_reply_voice_transcribing)))
                         val text = voiceText(target, settings.account)
                         if (text.isNullOrBlank()) {
-                            failures += Failure("asr", "asr_failed")
-                            continue
+                            counted = false
+                            mediaFailed++
+                            "[语音：$failedPlaceholder]"
+                        } else {
+                            "[语音] $text"
                         }
-                        "[语音] $text"
                     }
 
                     isVisual(target.type) -> {
@@ -163,20 +201,25 @@ object AiReplyEngine {
                             .onFailure { if (it is CancellationException) throw it }
                             .getOrNull()
                         if (analyzed.isNullOrBlank()) {
-                            failures += Failure("vision", "media_failed")
+                            counted = false
                             mediaFailed++
-                            continue
+                            "[$label：$failedPlaceholder]"
+                        } else {
+                            "[$label 分析] $analyzed"
                         }
-                        "[${labelOf(target.type)} 分析] $analyzed"
                     }
 
                     else -> plainText(target)
                 }
+                if (counted) usable++
                 if (targetLines.isNotEmpty()) targetLines.append('\n')
                 targetLines.append(target.senderLabel).append('：').append(body.replace("\n", "\n  "))
             }
-            if (failures.isNotEmpty()) {
-                return failure(settings, failures, started, contextChars, mediaTotal, mediaFailed)
+            if (usable == 0) {
+                return failure(
+                    settings, listOf(Failure("input", "no_content")),
+                    started, contextChars, mediaTotal, mediaFailed,
+                )
             }
 
             ensureValid()
@@ -329,18 +372,27 @@ object AiReplyEngine {
             )
         }
 
-        try {
-            body()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            WeLogger.w(TAG, "generate failed", e)
-            failure(
-                settings,
-                listOf(Failure("request", e.message.orEmpty().ifBlank { "unknown" })),
-                started, contextChars, mediaTotal, mediaFailed,
-            )
+        val timedOut = withTimeoutOrNull(GENERATE_TIMEOUT_MS) {
+            try {
+                body()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                WeLogger.w(TAG, "generate failed", e)
+                failure(
+                    settings,
+                    listOf(Failure("request", e.message.orEmpty().ifBlank { "unknown" })),
+                    started, contextChars, mediaTotal, mediaFailed,
+                )
+            }
         }
+
+        // 到点就放弃：宁可这一条不回，也不要拖到对方以为没人。
+        timedOut ?: failure(
+            settings,
+            listOf(Failure("request", "timeout")),
+            started, contextChars, mediaTotal, mediaFailed,
+        )
     }
 
     private val STOP_REASONS = setOf("stop", "end_turn", "stop_sequence")
@@ -390,6 +442,31 @@ object AiReplyEngine {
         imgPath = target.imagePath,
     )
 
+    /**
+     * 外部识别统一入口：单次超时 + 退避重试。
+     *
+     * 视觉与 ASR 都是网络服务，偶发超时/5xx 重试一次基本就过；但聊天有时效性，
+     * 所以每次都卡一个上限，重试满 [RECOGNIZE_ATTEMPTS] 仍不行就把异常抛给调用方降级。
+     */
+    private suspend fun <T> runRecognize(block: suspend () -> T): T {
+        var last: Throwable? = null
+        repeat(RECOGNIZE_ATTEMPTS) { attempt ->
+            currentCoroutineContext().ensureActive()
+            try {
+                return withTimeoutOrNull(RECOGNIZE_TIMEOUT_MS) { block() }
+                    ?: throw java.util.concurrent.TimeoutException("recognize timeout")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                last = e
+                if (attempt < RECOGNIZE_ATTEMPTS - 1) {
+                    delay(RECOGNIZE_RETRY_DELAY_MS * (attempt + 1))
+                }
+            }
+        }
+        throw last ?: IllegalStateException("recognize failed")
+    }
+
     private suspend fun recognize(
         target: Target,
         settings: Settings,
@@ -397,15 +474,49 @@ object AiReplyEngine {
     ): String {
         val profile = settings.visionProfile
             ?: error(localizedChatString(R.string.ai_image_need_config))
-        return AiImageRecognition.recognizeForReply(
-            toRow(target), profile, settings.visionInstruction, account = settings.account,
-        ) {
-            if (!isStillValid()) throw CancellationException("auto reply cancelled")
+        val row = toRow(target)
+        if (target.type == MessageType.VIDEO || target.type == MessageType.MICRO_VIDEO) {
+            // 视频分两条路，取决于文件是否已经落在本机：
+            //   已落盘 → 失败多半是网络/服务问题，值得重试，而且不用再等文件；
+            //   未落盘 → 重试也不会让文件凭空出现，只给 3s 等下载、试一次。否则会按
+            //            3×12s 的节奏把整批预算吃光，连带同批的文字也回不出去。
+            val ready = withContext(Dispatchers.IO) {
+                WeMessageApi.isVideoLocallyAvailable(target.imagePath.orEmpty())
+            }
+            if (ready) {
+                return runRecognize {
+                    AiImageRecognition.recognizeForReply(
+                        row, profile, settings.visionInstruction,
+                        account = settings.account,
+                        videoWaitMs = 0L,
+                    ) {
+                        if (!isStillValid()) throw CancellationException("auto reply cancelled")
+                    }
+                }
+            }
+            return withTimeoutOrNull(AUTO_VIDEO_RECOGNIZE_TIMEOUT_MS) {
+                AiImageRecognition.recognizeForReply(
+                    row, profile, settings.visionInstruction,
+                    account = settings.account,
+                    videoWaitMs = AUTO_VIDEO_WAIT_MS,
+                ) {
+                    if (!isStillValid()) throw CancellationException("auto reply cancelled")
+                }
+            } ?: throw java.util.concurrent.TimeoutException("video recognize timeout")
+        }
+        return runRecognize {
+            AiImageRecognition.recognizeForReply(
+                row, profile, settings.visionInstruction, account = settings.account,
+            ) {
+                if (!isStillValid()) throw CancellationException("auto reply cancelled")
+            }
         }
     }
 
     private suspend fun voiceText(target: Target, account: String): String? =
-        runCatching { VoiceTranscriber.transcribeByEncPath(toRow(target), account) }
+        runCatching {
+            runRecognize { VoiceTranscriber.transcribeByEncPath(toRow(target), account) }
+        }
             .onFailure {
                 if (it is CancellationException) throw it
                 WeLogger.w(TAG, "target voice transcribe failed", it)
@@ -456,57 +567,75 @@ object AiReplyEngine {
         }
 
         val total = if (settings.mediaContextEnabled) rows.count { isVisual(it.type) } else 0
-        var index = 0
-        var failed = 0
-        val text = buildString {
-            for (msg in rows) {
-                currentCoroutineContext().ensureActive()
-                if (!isStillValid()) throw CancellationException("auto reply cancelled")
-                val label = labelOf(msg.type)
-                val body = when {
-                    msg.type == MessageType.VOICE -> {
-                        onProgress(Progress("asr", localizedChatString(R.string.ai_reply_voice_transcribing)))
-                        val transcribed = runCatching { VoiceTranscriber.transcribeByEncPath(msg, settings.account) }
-                            .onFailure {
-                                if (it is CancellationException) throw it
-                                WeLogger.w(TAG, "history voice transcribe failed", it)
+        // 媒体序号必须预先按顺序分配：并发算正文后不能再靠自增计数。
+        val mediaOrder = HashMap<Int, Int>()
+        if (total > 0) {
+            var order = 0
+            rows.forEachIndexed { idx, msg -> if (isVisual(msg.type)) mediaOrder[idx] = ++order }
+        }
+        val failed = AtomicInteger(0)
+        val gate = Semaphore(HISTORY_CONCURRENCY)
+
+        // 串行时三条媒体就能把一个会话拖上几分钟；按序并发、结果仍按原顺序拼回。
+        val lines = coroutineScope {
+            rows.mapIndexed { idx, msg ->
+                async {
+                    gate.withPermit {
+                        currentCoroutineContext().ensureActive()
+                        if (!isStillValid()) throw CancellationException("auto reply cancelled")
+                        val label = labelOf(msg.type)
+                        val body = when {
+                            msg.type == MessageType.VOICE -> {
+                                onProgress(
+                                    Progress("asr", localizedChatString(R.string.ai_reply_voice_transcribing)),
+                                )
+                                val transcribed = runCatching {
+                                    runRecognize {
+                                        VoiceTranscriber.transcribeByEncPath(msg, settings.account)
+                                    }
+                                }
+                                    .onFailure {
+                                        if (it is CancellationException) throw it
+                                        WeLogger.w(TAG, "history voice transcribe failed", it)
+                                    }
+                                    .getOrNull()
+                                if (transcribed.isNullOrBlank()) voicePlaceholder(msg.content)
+                                else "[语音] ${transcribed.take(MAX_CONTEXT_LINE_CHARS)}"
                             }
-                            .getOrNull()
-                        if (transcribed.isNullOrBlank()) voicePlaceholder(msg.content)
-                        else "[语音] ${transcribed.take(MAX_CONTEXT_LINE_CHARS)}"
-                    }
 
-                    isVisual(msg.type) && settings.mediaContextEnabled -> {
-                        index++
-                        onMediaProgress(index, total)
-                        try {
-                            "[$label 分析] ${historyRecognize(msg, settings, isStillValid)}"
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            failed++
-                            WeLogger.w(TAG, "history media failed: type=${msg.type}, index=$index", e)
-                            "[$label：${localizedChatString(R.string.ai_reply_media_failed)}]"
+                            isVisual(msg.type) && settings.mediaContextEnabled -> {
+                                val order = mediaOrder[idx] ?: 0
+                                onMediaProgress(order, total)
+                                try {
+                                    "[$label 分析] ${historyRecognize(msg, settings, isStillValid)}"
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    failed.incrementAndGet()
+                                    WeLogger.w(TAG, "history media failed: type=${msg.type}, index=$order", e)
+                                    "[$label：${localizedChatString(R.string.ai_reply_media_failed)}]"
+                                }
+                            }
+
+                            isVisual(msg.type) -> "[$label]"
+
+                            else -> {
+                                val raw = if (msg.talker.endsWith("@chatroom") && msg.isSend == 0) {
+                                    msg.content.substringAfter(":\n", msg.content)
+                                } else {
+                                    msg.content
+                                }
+                                raw.trim().take(MAX_CONTEXT_LINE_CHARS)
+                            }
                         }
-                    }
-
-                    isVisual(msg.type) -> "[$label]"
-
-                    else -> {
-                        val raw = if (msg.talker.endsWith("@chatroom") && msg.isSend == 0) {
-                            msg.content.substringAfter(":\n", msg.content)
-                        } else {
-                            msg.content
-                        }
-                        raw.trim().take(MAX_CONTEXT_LINE_CHARS)
+                        val who = if (msg.isSend != 0) "我" else senderLabelOf(msg, settings.account)
+                        "$who：${body.replace("\n", "\n  ")}"
                     }
                 }
-                if (isNotEmpty()) append('\n')
-                append(if (msg.isSend != 0) "我" else senderLabelOf(msg, settings.account))
-                append('：').append(body.replace("\n", "\n  "))
-            }
+            }.awaitAll()
         }
-        return History(text, total, failed)
+
+        return History(lines.joinToString("\n"), total, failed.get())
     }
 
     private suspend fun historyRecognize(
@@ -516,10 +645,12 @@ object AiReplyEngine {
     ): String {
         val profile = settings.visionProfile
             ?: error(localizedChatString(R.string.ai_image_need_config))
-        return AiImageRecognition.recognizeForReply(
-            msg, profile, settings.visionInstruction, account = settings.account,
-        ) {
-            if (!isStillValid()) throw CancellationException("auto reply cancelled")
+        return runRecognize {
+            AiImageRecognition.recognizeForReply(
+                msg, profile, settings.visionInstruction, account = settings.account,
+            ) {
+                if (!isStillValid()) throw CancellationException("auto reply cancelled")
+            }
         }
     }
 
