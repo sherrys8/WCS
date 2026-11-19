@@ -65,6 +65,7 @@ import dev.sherry.wcs.agent.model.LlmStreamEvent
 import dev.sherry.wcs.agent.model.ModelProviderManager
 import dev.sherry.wcs.features.api.core.WeApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
+import dev.sherry.wcs.features.api.core.WeDatabaseListenerApi
 import dev.sherry.wcs.features.api.core.WeMessageApi
 import dev.sherry.wcs.features.api.core.models.MessageInfo
 import dev.sherry.wcs.features.api.core.models.MessageType
@@ -234,11 +235,59 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
     private fun promptFor(style: String): String =
         savedPromptFor(style).ifBlank { defaultPromptFor(style) }
 
+    /**
+     * 自动回复的引擎快照。
+     *
+     * 能力、模型、语气、长度、上下文、视觉档、识别指令全部沿用本功能已有配置 ——
+     * 自动回复只多一个「触发方式」，不另存一份配置，也不允许两边各改一半。
+     */
+    internal fun autoReplyEngineSettings(account: String): AiReplyEngine.Settings? {
+        val baseUrl = AiReplyApiConfig.resolvedBaseUrl()
+        val apiKey = AiReplyApiConfig.apiKey.trim()
+        val modelId = AiReplyApiConfig.modelId.trim()
+        if (baseUrl.isBlank() || apiKey.isBlank() || modelId.isBlank()) return null
+        return AiReplyEngine.Settings(
+            account = account,
+            stylePrompt = promptFor(lastStyle),
+            contextLimit = contextLimit.coerceIn(0, MAX_CONTEXT_LINES),
+            mediaContextEnabled = mediaContextEnabled,
+            visionProfile = ApiProfiles.get(visionProfileId),
+            visionInstruction = visionPrompt,
+            providerType = AiReplyApiConfig.providerType(),
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            modelId = modelId,
+            profileName = AiReplyApiConfig.profileName,
+        )
+    }
+
+    /**
+     * 自动回复发语音需要的全部参数。语音配置的「开启语音回复」没打开时返回 null ——
+     * 自动回复的 `voice_reply` 与它是「与」关系，任一关闭都只发文字。
+     */
+    internal fun autoReplyVoiceSpec(): AutoReplyVoiceSpec? {
+        if (!ttsEnabled) return null
+        if (!ttsCredentialsReady()) return null
+        val profile = ttsProfile() ?: return null
+        return AutoReplyVoiceSpec(
+            backend = ttsBackend,
+            voiceId = effectiveVoiceId(),
+            emotion = emotionVector(),
+            breezeInstructions = ttsBreezeInstructions,
+            apiKey = profile.apiKey,
+            cookie = profile.cookie.orEmpty(),
+            model = TtsProfiles.modelOf(profile),
+        )
+    }
+
     override fun onEnable() {
         WeChatMessageContextMenuApi.addProvider(this)
+        // 自动回复不是独立功能：它跟着「AI 回复」一起开，也一起关。
+        AiAutoReply.attach()
     }
 
     override fun onDisable() {
+        AiAutoReply.detach()
         WeChatMessageContextMenuApi.removeProvider(this)
     }
 
@@ -950,6 +999,19 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
         val customVoiceOptions = mofangCustomVoices.map { DropdownOption(it.voiceId, it.label) }
         val emotionOptions = TextToSpeech.EMOTIONS.map { DropdownOption(it.first, it.first) }
 
+        // 自动回复：放在最前面的第一组。MMKV 委托不可观察，状态一律本地镜像。
+        var autoOn by remember { mutableStateOf(AiAutoReply.enabled) }
+        var autoGroup by remember { mutableStateOf(AiAutoReply.groupEnabled) }
+        var autoAtOnly by remember { mutableStateOf(AiAutoReply.groupAtOnly) }
+        var autoSkipAll by remember { mutableStateOf(AiAutoReply.skipAnnounceAll) }
+        var autoVoice by remember { mutableStateOf(AiAutoReply.voiceReply) }
+        var autoSessions by remember { mutableStateOf(AiAutoReply.sessionsLabel()) }
+        var autoToday by remember { mutableStateOf(0 to 0) }
+        LaunchedEffect(autoOn) {
+            if (!autoOn) return@LaunchedEffect
+            autoToday = withContext(Dispatchers.IO) { AiAutoReply.todayCounts(WeApi.selfWxId) }
+        }
+
         AlertDialogContent(
             title = {
                 Text(
@@ -963,6 +1025,152 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState()),
                 ) {
+                    SegmentedColumn(title = stringResource(R.string.ai_auto_reply_title)) {
+                        item {
+                            SwitchWidget(
+                                title = stringResource(R.string.ai_auto_reply_title),
+                                description = if (autoOn) {
+                                    stringResource(
+                                        R.string.ai_auto_reply_summary_on,
+                                        AiAutoReply.talkers.size,
+                                    )
+                                } else {
+                                    stringResource(R.string.ai_auto_reply_summary_off)
+                                },
+                                checked = autoOn,
+                                onCheckedChange = {
+                                    autoOn = it
+                                    AiAutoReply.enabled = it
+                                },
+                            )
+                        }
+                        if (autoOn) {
+                            item {
+                                BaseWidget(
+                                    iconPlaceholder = false,
+                                    title = stringResource(R.string.ai_auto_reply_sessions),
+                                    description = autoSessions,
+                                    onClick = {
+                                        AiAutoReply.openSessionsDialog(context) {
+                                            autoSessions = AiAutoReply.sessionsLabel()
+                                        }
+                                    },
+                                    trailingContent = {
+                                        Icon(
+                                            MaterialSymbols.Outlined.Chevron_right,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                )
+                            }
+                            item {
+                                SwitchWidget(
+                                    title = stringResource(R.string.ai_auto_reply_group),
+                                    description = stringResource(R.string.ai_auto_reply_group_desc),
+                                    checked = autoGroup,
+                                    onCheckedChange = {
+                                        autoGroup = it
+                                        AiAutoReply.groupEnabled = it
+                                    },
+                                )
+                            }
+                            if (autoGroup) {
+                                item {
+                                    SwitchWidget(
+                                        title = stringResource(R.string.ai_auto_reply_at_only),
+                                        description = stringResource(
+                                            if (autoAtOnly) R.string.ai_auto_reply_at_only_on
+                                            else R.string.ai_auto_reply_at_only_off
+                                        ),
+                                        checked = autoAtOnly,
+                                        onCheckedChange = {
+                                            autoAtOnly = it
+                                            AiAutoReply.groupAtOnly = it
+                                        },
+                                    )
+                                }
+                                if (!autoAtOnly) {
+                                    // 关掉「仅 @」等于允许群里每条消息都触发，必须当场警示
+                                    item {
+                                        Text(
+                                            text = stringResource(R.string.ai_auto_reply_flood_warning),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.padding(vertical = 4.dp),
+                                        )
+                                    }
+                                }
+                                item {
+                                    SwitchWidget(
+                                        title = stringResource(R.string.ai_auto_reply_skip_all),
+                                        description = stringResource(R.string.ai_auto_reply_skip_all_desc),
+                                        checked = autoSkipAll,
+                                        onCheckedChange = {
+                                            autoSkipAll = it
+                                            AiAutoReply.skipAnnounceAll = it
+                                        },
+                                    )
+                                }
+                            }
+                            item {
+                                SwitchWidget(
+                                    title = stringResource(R.string.ai_auto_reply_voice),
+                                    description = stringResource(
+                                        if (autoVoice) R.string.ai_auto_reply_voice_on
+                                        else R.string.ai_auto_reply_voice_off
+                                    ),
+                                    checked = autoVoice,
+                                    onCheckedChange = {
+                                        autoVoice = it
+                                        AiAutoReply.voiceReply = it
+                                    },
+                                )
+                            }
+                            item {
+                                BaseWidget(
+                                    iconPlaceholder = false,
+                                    title = stringResource(R.string.ai_auto_reply_rhythm),
+                                    description = AiAutoReply.rhythmLabel(),
+                                    onClick = { AiAutoReply.openRhythmDialog(context) },
+                                    trailingContent = {
+                                        Icon(
+                                            MaterialSymbols.Outlined.Chevron_right,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                )
+                            }
+                            item {
+                                BaseWidget(
+                                    iconPlaceholder = false,
+                                    title = stringResource(R.string.ai_auto_reply_log),
+                                    description = stringResource(
+                                        R.string.ai_auto_reply_log_desc,
+                                        autoToday.first,
+                                        autoToday.second,
+                                    ),
+                                    onClick = { AiAutoReply.openLogDialog(context) },
+                                    trailingContent = {
+                                        Icon(
+                                            MaterialSymbols.Outlined.Chevron_right,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                )
+                            }
+                            if (!WeDatabaseListenerApi.isActive) {
+                                item {
+                                    Text(
+                                        text = stringResource(R.string.ai_auto_reply_need_listener),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.padding(vertical = 4.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     SegmentedColumn(title = stringResource(R.string.ui_group_ai_settings_title)) {
                         item {
                             // 只能选，不能改：地址与密钥属于配置档本身，改一处会影响所有引用方
@@ -1033,42 +1241,6 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                             },
                             modifier = Modifier.padding(top = 8.dp),
                         )
-                    }
-
-                    SegmentedColumn(title = stringResource(R.string.ai_reply_generation_title)) {
-                        item {
-                            BaseItemContainer {
-                                IntNumberPickerWidget(
-                                    iconPlaceholder = true,
-                                    title = stringResource(R.string.ai_reply_count),
-                                    description = stringResource(R.string.ai_reply_count_description),
-                                    value = countValue,
-                                    startInt = 1,
-                                    endInt = MAX_CANDIDATES,
-                                    stepSize = 1,
-                                    onValueChange = {
-                                        countValue = it
-                                        candidateCount = it
-                                    },
-                                )
-                            }
-                        }
-                        item {
-                            BaseItemContainer {
-                                IntNumberPickerWidget(
-                                    iconPlaceholder = true,
-                                    title = stringResource(R.string.ai_reply_context_limit),
-                                    value = contextValue,
-                                    startInt = 0,
-                                    endInt = MAX_CONTEXT_LINES,
-                                    stepSize = 1,
-                                    onValueChange = {
-                                        contextValue = it
-                                        contextLimit = it
-                                    },
-                                )
-                            }
-                        }
                     }
 
                     SegmentedColumn(title = stringResource(R.string.ai_reply_media_title)) {
@@ -1277,6 +1449,42 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                                         )
                                     }
                                 }
+                            }
+                        }
+                    }
+
+                    SegmentedColumn(title = stringResource(R.string.ai_reply_generation_title)) {
+                        item {
+                            BaseItemContainer {
+                                IntNumberPickerWidget(
+                                    iconPlaceholder = true,
+                                    title = stringResource(R.string.ai_reply_count),
+                                    description = stringResource(R.string.ai_reply_count_description),
+                                    value = countValue,
+                                    startInt = 1,
+                                    endInt = MAX_CANDIDATES,
+                                    stepSize = 1,
+                                    onValueChange = {
+                                        countValue = it
+                                        candidateCount = it
+                                    },
+                                )
+                            }
+                        }
+                        item {
+                            BaseItemContainer {
+                                IntNumberPickerWidget(
+                                    iconPlaceholder = true,
+                                    title = stringResource(R.string.ai_reply_context_limit),
+                                    value = contextValue,
+                                    startInt = 0,
+                                    endInt = MAX_CONTEXT_LINES,
+                                    stepSize = 1,
+                                    onValueChange = {
+                                        contextValue = it
+                                        contextLimit = it
+                                    },
+                                )
                             }
                         }
                     }

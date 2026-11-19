@@ -1495,9 +1495,16 @@ object WeMessageApi : ApiFeature(), IResolveDex {
     }
 
     /** 发送文本消息 */
-    fun sendText(toUser: String, text: String): Boolean {
+    /**
+     * 发送文本。[redactLog] 为真时只记长度，不记正文 —— 自动回复的正文不该出现在 logcat 里。
+     */
+    fun sendText(toUser: String, text: String, redactLog: Boolean = false): Boolean {
         return try {
-            WeLogger.i(TAG, "sending text message: $text")
+            if (redactLog) {
+                WeLogger.i(TAG, "sending text message to $toUser, ${text.length} chars")
+            } else {
+                WeLogger.i(TAG, "sending text message: $text")
+            }
             val sendMsgObject = methodGetSendMsgObject.method.invoke(null) ?: return false
             val msgObj = createSendMsgScene(toUser, text)
             methodPostToQueue.method.invoke(sendMsgObject, msgObj) as? Boolean ?: false
