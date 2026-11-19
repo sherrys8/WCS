@@ -10,6 +10,7 @@ import dev.sherry.wcs.agent.model.LlmStreamEvent
 import dev.sherry.wcs.agent.model.ModelProviderManager
 import dev.sherry.wcs.features.api.core.WeApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
+import dev.sherry.wcs.features.api.core.WeMessageApi
 import dev.sherry.wcs.features.api.core.models.MessageType
 import dev.sherry.wcs.features.api.core.models.WeMessage
 import dev.sherry.wcs.utils.WeLogger
