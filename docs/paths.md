@@ -49,13 +49,14 @@ WcS 注入微信进程后，读写的不止自己的目录。这份文档列出�
 
 | 子项 | 用途 | 出处 |
 |------|------|------|
-| `wcs_tts/` | 文字转语音产物：魔方 `tts_*.wav`、豆包 `doubao_*.aac`、Breeze `breeze_*.mp3` | `TextToSpeech.kt:871,973,1000` |
-| `breeze_previews/` | Breeze 克隆的试听音频（从 `/v1/voice-previews/{id}/stream` 下载）+ 选单条参考音频时复制进来的样本副本 | `BreezeVoicePicker.kt:108` |
+| `wcs_tts/` | 文字转语音及AI回复语音：魔方 `tts_*.wav`、豆包 `doubao_*.aac`、Breeze `breeze_*.mp3` 和发送用 `.silk`；每次准备缓存目录时，按文件最后修改日期只保留今天及之前3天，删除更早文件 | `TextToSpeech.kt`、`TtsCache.kt` |
+| `breeze_previews/` | Breeze 克隆试听音频和选取参考音频的临时副本；使用相同的本地日期淘汰，不删除用户选取的原文件 | `BreezeVoicePicker.kt`、`TtsCache.kt` |
 | `doubao_avatars/` | 豆包音色选择器头像的 Coil 磁盘缓存 | `DoubaoVoicePicker.kt:91` |
 | `doubao_voices.json` | 豆包在线音色库缓存（373 条，含头像/试听签名地址） | `DoubaoVoicePicker.kt:155` |
+| `ai-recognition/{账号摘要}/{缓存键摘要}.json` | AI回复与未来自动回复共用的语音转写、图片/表情/视频分析成功文本；按消息、模型配置与指令隔离，按文件修改日期保留今天及之前3天；首次使用/跨天访问时清理旧记录，读取拒绝过期内容，不含原媒体或凭据 | `AiRecognitionCache.kt`、`VoiceTranscriber.kt`、`AiImageRecognition.kt` |
 | `monet/` | Monet 取色模块生成中间产物 | `MonetEngineModuleGenerator.kt:157` |
 | `notification-media/` | 通知里要显示的媒体副本 | `NotificationsEvolved.kt:215` |
-| `panels/` | 面板临时素材 | `PanelPaths.kt:19` |
+| `panels/` | 面板临时素材；TTS的 `edge-*`、`system-tts-*` 遗留文件按本地日期保留今天及之前3天，其他临时件仍按1天清理；正常使用完成后的即时删除保持不变 | `PanelPaths.kt`、`VoicePanel.kt` |
 | `python/` | Python 运行时解压缓存 | `PythonPluginManager.kt:43` |
 | `view-sticker-as-image/{decoded,snapshots}` | 贴纸转图片的解码结果与快照 | `ViewStickerAsImage.kt:145,185` |
 | 一次性临时件 | `sticker-send-image-*`、`sticker-send-converted-*`、`upload_*`、`group_report_*.png`、`auto_save_moments_*.bin`、`wcs_moments_{temp,thumb,video,probe,probe_live}*.{jpg,mp4}` | `WeMessageApi.kt:1182,1189`、`ApiServer.kt:303`、`GroupReportImage.kt:61`、`AutoSaveMoments.kt:409`、`WeMomentsApi.kt:847-2222` |

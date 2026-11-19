@@ -2112,6 +2112,7 @@
     <string name="ai_reply_media_target">正在识别目标消息</string>
     <string name="ai_reply_media_progress">上下文多媒体 %1$d/%2$d</string>
     <string name="ai_reply_media_preparing">正在准备媒体</string>
+    <string name="ai_reply_media_cached">已复用保存的识别文本</string>
     <string name="ai_reply_media_uploading">正在上传至视觉服务</string>
     <string name="ai_reply_media_uploaded">请求体已写完，等待服务端响应</string>
     <string name="ai_reply_media_accepted">服务端已返回 HTTP 成功，等待识别结果</string>

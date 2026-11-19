@@ -3,6 +3,8 @@
 > 状态：**已实现（未提交）**。基线 `4a9d2e92`。
 > 目标文件：`features/items/chat/AiReplyCandidates.kt`、`features/items/chat/VoiceTranscriber.kt`、
 > `features/api/core/WeDatabaseApi.kt`、`features/api/core/models/WeContact.kt`。
+>
+> 后续缓存变更：本地已改为 AiRecognitionCache，语音与图片/表情/视频的成功分析共用 `cache/WcS/ai-recognition/`，按账号、消息和模型配置隔离，按本地日期保留今天及之前3天，无200条淘汰；过期后重新识别。下文 ai_stt_cache.json 为历史方案，不再读取，详见 `ai-reply-vision-integration.md`；新缓存尚未构建或真机验证。
 
 ## 1. 现状
 

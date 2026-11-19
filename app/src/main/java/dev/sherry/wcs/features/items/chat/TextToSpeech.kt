@@ -70,7 +70,6 @@ import dev.sherry.wcs.utils.BreezeCreditsClient
 import dev.sherry.wcs.utils.BreezeTtsClient
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.showToast
-import dev.sherry.wcs.utils.fs.KnownPaths
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -989,7 +988,7 @@ object TextToSpeech :
                         val noUrl = localizedChatString(R.string.tts_err_no_audio_url)
                         error = "code=${root.opt("code")} ${msg.ifEmpty { noUrl }}"
                     } else {
-                        val dir = File(KnownPaths.moduleCache.toFile(), "wcs_tts").apply { mkdirs() }
+                        val dir = TtsCache.generatedDir
                         val dest = File(dir, "tts_${System.currentTimeMillis()}.wav")
                         if (download(audioUrl, dest)) {
                             wavPath = dest.absolutePath
@@ -1091,7 +1090,7 @@ object TextToSpeech :
             if (bytes.isEmpty()) {
                 if (error.isEmpty()) error = localizedChatString(R.string.tts_err_no_audio_data)
             } else {
-                val dir = File(KnownPaths.moduleCache.toFile(), "wcs_tts").apply { mkdirs() }
+                val dir = TtsCache.generatedDir
                 val dest = File(dir, "doubao_${System.currentTimeMillis()}.aac")
                 dest.writeBytes(bytes)
                 path = dest.absolutePath
@@ -1118,7 +1117,7 @@ object TextToSpeech :
             var path: String? = null
             var error = ""
             try {
-                val dir = File(KnownPaths.moduleCache.toFile(), "wcs_tts").apply { mkdirs() }
+                val dir = TtsCache.generatedDir
                 val dest = File(dir, "breeze_${System.currentTimeMillis()}.mp3")
                 BreezeTtsClient.synthesize(key, voiceId, model, text, instructions, dest)
                 path = dest.absolutePath

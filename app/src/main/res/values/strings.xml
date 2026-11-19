@@ -2159,6 +2159,7 @@
     <string name="ai_reply_media_target">Recognizing the target message</string>
     <string name="ai_reply_media_progress">Context media %1$d/%2$d</string>
     <string name="ai_reply_media_preparing">Preparing media</string>
+    <string name="ai_reply_media_cached">Reusing saved recognition text</string>
     <string name="ai_reply_media_uploading">Uploading to the vision service</string>
     <string name="ai_reply_media_uploaded">Request body written; waiting for the server</string>
     <string name="ai_reply_media_accepted">Server returned HTTP success; waiting for recognition</string>

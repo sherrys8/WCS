@@ -2,6 +2,7 @@ package dev.sherry.wcs.features.items.chat.panel
 
 import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.listDirectoryEntries
+import dev.sherry.wcs.features.items.chat.TtsCache
 import dev.sherry.wcs.utils.fs.KnownPaths
 import dev.sherry.wcs.utils.fs.createDirsSafe
 import java.nio.file.Path
@@ -11,6 +12,7 @@ import java.time.temporal.ChronoUnit
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.div
 import kotlin.io.path.isRegularFile
+import kotlin.io.path.name
 
 object PanelPaths {
     val stickerPanelDir: Path by lazy { (KnownPaths.moduleData / "sticker_panel").createDirsSafe() }
@@ -23,9 +25,14 @@ object PanelPaths {
 
     fun cleanupStalePanelCache() {
         val cutoff = FileTime.from(Instant.now().minus(1, ChronoUnit.DAYS))
+        val ttsCutoff = FileTime.fromMillis(TtsCache.expirationCutoffMillis())
         runCatching {
             panelCacheDir.listDirectoryEntries()
-                .filter { it.isRegularFile() && it.getLastModifiedTime() < cutoff }
+                .filter {
+                    val isTts = it.name.startsWith("edge-") || it.name.startsWith("system-tts-")
+                    val expiresBefore = if (isTts) ttsCutoff else cutoff
+                    it.isRegularFile() && it.getLastModifiedTime() < expiresBefore
+                }
                 .forEach(Path::deleteIfExists)
         }
     }

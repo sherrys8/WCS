@@ -66,7 +66,6 @@ import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.BreezeTtsClient
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.showToast
-import dev.sherry.wcs.utils.fs.KnownPaths
 import dev.sherry.wcs.utils.openInSystem
 import java.io.File
 import java.util.Locale
@@ -141,8 +140,7 @@ private val breezeMainHandler = Handler(Looper.getMainLooper())
 private val BREEZE_SAMPLE_MIME = arrayOf("*/*")
 
 /** 克隆预览的试听音频与样本副本都只是中间件，落在这个目录，可随时清。 */
-private fun breezePreviewDir(): File =
-    File(KnownPaths.moduleCache.toFile(), "breeze_previews").apply { mkdirs() }
+private fun breezePreviewDir(): File = TtsCache.previewDir
 
 /**
  * 音色选择器。官方目录是万级，所以那一栏走服务端搜索 + 底部翻页条（每页 50 个，

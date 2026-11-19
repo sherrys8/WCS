@@ -43,6 +43,7 @@ import com.github.penfeizhou.animation.decode.FrameSeqDecoder
 import com.github.penfeizhou.animation.loader.FileLoader
 import com.github.penfeizhou.animation.webp.decode.WebPDecoder
 import dev.sherry.wcs.R
+import dev.sherry.wcs.features.api.core.WeApi
 import dev.sherry.wcs.features.api.core.WeMessageApi
 import dev.sherry.wcs.features.api.core.WeServiceApi
 import dev.sherry.wcs.features.api.core.models.MessageInfo
@@ -341,25 +342,34 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
         profile: ApiProfile,
         prompt: String,
         originalMessage: MessageInfo? = null,
+        account: String = WeApi.selfWxId,
         onStatus: (Int) -> Unit = {},
     ): String {
         check(profile.capability == CAP_VISION && profile.apiKey.isNotBlank() &&
             profile.defaultModelId.isNotBlank()) { localizedChatString(R.string.ai_image_need_config) }
-        val md5 = if (message.type?.isSticker == true) {
-            message.imgPath?.takeIf { it.isNotBlank() }
-                ?: XmlUtils.extractXmlAttr(message.content, "md5").takeIf { it.isNotBlank() }
-                ?: XmlUtils.extractXmlTag(message.content, "md5").takeIf { it.isNotBlank() }
-                ?: XmlUtils.extractXmlTag(message.content, "emoticonmd5").takeIf { it.isNotBlank() }
-        } else null
-        return recognizeMedia(
-            message.type, message.msgSvrId, message.imgPath, md5, profile, prompt,
-            localizedChatString(R.string.ai_image_empty),
-            localizedChatString(R.string.ai_image_video_missing),
-            localizedChatString(R.string.ai_image_video_too_large),
-            localizedChatString(R.string.ai_image_animation_prompt),
-            localizedChatString(R.string.ai_image_animation_unsupported),
-            originalMessage, onStatus,
-        )
+        val animationPrompt = localizedChatString(R.string.ai_image_animation_prompt)
+        val emptyResult = localizedChatString(R.string.ai_image_empty)
+        return AiRecognitionCache.getOrRecognize(
+            "vision", account, message, profile,
+            JSONArray().put(prompt).put(animationPrompt).toString(),
+            onCacheHit = { onStatus(R.string.ai_reply_media_cached) },
+        ) {
+            val md5 = if (message.type?.isSticker == true) {
+                message.imgPath?.takeIf { it.isNotBlank() }
+                    ?: XmlUtils.extractXmlAttr(message.content, "md5").takeIf { it.isNotBlank() }
+                    ?: XmlUtils.extractXmlTag(message.content, "md5").takeIf { it.isNotBlank() }
+                    ?: XmlUtils.extractXmlTag(message.content, "emoticonmd5").takeIf { it.isNotBlank() }
+            } else null
+            recognizeMedia(
+                message.type, message.msgSvrId, message.imgPath, md5, profile, prompt,
+                emptyResult,
+                localizedChatString(R.string.ai_image_video_missing),
+                localizedChatString(R.string.ai_image_video_too_large),
+                animationPrompt,
+                localizedChatString(R.string.ai_image_animation_unsupported),
+                originalMessage, onStatus,
+            )
+        } ?: throw IOException(emptyResult)
     }
 
     private suspend fun recognizeMedia(
