@@ -61,11 +61,10 @@ internal class AutoReplyScheduler(
     private val buckets = ConcurrentHashMap<String, Bucket>()
     private val requestGate = Semaphore(1)
 
-    @Volatile
-    private var version = 0
+    /** 每会话一个版本号：本人接管只作废这一个会话，不能牵连别的会话。 */
+    private val versions = ConcurrentHashMap<String, Int>()
 
-    /** 供任务侧比对：任务领取时的版本与当前不一致就作废。 */
-    val currentVersion: Int get() = version
+    fun versionFor(account: String, talker: String): Int = versions["$account|$talker"] ?: 0
 
     @Volatile
     private var closed = false
@@ -85,8 +84,9 @@ internal class AutoReplyScheduler(
 
     /** 本人在该会话发言：作废在途任务，清掉缓冲，只影响这一个会话。 */
     fun onTakeover(talker: String, account: String) {
-        version++
-        val bucket = buckets.remove("$account|$talker") ?: return
+        val key = "$account|$talker"
+        versions[key] = (versions[key] ?: 0) + 1
+        val bucket = buckets.remove(key) ?: return
         runCatching { bucket.channel.close() }
         bucket.job?.cancel()
     }
@@ -98,7 +98,7 @@ internal class AutoReplyScheduler(
 
     fun shutdown() {
         closed = true
-        version++
+        versions.keys.forEach { versions[it] = (versions[it] ?: 0) + 1 }
         buckets.values.forEach {
             runCatching { it.channel.close() }
             it.job?.cancel()
@@ -110,6 +110,8 @@ internal class AutoReplyScheduler(
     private suspend fun loop(bucket: Bucket) {
         while (scope.isActive && !closed) {
             val first = bucket.channel.receiveCatching().getOrNull() ?: break
+            // 版本在收到第一条时就定下：冷却等待期间被接管，这批也就该作废。
+            val batchVersion = versionFor(first.account, first.talker)
             val items = ArrayList<Inbound>(MAX_BATCH)
             items += first
             val timing = timing()
@@ -132,9 +134,9 @@ internal class AutoReplyScheduler(
             val now = System.currentTimeMillis()
             if (now < cooldown) delay(cooldown - now)
 
-            val batch = Batch(first.account, first.talker, items, version)
+            val batch = Batch(first.account, first.talker, items, batchVersion)
             requestGate.withPermit {
-                if (batch.version != version) return@withPermit
+                if (batch.version != versionFor(batch.account, batch.talker)) return@withPermit
                 if (closed) return@withPermit
                 runCatching { handler(batch) }
                     .onFailure { WeLogger.w(TAG, "batch handler failed: ${it.message}") }

@@ -264,8 +264,8 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
             AiReplyEngine.generate(
                 AiReplyEngine.Request(targets = targets, settings = settings),
                 isStillValid = {
-                    enabled && batch.version == (scheduler?.currentVersion ?: -1) &&
-                        account == batch.account
+                    enabled && account == batch.account &&
+                        batch.version == (scheduler?.versionFor(batch.account, batch.talker) ?: -1)
                 },
             )
         }.getOrElse { failure ->
