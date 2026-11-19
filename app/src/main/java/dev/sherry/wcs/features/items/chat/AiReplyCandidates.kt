@@ -1243,50 +1243,6 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                         )
                     }
 
-                    SegmentedColumn(title = stringResource(R.string.ai_reply_media_title)) {
-                        item {
-                            SwitchWidget(
-                                title = stringResource(R.string.ai_reply_media_enable),
-                                description = stringResource(R.string.ai_reply_media_summary),
-                                checked = mediaEnabled,
-                                onCheckedChange = { mediaEnabled = it; mediaContextEnabled = it },
-                            )
-                        }
-                        if (mediaEnabled) {
-                            item {
-                                val profiles = ApiProfiles.ofCapability(CAP_VISION)
-                                val providerLabel = stringResource(R.string.api_profile_provider_zhipu)
-                                val options = listOf(DropdownOption("", stringResource(R.string.api_profile_none))) +
-                                    profiles.map {
-                                        DropdownOption(it.id, "$providerLabel · ${it.name} · ${it.defaultModelId}")
-                                    }
-                                DropDownMenuWidget(
-                                    title = stringResource(R.string.ai_reply_media_provider),
-                                    description = null,
-                                    value = mediaProfile,
-                                    options = if (options.any { it.value == mediaProfile }) options else {
-                                        options + DropdownOption(mediaProfile, stringResource(R.string.api_profile_none))
-                                    },
-                                    onValueChange = {
-                                        mediaProfile = it
-                                        visionProfileId = it
-                                    },
-                                )
-                            }
-                            item {
-                                TextFieldDialogWidget(
-                                    title = stringResource(R.string.ai_image_instruction),
-                                    value = mediaPrompt,
-                                    onValueChange = { mediaPrompt = it; visionPrompt = it },
-                                    dialogTitle = stringResource(R.string.ai_image_instruction),
-                                    confirmLabel = stringResource(R.string.dialog_confirm),
-                                    dismissLabel = stringResource(R.string.dialog_cancel),
-                                    singleLine = false,
-                                )
-                            }
-                        }
-                    }
-
                     SegmentedColumn(title = stringResource(R.string.ai_reply_voice_group)) {
                         item {
                             SwitchWidget(
@@ -1449,6 +1405,50 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                                         )
                                     }
                                 }
+                            }
+                        }
+                    }
+
+                    SegmentedColumn(title = stringResource(R.string.ai_reply_media_title)) {
+                        item {
+                            SwitchWidget(
+                                title = stringResource(R.string.ai_reply_media_enable),
+                                description = stringResource(R.string.ai_reply_media_summary),
+                                checked = mediaEnabled,
+                                onCheckedChange = { mediaEnabled = it; mediaContextEnabled = it },
+                            )
+                        }
+                        if (mediaEnabled) {
+                            item {
+                                val profiles = ApiProfiles.ofCapability(CAP_VISION)
+                                val providerLabel = stringResource(R.string.api_profile_provider_zhipu)
+                                val options = listOf(DropdownOption("", stringResource(R.string.api_profile_none))) +
+                                    profiles.map {
+                                        DropdownOption(it.id, "$providerLabel · ${it.name} · ${it.defaultModelId}")
+                                    }
+                                DropDownMenuWidget(
+                                    title = stringResource(R.string.ai_reply_media_provider),
+                                    description = null,
+                                    value = mediaProfile,
+                                    options = if (options.any { it.value == mediaProfile }) options else {
+                                        options + DropdownOption(mediaProfile, stringResource(R.string.api_profile_none))
+                                    },
+                                    onValueChange = {
+                                        mediaProfile = it
+                                        visionProfileId = it
+                                    },
+                                )
+                            }
+                            item {
+                                TextFieldDialogWidget(
+                                    title = stringResource(R.string.ai_image_instruction),
+                                    value = mediaPrompt,
+                                    onValueChange = { mediaPrompt = it; visionPrompt = it },
+                                    dialogTitle = stringResource(R.string.ai_image_instruction),
+                                    confirmLabel = stringResource(R.string.dialog_confirm),
+                                    dismissLabel = stringResource(R.string.dialog_cancel),
+                                    singleLine = false,
+                                )
                             }
                         }
                     }

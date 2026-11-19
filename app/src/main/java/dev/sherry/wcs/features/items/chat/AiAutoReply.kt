@@ -1,7 +1,7 @@
 package dev.sherry.wcs.features.items.chat
 
 import android.content.ContentValues
-import androidx.activity.ComponentActivity
+import android.content.Context
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -399,7 +399,7 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
         return localizedChatString(R.string.ai_auto_reply_rhythm_summary, seconds)
     }
 
-    fun openSessionsDialog(context: ComponentActivity, onDone: () -> Unit = {}) {
+    fun openSessionsDialog(context: Context, onDone: () -> Unit = {}) {
         val contacts = WeDatabaseApi.getFriends() + WeDatabaseApi.getGroups()
         showComposeDialog(context) {
             ContactsSelector(
@@ -415,7 +415,7 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
         }
     }
 
-    fun openRhythmDialog(context: ComponentActivity) {
+    fun openRhythmDialog(context: Context) {
         showComposeDialog(context) {
             AlertDialogContent(
                 title = { Text(stringResource(R.string.ai_auto_reply_rhythm)) },
@@ -469,7 +469,7 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
         cooldownMs = cooldown
     }
 
-    fun openLogDialog(context: ComponentActivity) {
+    fun openLogDialog(context: Context) {
         val account = WeApi.selfWxId
         showComposeDialog(context) {
             var filter by remember { mutableStateOf(0) }

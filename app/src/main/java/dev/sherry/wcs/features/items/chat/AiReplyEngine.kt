@@ -18,7 +18,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 
 /**
  * 生成引擎：把「一批待回复消息 + 一份设置快照」变成一条（或 N 条）回复正文。
@@ -132,9 +131,12 @@ object AiReplyEngine {
 
             val newest = request.targets.last()
             val history = loadHistory(newest, settings, isStillValid, onProgress) { index, total ->
-                mediaTotal = total
-                mediaFailed = it
-                onProgress(Progress("media", localizedChatString(R.string.ai_reply_media_progress, index, total)))
+                onProgress(
+                    Progress(
+                        "media",
+                        localizedChatString(R.string.ai_reply_media_progress, index, total),
+                    ),
+                )
             }
             contextChars = history.text.length
             mediaTotal = history.mediaCount
