@@ -2153,6 +2153,7 @@
     <string name="ai_reply_media_result">Context media: %1$d recognized, %2$d failed</string>
     <string name="ai_reply_media_title">Media recognition</string>
     <string name="ai_reply_media_provider">Recognition provider profile</string>
+    <string name="ai_reply_media_profile_missing">No vision profile yet. Add one under Entertainment → API Profiles.</string>
     <string name="ai_reply_media_enable">Recognize media in context</string>
     <string name="ai_reply_media_summary">Recognize context images, stickers and videos independently of the AI Recognition switch. A media reply target is always recognized.</string>
     <string name="ai_reply_media_source">[Media message — recognition starts when generating]</string>
@@ -4734,6 +4735,7 @@ Time: {time}</string>
     <string name="ai_auto_reply_stage_received">Received</string>
     <string name="ai_auto_reply_stage_buffered">Waiting</string>
     <string name="ai_auto_reply_detail_batch">%1$s messages merged</string>
+    <string name="ai_auto_reply_detail_overflow">Flood, dropped %1$s older messages</string>
     <string name="ai_auto_reply_reason_cooldown">Cooling down</string>
     <string name="ai_auto_reply_reason_announce_all">Mentions everyone</string>
     <string name="ai_auto_reply_reason_at_required">You were not mentioned</string>

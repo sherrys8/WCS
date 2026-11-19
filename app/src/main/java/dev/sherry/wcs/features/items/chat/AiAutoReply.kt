@@ -39,9 +39,12 @@ import dev.sherry.wcs.utils.fs.KnownPaths
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -61,6 +64,7 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
     private const val PREFIX = "ai_auto_reply_"
     private const val FRESH_WINDOW_MS = 30_000L
     private const val FUTURE_TOLERANCE_MS = 60_000L
+    private const val VOICE_SEND_TIMEOUT_MS = 30_000L
     private const val LOG_RETENTION_DAYS = 3
     private const val LOG_LINES_FOR_PAGE = 200
 
@@ -90,6 +94,8 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
                     debounceMs = debounceMs.coerceIn(500L, 30_000L),
                     maxWaitMs = maxWaitMs.coerceIn(1000L, 120_000L),
                     cooldownMs = cooldownMs.coerceIn(0L, 120_000L),
+                    // 攒批上限就是「参考上下文条数」：刷屏超过这个数只保留最新的
+                    maxBatch = AiReplyCandidates.autoReplyBatchLimit(),
                 )
             },
             handler = { batch -> handleBatch(batch) },
@@ -116,9 +122,19 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
         val talker = values.getAsString("talker") ?: return
         if (talker.isBlank()) return
 
-        // 本人发言 = 人工接管：作废该会话在途任务。这一步与总开关无关。
+        // isSend=1 有两种来源：本人手动发，或本模块刚发出去的那条。
+        // 前者算人工接管（不该再插嘴），后者必须放过 —— 否则 AI 每发一条都会把
+        // 同一会话里刚排上的下一批作废，表现为「只回一句就哑了」。
         if (isSend != 0) {
-            if (enabled) scheduler?.onTakeover(talker, account)
+            if (enabled) {
+                val echo = scheduler?.consumeSelfEcho(
+                    account,
+                    talker,
+                    values.getAsString("content").orEmpty(),
+                    values.getAsInteger("type") ?: MessageType.TEXT.code,
+                ) == true
+                if (!echo) scheduler?.onTakeover(talker, account)
+            }
             return
         }
 
@@ -254,6 +270,11 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
             }
         }
 
+        if (batch.dropped > 0) {
+            AutoReplyLog.append(
+                batch.account, Stage.SKIP, batch.talker, "overflow:${batch.dropped}", "text",
+            )
+        }
         AutoReplyLog.append(
             batch.account, Stage.BUFFERED, batch.talker, "batch:${targets.size}",
             kindOf(batch.items.last().typeCode),
@@ -269,7 +290,15 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
                 },
             )
         }.getOrElse { failure ->
-            if (failure is CancellationException) throw failure
+            if (failure is CancellationException) {
+                // 被接管 / 关开关 / 退出打断。原来直接抛出去，日志里只剩一条 BUFFERED，
+                // 事后分不清「没发出去」和「发出去了没记」。补一条再放行取消。
+                AutoReplyLog.append(
+                    batch.account, Stage.SKIP, batch.talker, "cancelled",
+                    kindOf(batch.items.last().typeCode),
+                )
+                throw failure
+            }
             WeLogger.w(TAG, "engine failed", failure)
             null
         }
@@ -290,8 +319,41 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
         }
 
         val cost = System.currentTimeMillis() - started
-        val voiceOk = maybeSendVoice(batch.account, batch.talker, text)
-        if (voiceOk) {
+
+        // 一旦生成成功就必须发出去并记账。这段放进 NonCancellable：接管或关开关
+        // 随时可能把协程掐断，被掐在发送与记账之间就会出现「微信里已经发出去了，
+        // 日志还停在等待回复、账本也没记」。
+        withContext(NonCancellable) {
+            val voiceOk = withTimeoutOrNull(VOICE_SEND_TIMEOUT_MS) {
+                maybeSendVoice(batch.account, batch.talker, text)
+            } ?: false
+
+            if (voiceOk) {
+                scheduler?.markCooldown(batch.talker, batch.account)
+                scheduler?.markSelfSent(batch.account, batch.talker, text, voice = true)
+                AutoReplyLedger.record(
+                    AutoReplyLedger.Task(
+                        id = "${batch.account}|${batch.talker}|${System.currentTimeMillis()}",
+                        account = batch.account,
+                        talker = batch.talker,
+                        batch = targets.map { if (it.msgSvrId != 0L) "s:${it.msgSvrId}" else "l:${it.msgId}" },
+                        state = "QUEUE_ACCEPTED",
+                        at = System.currentTimeMillis(),
+                        chars = text.length,
+                        model = settings.modelId,
+                        note = "voice",
+                    ),
+                )
+                AutoReplyLog.append(
+                    batch.account, Stage.SENT, batch.talker, "voice", "voice",
+                    chars = text.length, costMs = cost, model = settings.modelId,
+                    profile = settings.profileName,
+                )
+                return@withContext
+            }
+
+            val sent = WeMessageApi.sendText(batch.talker, text, redactLog = true)
+            if (sent) scheduler?.markSelfSent(batch.account, batch.talker, text)
             scheduler?.markCooldown(batch.talker, batch.account)
             AutoReplyLedger.record(
                 AutoReplyLedger.Task(
@@ -299,48 +361,25 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
                     account = batch.account,
                     talker = batch.talker,
                     batch = targets.map { if (it.msgSvrId != 0L) "s:${it.msgSvrId}" else "l:${it.msgId}" },
-                    state = "QUEUE_ACCEPTED",
+                    state = if (sent) "QUEUE_ACCEPTED" else "FAILED",
                     at = System.currentTimeMillis(),
                     chars = text.length,
                     model = settings.modelId,
-                    note = "voice",
+                    note = "",
                 ),
             )
             AutoReplyLog.append(
-                batch.account, Stage.SENT, batch.talker, "voice", "voice",
-                chars = text.length, costMs = cost, model = settings.modelId,
+                batch.account,
+                if (sent) Stage.SENT else Stage.FAILED,
+                batch.talker,
+                if (sent) "" else "send_failed",
+                "text",
+                chars = text.length,
+                costMs = cost,
+                model = settings.modelId,
                 profile = settings.profileName,
             )
-            return
         }
-
-        val sent = WeMessageApi.sendText(batch.talker, text, redactLog = true)
-        scheduler?.markCooldown(batch.talker, batch.account)
-        val state = if (sent) "QUEUE_ACCEPTED" else "FAILED"
-        AutoReplyLedger.record(
-            AutoReplyLedger.Task(
-                id = "${batch.account}|${batch.talker}|${System.currentTimeMillis()}",
-                account = batch.account,
-                talker = batch.talker,
-                batch = targets.map { if (it.msgSvrId != 0L) "s:${it.msgSvrId}" else "l:${it.msgId}" },
-                state = state,
-                at = System.currentTimeMillis(),
-                chars = text.length,
-                model = settings.modelId,
-                note = "",
-            ),
-        )
-        AutoReplyLog.append(
-            batch.account,
-            if (sent) Stage.SENT else Stage.FAILED,
-            batch.talker,
-            if (sent) "" else "send_failed",
-            "text",
-            chars = text.length,
-            costMs = cost,
-            model = settings.modelId,
-            profile = settings.profileName,
-        )
     }
 
     /**
@@ -601,6 +640,9 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
             entry.reason.startsWith("batch:") ->
                 localizedChatString(R.string.ai_auto_reply_detail_batch, entry.reason.removePrefix("batch:"))
 
+            entry.reason.startsWith("overflow:") ->
+                localizedChatString(R.string.ai_auto_reply_detail_overflow, entry.reason.removePrefix("overflow:"))
+
             else -> reasonLabel(entry.reason)
         }
         return if (detail.isBlank()) stage else "$stage · $detail"
@@ -624,7 +666,9 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
 
     fun todayCounts(account: String): Pair<Int, Int> {
         val entries = AutoReplyLog.today(account, 500)
-        return entries.size to entries.count { it.stage == Stage.SENT }
+        // overflow 那行是「丢了多少条」的注释，不是一次回复尝试，不计入条数
+        val attempts = entries.count { !it.reason.startsWith("overflow:") }
+        return attempts to entries.count { it.stage == Stage.SENT }
     }
 
     object Stage {
@@ -652,7 +696,7 @@ internal data class AutoReplyVoiceSpec(
 /**
  * 自动回复的独立日志。
  *
- * `moduleCache/auto-reply/<账号>/yyyy-MM-dd.log`，一行一条 JSON，只记结论。
+ * `moduleCache/auto-reply/<账号>/<会话>/yyyy-MM-dd.log`，一行一条 JSON，只记结论。
  * 与账本 `moduleData/auto_reply/state.json` 是两回事：账本要可靠，日志给人看。
  */
 internal object AutoReplyLog {
@@ -675,10 +719,27 @@ internal object AutoReplyLog {
     private fun dir(account: String): File =
         (KnownPaths.moduleCache / "auto-reply" / sanitize(account)).toFile()
 
-    private fun sanitize(account: String): String = account.ifBlank { "unknown" }
+    /** 一个白名单会话一个子目录：`auto-reply/<账号>/<会话>/yyyy-MM-dd.log`。 */
+    private fun sessionDir(account: String, talker: String): File =
+        File(dir(account), sanitize(talker))
 
-    private fun file(account: String, at: Long = System.currentTimeMillis()): File =
-        File(dir(account), SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(at)) + ".log")
+    /** 目录名要能落在文件系统上：wxid 本身安全，但群 id 与备注名可能带分隔符。 */
+    private fun sanitize(raw: String): String = raw.trim()
+        .map { ch ->
+            if (ch.isLetterOrDigit() || ch == '_' || ch == '-' || ch == '@' || ch == '.') ch else '_'
+        }
+        .joinToString("")
+        .take(64)
+        .ifBlank { "unknown" }
+
+    private fun dateName(at: Long): String =
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(at))
+
+    private fun file(
+        account: String,
+        talker: String,
+        at: Long = System.currentTimeMillis(),
+    ): File = File(sessionDir(account, talker), dateName(at) + ".log")
 
     fun append(
         account: String,
@@ -692,7 +753,7 @@ internal object AutoReplyLog {
         profile: String = "",
     ) {
         runCatching {
-            val target = file(account)
+            val target = file(account, talker)
             target.parentFile?.mkdirs()
             val line = buildString {
                 append('{')
@@ -711,27 +772,48 @@ internal object AutoReplyLog {
         }.onFailure { WeLogger.w(TAG, "append failed", it) }
     }
 
+    /**
+     * 当天全部会话的日志，跨文件按时间倒序合并。
+     *
+     * 分文件之后不能再只读一个路径：账号目录下的旧文件是升级前的结构，一并读进来，
+     * 免得刚升级当天界面上突然空了。
+     */
     fun today(account: String, limit: Int): List<Entry> {
-        val target = file(account)
-        if (!target.isFile) return emptyList()
+        val folder = dir(account)
+        val name = dateName(System.currentTimeMillis())
+        val files = ArrayList<File>(4)
+        File(folder, name).takeIf { it.isFile }?.let { files.add(it) }
+        folder.listFiles()?.forEach { child ->
+            if (child.isDirectory) File(child, name).takeIf { it.isFile }?.let { files.add(it) }
+        }
+        if (files.isEmpty()) return emptyList()
         return runCatching {
-            target.readLines()
-                .asReversed()
+            files.asSequence()
+                // 每个文件只取最后 limit 行：合并后总共也只留 limit 条，
+                // 单个文件里更早的行无论如何都会被淘汰，没必要解析。
+                .flatMap { it.readLines().asReversed().take(limit).asSequence() }
                 .mapNotNull { parse(it) }
+                .sortedByDescending { it.t }
                 .take(limit)
+                .toList()
         }.getOrDefault(emptyList())
     }
 
     fun prune(account: String) {
         val folder = dir(account)
-        val files = folder.listFiles()?.filter { it.name.endsWith(".log") } ?: return
+        if (!folder.isDirectory) return
         val cutoff = System.currentTimeMillis() - RETENTION_DAYS * 24L * 3600 * 1000
-        files.forEach { if (it.lastModified() < cutoff) runCatching { it.delete() } }
+        folder.walkTopDown()
+            .filter { it.isFile && it.name.endsWith(".log") && it.lastModified() < cutoff }
+            .forEach { runCatching { it.delete() } }
+        // 顺手收掉空掉的会话目录，免得白名单改来改去在盘上留一堆空壳
+        folder.walkBottomUp()
+            .filter { it.isDirectory && it != folder && it.listFiles().isNullOrEmpty() }
+            .forEach { runCatching { it.delete() } }
     }
 
     fun clear(account: String) {
-        val folder = dir(account)
-        folder.listFiles()?.forEach { runCatching { it.delete() } }
+        dir(account).listFiles()?.forEach { runCatching { it.deleteRecursively() } }
     }
 
     private fun parse(line: String): Entry? = runCatching {

@@ -33,7 +33,7 @@
 | `group_report_*.png` | 群聊分析长图 | `GroupReportImage` | **不删**（泄漏点） |
 | `auto_save_moments_*.bin` | 朋友圈自动保存的中间文件 | `AutoSaveMoments` | **不删**（泄漏点） |
 | `upload_*` | MCP / HTTP 接口上传的临时文件 | `ApiServer` | **不删**（泄漏点） |
-| `auto-reply/<账号>/` | 自动回复日志（设计稿规划，未实现） | — | 4 天 |
+| `auto-reply/<账号>/<会话>/` | 自动回复日志（已有，按账号+会话分目录） | `AutoReplyLog` | 4 天 |
 
 另：`JavaEngine` 把 `cacheDir` 作为变量暴露给用户脚本，脚本可以往这里写任意文件，无回收机制。
 
