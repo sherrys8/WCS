@@ -186,7 +186,7 @@ object ApiProfiles {
 
     /** 有多少个功能正引用这条配置。删除前用它拦截，避免「删完功能静默失效」。 */
     fun usageCount(id: String): Int =
-        listOf(KEY_GROUP_PROFILE, KEY_REPLY_PROFILE, KEY_TTS_PROFILE, "ai_image_profile_id").count {
+        listOf(KEY_GROUP_PROFILE, KEY_REPLY_PROFILE, KEY_TTS_PROFILE, "ai_image_profile_id", "ai_reply_vision_profile_id").count {
             WePrefs.getStringOrDef(it, "") == id
         }
 

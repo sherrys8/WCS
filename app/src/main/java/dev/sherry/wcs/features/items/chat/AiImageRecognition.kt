@@ -47,6 +47,7 @@ import dev.sherry.wcs.features.api.core.WeMessageApi
 import dev.sherry.wcs.features.api.core.WeServiceApi
 import dev.sherry.wcs.features.api.core.models.MessageInfo
 import dev.sherry.wcs.features.api.core.models.MessageType
+import dev.sherry.wcs.features.api.core.models.WeMessage
 import dev.sherry.wcs.features.api.ui.WeChatMessageContextMenuApi
 import dev.sherry.wcs.features.core.FeatureCategoryIds
 import dev.sherry.wcs.features.core.SwitchFeature
@@ -60,6 +61,7 @@ import dev.sherry.wcs.ui.utils.ShowComposeDialogScope
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.fs.KnownPaths
 import dev.sherry.wcs.utils.WeLogger
+import dev.sherry.wcs.utils.serialization.XmlUtils
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.OutputStream
@@ -327,18 +329,71 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
         videoTooLarge: String,
         animationPrompt: String,
         unsupportedAnimation: String,
+    ): String = recognizeMedia(
+        message.type, message.serverId, message.imagePath,
+        if (message.type?.isSticker == true) message.stickerMd5 else null,
+        profile, prompt, emptyResult, videoMissing, videoTooLarge,
+        animationPrompt, unsupportedAnimation, originalMessage = message,
+    )
+
+    suspend fun recognizeForReply(
+        message: WeMessage,
+        profile: ApiProfile,
+        prompt: String,
+        originalMessage: MessageInfo? = null,
+        onStatus: (Int) -> Unit = {},
+    ): String {
+        check(profile.capability == CAP_VISION && profile.apiKey.isNotBlank() &&
+            profile.defaultModelId.isNotBlank()) { localizedChatString(R.string.ai_image_need_config) }
+        val md5 = if (message.type?.isSticker == true) {
+            message.imgPath?.takeIf { it.isNotBlank() }
+                ?: XmlUtils.extractXmlAttr(message.content, "md5").takeIf { it.isNotBlank() }
+                ?: XmlUtils.extractXmlTag(message.content, "md5").takeIf { it.isNotBlank() }
+                ?: XmlUtils.extractXmlTag(message.content, "emoticonmd5").takeIf { it.isNotBlank() }
+        } else null
+        return recognizeMedia(
+            message.type, message.msgSvrId, message.imgPath, md5, profile, prompt,
+            localizedChatString(R.string.ai_image_empty),
+            localizedChatString(R.string.ai_image_video_missing),
+            localizedChatString(R.string.ai_image_video_too_large),
+            localizedChatString(R.string.ai_image_animation_prompt),
+            localizedChatString(R.string.ai_image_animation_unsupported),
+            originalMessage, onStatus,
+        )
+    }
+
+    private suspend fun recognizeMedia(
+        type: MessageType?,
+        serverId: Long,
+        imagePath: String?,
+        stickerMd5: String?,
+        profile: ApiProfile,
+        prompt: String,
+        emptyResult: String,
+        videoMissing: String,
+        videoTooLarge: String,
+        animationPrompt: String,
+        unsupportedAnimation: String,
+        originalMessage: MessageInfo? = null,
+        onStatus: (Int) -> Unit = {},
     ): String = withContext(Dispatchers.IO) {
+        onStatus(R.string.ai_reply_media_preparing)
         val cacheDirectory = (KnownPaths.moduleCache / "ai-image-recognition").createDirectories()
         val temporary = cacheDirectory / "media-${UUID.randomUUID()}.tmp"
         val videoCache = cacheDirectory / "video-${UUID.randomUUID()}.mp4"
-        val isVideo = message.type == MessageType.VIDEO || message.type == MessageType.MICRO_VIDEO
+        val isVideo = type == MessageType.VIDEO || type == MessageType.MICRO_VIDEO
         try {
             if (isVideo) {
-                val rawPath = message.imagePath
+                val rawPath = imagePath
                 WeLogger.i(TAG, "视频识别: imagePath=$rawPath")
                 if (rawPath.isNullOrBlank()) throw IOException(videoMissing)
                 val restored = try {
-                    runInterruptible { WeServiceApi.getVideoMp4PathFromMsgInfo(message) }
+                    runInterruptible {
+                        val nativeMessage = originalMessage ?: if (serverId != 0L) {
+                            MessageInfo(WeMessageApi.getMsgInfoInstanceByMsgSvrId(serverId))
+                        } else null
+                        nativeMessage?.let { WeServiceApi.getVideoMp4PathFromMsgInfo(it) }.orEmpty()
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -350,16 +405,17 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                 val video = awaitVideoSource(restored, rawPath, videoCache, videoMissing, videoTooLarge)
                 currentCoroutineContext().ensureActive()
                 return@withContext requestRecognition(
-                    profile, prompt, null, emptyResult, videoPath = video,
+                    profile, prompt, null, emptyResult, videoPath = video, onStatus = onStatus,
                 )
             }
             val media = runInterruptible {
                 val deadline = SystemClock.elapsedRealtime() + 120_000L
-                if (message.type?.isSticker == true) {
-                    val md5 = message.stickerMd5 ?: throw IOException(emptyResult)
+                if (type?.isSticker == true) {
+                    val md5 = stickerMd5 ?: throw IOException(emptyResult)
                     WeMessageApi.materializeNotificationSticker(md5, temporary, deadline, wait = true)
                 } else {
-                    WeMessageApi.materializeNotificationLargeImage(message.serverId, temporary, deadline)
+                    if (serverId == 0L) throw IOException(emptyResult)
+                    WeMessageApi.materializeNotificationLargeImage(serverId, temporary, deadline)
                 }
             } ?: throw IOException(emptyResult)
             currentCoroutineContext().ensureActive()
@@ -367,7 +423,7 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
             val dataUri = animation ?: encodeImage(media.path, emptyResult)
             currentCoroutineContext().ensureActive()
             val instruction = if (animation == null) prompt else "$prompt\n$animationPrompt"
-            requestRecognition(profile, instruction, dataUri, emptyResult)
+            requestRecognition(profile, instruction, dataUri, emptyResult, onStatus = onStatus)
         } finally {
             temporary.toFile().delete()
             videoCache.toFile().delete()
@@ -726,6 +782,7 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
         imageDataUri: String?,
         emptyResult: String,
         videoPath: Path? = null,
+        onStatus: (Int) -> Unit = {},
     ): String = coroutineScope {
         val connection = URL(profile.asConfig().requestEndpoint()).openConnection() as HttpURLConnection
         val cancellation = launch(Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) {
@@ -746,6 +803,7 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                     setRequestProperty("Authorization", "Bearer ${profile.apiKey}")
                     setRequestProperty("Content-Type", "application/json")
                 }
+                onStatus(R.string.ai_reply_media_uploading)
                 val video = videoPath
                 if (video != null) {
                     val prefix = videoRequestPrefix(profile.defaultModelId, prompt)
@@ -771,6 +829,7 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                             .put("role", "user").put("content", content)))
                     connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
                 }
+                onStatus(R.string.ai_reply_media_uploaded)
                 val status = connection.responseCode
                 if (status !in 200..299) {
                     val detail = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { reader ->
@@ -785,10 +844,13 @@ object AiImageRecognition : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIt
                     }.orEmpty()
                     throw IOException("HTTP $status: $detail")
                 }
+                onStatus(R.string.ai_reply_media_accepted)
+                WeLogger.i(TAG, "vision response: HTTP $status, model=${profile.defaultModelId}")
                 val response = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
                 val value = JSONObject(response).optJSONArray("choices")?.optJSONObject(0)
                     ?.optJSONObject("message")?.opt("content")
                 if (value !is String || value.isBlank()) throw IOException(emptyResult)
+                onStatus(R.string.ai_reply_media_recognized)
                 value.trim()
             }
         } finally {
