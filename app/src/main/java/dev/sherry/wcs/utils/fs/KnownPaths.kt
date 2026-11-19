@@ -23,10 +23,13 @@ object KnownPaths {
         HostInfo.application.codeCacheDir.asPath
     }
 
+    /**
+     * 可再生缓存。挂在 [moduleData] 下面而不是宿主的 `cache/` 目录里：
+     * `Android/data/<包名>/cache` 是微信的外部缓存目录，微信「清理缓存」和系统的
+     * 「清除缓存」都会整目录清掉，`WcS/Wcs_Cache` 不在它们的清理范围内。
+     */
     val moduleCache by lazy {
-        (internalStorage / "Android" / "data" /
-                runCatching { HostInfo.packageName }.getOrDefault(PackageNames.WECHAT)
-                / "cache" / BuildConfig.TAG).createDirsSafe()
+        (moduleData / "Wcs_Cache").createDirsSafe()
     }
 
     val moduleAssets by lazy {

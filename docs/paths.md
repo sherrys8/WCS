@@ -17,9 +17,9 @@ WcS 注入微信进程后，读写的不止自己的目录。这份文档列出�
 | 属性 | 实际路径 | 可见性 | 定义 |
 |------|----------|--------|------|
 | `KnownPaths.moduleData` | `/storage/emulated/0/Android/data/com.tencent.mm/WcS/` | 文件管理器可见 | `KnownPaths.kt:16` |
-| `KnownPaths.moduleCache` | `/storage/emulated/0/Android/data/com.tencent.mm/cache/WcS/` | 文件管理器可见 | `KnownPaths.kt:26` |
-| `KnownPaths.moduleAssets` | `/storage/emulated/0/Android/data/com.tencent.mm/WcS/assets/` | 文件管理器可见 | `KnownPaths.kt:32` |
-| `KnownPaths.downloads` | `/storage/emulated/0/Download/WcS/` | 公共下载目录 | `KnownPaths.kt:40` |
+| `KnownPaths.moduleCache` | `/storage/emulated/0/Android/data/com.tencent.mm/WcS/Wcs_Cache/` | 文件管理器可见 | `KnownPaths.kt:31` |
+| `KnownPaths.moduleAssets` | `/storage/emulated/0/Android/data/com.tencent.mm/WcS/assets/` | 文件管理器可见 | `KnownPaths.kt:35` |
+| `KnownPaths.downloads` | `/storage/emulated/0/Download/WcS/` | 公共下载目录 | `KnownPaths.kt:43` |
 | `KnownPaths.codeCacheDir` | `/data/data/com.tencent.mm/cache/` | 需要 root | `KnownPaths.kt:22` |
 | 微信内部 files | `/data/data/com.tencent.mm/files/` | 需要 root | 直接用 `application.filesDir` |
 | 微信内部 no_backup | `/data/data/com.tencent.mm/no_backup/` | 需要 root | 直接用 `application.noBackupFilesDir` |
@@ -45,7 +45,9 @@ WcS 注入微信进程后，读写的不止自己的目录。这份文档列出�
 
 ## moduleCache —— 可再生的缓存
 
-系统存储紧张时会回收，因此**任何删了会丢用户东西的东西都不能放这里**。
+挂在 `WcS/Wcs_Cache`，**不在**宿主的 `Android/data/<包名>/cache` 下，微信「清理缓存」和
+系统的「清除缓存」都碰不到它。代价是不再有外部兜底清理，全靠各功能自己的淘汰策略，
+因此**任何删了会丢用户东西的东西都不能放这里**。
 
 | 子项 | 用途 | 出处 |
 |------|------|------|
