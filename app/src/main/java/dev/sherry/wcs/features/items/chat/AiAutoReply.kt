@@ -145,18 +145,8 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
             val atUsers = atUserList(content = values.getAsString("msgsource").orEmpty())
             isAnnounceAll = atUsers.contains(ANNOUNCE_ALL)
             isAtMe = account in atUsers
-            if (skipAnnounceAll && isAnnounceAll) {
-                AutoReplyLog.append(
-                    account, Stage.SKIP, talker, "announce_all", kindOf(typeCode),
-                )
-                return
-            }
-            if (groupAtOnly && !isAtMe) {
-                AutoReplyLog.append(
-                    account, Stage.SKIP, talker, "at_required", kindOf(typeCode),
-                )
-                return
-            }
+            if (skipAnnounceAll && isAnnounceAll) return
+            if (groupAtOnly && !isAtMe) return
         }
 
         val svrKey = if (msgSvrId != 0L) "svr:$msgSvrId" else "local:$msgId"
@@ -172,7 +162,6 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
             else -> senderWxId
         }
 
-        AutoReplyLog.append(account, Stage.RECEIVED, talker, "", kindOf(typeCode))
         scheduler?.submit(
             AutoReplyScheduler.Inbound(
                 account = account,
@@ -252,6 +241,17 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
                 content = item.content,
                 imagePath = item.imagePath,
             )
+        }
+
+        if (batch.talker.endsWith("@chatroom")) {
+            if (skipAnnounceAll && batch.items.any { it.isAnnounceAll }) {
+                AutoReplyLog.append(batch.account, Stage.SKIP, batch.talker, "announce_all", "text")
+                return
+            }
+            if (groupAtOnly && batch.items.none { it.isAtMe }) {
+                AutoReplyLog.append(batch.account, Stage.SKIP, batch.talker, "at_required", "text")
+                return
+            }
         }
 
         AutoReplyLog.append(
