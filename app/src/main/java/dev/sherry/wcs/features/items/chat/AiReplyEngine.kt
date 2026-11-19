@@ -321,7 +321,7 @@ object AiReplyEngine {
                     },
                 ),
             )
-            Result(
+            return Result(
                 text = single, candidates = candidates, finishReason = finishReason,
                 completed = true, promptTokens = promptTokens, contextChars = contextChars,
                 mediaTotal = mediaTotal, mediaFailed = mediaFailed,

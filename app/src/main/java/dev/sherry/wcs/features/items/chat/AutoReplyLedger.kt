@@ -47,30 +47,42 @@ internal object AutoReplyLedger {
     )
 
     /** 返回 true 表示本进程第一次领取这条消息。 */
-    fun claim(key: String, at: Long = System.currentTimeMillis()): Boolean = synchronized(lock) {
-        if (claimed.containsKey(key)) return false
-        if (claimed.size >= MEMORY_CAPACITY) {
-            val iterator = claimed.keys.iterator()
-            if (iterator.hasNext()) {
-                iterator.next()
-                iterator.remove()
+    fun claim(key: String, at: Long = System.currentTimeMillis()): Boolean {
+        var taken = false
+        synchronized(lock) {
+            if (!claimed.containsKey(key)) {
+                if (claimed.size >= MEMORY_CAPACITY) {
+                    val iterator = claimed.keys.iterator()
+                    if (iterator.hasNext()) {
+                        iterator.next()
+                        iterator.remove()
+                    }
+                }
+                claimed[key] = at
+                taken = true
             }
         }
-        claimed[key] = at
-        true
+        return taken
     }
 
     /** 客户端 id 作为别名一起写入：补齐服务端 id 后不会再处理一次。 */
-    fun alias(key: String, at: Long = System.currentTimeMillis()) = synchronized(lock) {
-        claimed.putIfAbsent(key, at)
-        Unit
+    fun alias(key: String, at: Long = System.currentTimeMillis()) {
+        synchronized(lock) {
+            claimed.putIfAbsent(key, at)
+        }
     }
 
     fun isClaimed(key: String): Boolean = synchronized(lock) { claimed.containsKey(key) }
 
-    fun ensureLoaded() = synchronized(lock) {
-        if (loaded) return
-        loaded = true
+    fun ensureLoaded() {
+        synchronized(lock) {
+            if (loaded) return
+            loaded = true
+            loadLocked()
+        }
+    }
+
+    private fun loadLocked() {
         if (!stateFile.isFile) return
         runCatching {
             val root = JSONObject(stateFile.readText())

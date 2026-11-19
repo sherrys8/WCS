@@ -58,9 +58,6 @@ internal class AutoReplyScheduler(
         var job: Job?,
     )
 
-    private const val MAX_BATCH = 20
-    private const val MAX_PENDING = 40
-
     private val buckets = ConcurrentHashMap<String, Bucket>()
     private val requestGate = Semaphore(1)
 
@@ -148,5 +145,7 @@ internal class AutoReplyScheduler(
 
     private companion object {
         const val TAG = "AutoReplyScheduler"
+        const val MAX_BATCH = 20
+        const val MAX_PENDING = 40
     }
 }
