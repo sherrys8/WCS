@@ -1006,6 +1006,8 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
         var autoSkipAll by remember { mutableStateOf(AiAutoReply.skipAnnounceAll) }
         var autoVoice by remember { mutableStateOf(AiAutoReply.voiceReply) }
         var autoSessions by remember { mutableStateOf(AiAutoReply.sessionsLabel()) }
+        var autoSessionCount by remember { mutableStateOf(AiAutoReply.talkers.size) }
+        var autoRhythm by remember { mutableStateOf(AiAutoReply.rhythmLabel()) }
         var autoToday by remember { mutableStateOf(0 to 0) }
         LaunchedEffect(autoOn) {
             if (!autoOn) return@LaunchedEffect
@@ -1030,10 +1032,9 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                             SwitchWidget(
                                 title = stringResource(R.string.ai_auto_reply_title),
                                 description = if (autoOn) {
-                                    stringResource(
-                                        R.string.ai_auto_reply_summary_on,
-                                        AiAutoReply.talkers.size,
-                                    )
+                                    // 必须读 State：直接读 AiAutoReply.talkers 不会建立订阅，
+                                    // 选完会话后这一行不会重组。
+                                    stringResource(R.string.ai_auto_reply_summary_on, autoSessionCount)
                                 } else {
                                     stringResource(R.string.ai_auto_reply_summary_off)
                                 },
@@ -1053,6 +1054,7 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                                     onClick = {
                                         AiAutoReply.openSessionsDialog(context) {
                                             autoSessions = AiAutoReply.sessionsLabel()
+                                            autoSessionCount = AiAutoReply.talkers.size
                                         }
                                     },
                                     trailingContent = {
@@ -1130,8 +1132,12 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                                 BaseWidget(
                                     iconPlaceholder = false,
                                     title = stringResource(R.string.ai_auto_reply_rhythm),
-                                    description = AiAutoReply.rhythmLabel(),
-                                    onClick = { AiAutoReply.openRhythmDialog(context) },
+                                    description = autoRhythm,
+                                    onClick = {
+                                        AiAutoReply.openRhythmDialog(context) {
+                                            autoRhythm = AiAutoReply.rhythmLabel()
+                                        }
+                                    },
                                     trailingContent = {
                                         Icon(
                                             MaterialSymbols.Outlined.Chevron_right,

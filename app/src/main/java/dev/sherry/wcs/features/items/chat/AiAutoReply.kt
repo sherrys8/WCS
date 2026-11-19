@@ -409,13 +409,14 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
                 onDismiss = onDismiss,
             ) { selected ->
                 talkers = selected
-                onDismiss()
+                // 先回调再关窗：关窗会销毁这段 composition，之后再写状态就不触发重组了。
                 onDone()
+                onDismiss()
             }
         }
     }
 
-    fun openRhythmDialog(context: Context) {
+    fun openRhythmDialog(context: Context, onDone: () -> Unit = {}) {
         showComposeDialog(context) {
             AlertDialogContent(
                 title = { Text(stringResource(R.string.ai_auto_reply_rhythm)) },
@@ -428,6 +429,7 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
                                 description = null,
                                 onClick = {
                                     applyRhythm(5000L, 25000L, 30000L)
+                                    onDone()
                                     onDismiss()
                                 },
                             )
@@ -439,6 +441,7 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
                                 description = null,
                                 onClick = {
                                     applyRhythm(3000L, 15000L, 10000L)
+                                    onDone()
                                     onDismiss()
                                 },
                             )
@@ -450,6 +453,7 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
                                 description = null,
                                 onClick = {
                                     applyRhythm(1000L, 8000L, 5000L)
+                                    onDone()
                                     onDismiss()
                                 },
                             )
