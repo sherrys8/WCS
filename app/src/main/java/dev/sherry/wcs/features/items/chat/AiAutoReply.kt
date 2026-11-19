@@ -735,11 +735,14 @@ internal object AutoReplyLog {
     private fun dateName(at: Long): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(at))
 
+    /** 日志文件名 `yyyy-MM-dd.log`。写入与读取必须共用这一个函数，避免两边拼得不一样。 */
+    private fun logName(at: Long): String = dateName(at) + ".log"
+
     private fun file(
         account: String,
         talker: String,
         at: Long = System.currentTimeMillis(),
-    ): File = File(sessionDir(account, talker), dateName(at) + ".log")
+    ): File = File(sessionDir(account, talker), logName(at))
 
     fun append(
         account: String,
@@ -780,7 +783,9 @@ internal object AutoReplyLog {
      */
     fun today(account: String, limit: Int): List<Entry> {
         val folder = dir(account)
-        val name = dateName(System.currentTimeMillis())
+        // 带后缀：这里曾漏掉 `.log`，`File(child, "2026-11-20")` 永远 isFile=false，
+        // 于是文件在盘上、界面却是 0 条。文件名统一由 [logName] 生成，别再手拼。
+        val name = logName(System.currentTimeMillis())
         val files = ArrayList<File>(4)
         File(folder, name).takeIf { it.isFile }?.let { files.add(it) }
         folder.listFiles()?.forEach { child ->
