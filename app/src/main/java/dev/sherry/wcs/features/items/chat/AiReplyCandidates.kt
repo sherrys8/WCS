@@ -298,6 +298,7 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
             apiKey = profile.apiKey,
             cookie = profile.cookie.orEmpty(),
             model = TtsProfiles.modelOf(profile),
+            userAgent = profile.userAgent,
         )
     }
 
@@ -480,6 +481,7 @@ object AiReplyCandidates : SwitchFeature(), WeChatMessageContextMenuApi.IMenuIte
                     text,
                     effectiveVoiceId(),
                     cookie = profile.cookie,
+                    userAgent = profile.userAgent,
                     cb = callback,
                 )
 

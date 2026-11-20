@@ -664,6 +664,17 @@ object ApiProfileManager : ClickableFeature() {
                         password = true,
                     )
                 }
+                item {
+                    TextFieldDialogWidget(
+                        title = stringResource(R.string.api_profile_user_agent),
+                        value = draft.userAgent,
+                        onValueChange = { persist(draft.copy(userAgent = it.trim())) },
+                        dialogTitle = stringResource(R.string.api_profile_user_agent),
+                        confirmLabel = stringResource(R.string.dialog_confirm),
+                        dismissLabel = stringResource(R.string.dialog_cancel),
+                        valueHint = stringResource(R.string.api_profile_user_agent_hint),
+                    )
+                }
             } else {
                 item {
                     TextFieldDialogWidget(

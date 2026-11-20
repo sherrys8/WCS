@@ -819,7 +819,7 @@ object TextToSpeech :
                                     title = stringResource(R.string.tts_settings_profile),
                                     description = profile?.let {
                                         context.getString(TtsProfiles.providerLabelRes(it.provider)) +
-                                            " · " + it.name
+                                            " " + it.name
                                     } ?: stringResource(R.string.api_profile_none),
                                     onClick = {
                                         showApiProfilePicker(context, profileId, CAP_TTS) { picked ->
@@ -1022,9 +1022,14 @@ object TextToSpeech :
         text: String,
         speaker: String,
         cookie: String = doubaoCookie,
+        userAgent: String = activeProfile?.takeIf { it.provider == TTS_PROVIDER_DOUBAO }?.userAgent.orEmpty(),
         cb: (String?, String) -> Unit,
     ) {
         Thread {
+            if (userAgent.any { it != '\t' && it.code !in 32..126 }) {
+                mh.post { cb(null, localizedChatString(R.string.api_profile_user_agent_invalid)) }
+                return@Thread
+            }
             val audio = ByteArrayOutputStream()
             val closed = CountDownLatch(1)
             var error = ""
@@ -1032,7 +1037,7 @@ object TextToSpeech :
             val request = Request.Builder()
                 .url(doubaoWsUrl(speaker))
                 .header("Origin", DOUBAO_ORIGIN)
-                .header("User-Agent", DOUBAO_UA)
+                .header("User-Agent", userAgent.ifBlank { DOUBAO_UA })
                 .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
                 .header("Cache-Control", "no-cache")
                 .header("Pragma", "no-cache")

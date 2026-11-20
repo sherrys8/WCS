@@ -416,7 +416,7 @@ object AiAutoReply : WeDatabaseListenerApi.IInsertListener {
                 )
 
                 TextToSpeech.BACKEND_DOUBAO -> TextToSpeech.generateVoiceDoubao(
-                    text, spec.voiceId, cookie = spec.cookie, cb = callback,
+                    text, spec.voiceId, cookie = spec.cookie, userAgent = spec.userAgent, cb = callback,
                 )
 
                 else -> TextToSpeech.generateVoice(
@@ -691,6 +691,7 @@ internal data class AutoReplyVoiceSpec(
     val apiKey: String,
     val cookie: String,
     val model: String,
+    val userAgent: String = "",
 )
 
 /**

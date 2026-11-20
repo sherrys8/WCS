@@ -110,6 +110,7 @@ data class ApiProfile(
     val provider: String = "",
     /** 豆包登录态或 Breeze 签到 Cookie。 */
     val cookie: String = "",
+    val userAgent: String = "",
 ) {
     val isTts: Boolean get() = capability == CAP_TTS
 
@@ -186,7 +187,7 @@ object ApiProfiles {
 
     /** 有多少个功能正引用这条配置。删除前用它拦截，避免「删完功能静默失效」。 */
     fun usageCount(id: String): Int =
-        listOf(KEY_GROUP_PROFILE, KEY_REPLY_PROFILE, KEY_TTS_PROFILE, "ai_image_profile_id", "ai_reply_vision_profile_id").count {
+        listOf(KEY_GROUP_PROFILE, KEY_REPLY_PROFILE, KEY_TTS_PROFILE, "ai_image_profile_id", "ai_reply_vision_profile_id", "doubao_music_profile_id").count {
             WePrefs.getStringOrDef(it, "") == id
         }
 
@@ -277,6 +278,7 @@ object ApiProfiles {
         capability = json.optString("capability", CAP_LLM),
         provider = json.optString("provider", ""),
         cookie = json.optString("cookie", ""),
+        userAgent = json.optString("userAgent", ""),
     )
 
     private fun encode(profile: ApiProfile): JSONObject = JSONObject()
@@ -290,4 +292,5 @@ object ApiProfiles {
         .put("capability", profile.capability)
         .put("provider", profile.provider)
         .put("cookie", profile.cookie)
+        .put("userAgent", profile.userAgent)
 }

@@ -115,7 +115,7 @@ private fun ShowComposeDialogScope.ApiProfilePickerContent(
                                     iconPlaceholder = false,
                                     title = profile.name,
                                     description = if (profile.isTts) {
-                                        stringResource(R.string.api_profile_capability_tts) + " · " +
+                                        stringResource(R.string.api_profile_capability_tts) + " " +
                                             stringResource(TtsProfiles.providerLabelRes(profile.provider))
                                     } else if (profile.capability == CAP_ASR) {
                                         stringResource(R.string.api_profile_provider_siliconflow)
