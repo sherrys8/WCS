@@ -64,6 +64,16 @@ object TtsProfiles {
         return forBackend(legacyBackend)
     }
 
+    fun currentBackend(): Int = active()?.let(::backendOf)
+        ?: WePrefs.getIntOrDef(LEGACY_BACKEND, TextToSpeech.BACKEND_BREEZE)
+
+    fun selectBackend(backend: Int) {
+        val provider = providerOf(backend)
+        val profile = byId(activeId)?.takeIf { it.provider == provider } ?: forProvider(provider)
+        WePrefs.putInt(LEGACY_BACKEND, backend)
+        activeId = profile?.id.orEmpty()
+    }
+
     /** 这条档的模型：Breeze 用它选引擎，空着就回到客户端默认值。 */
     fun modelOf(profile: ApiProfile?): String =
         profile?.defaultModelId?.takeIf { it.isNotBlank() } ?: BreezeTtsClient.DEFAULT_MODEL

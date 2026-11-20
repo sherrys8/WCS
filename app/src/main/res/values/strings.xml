@@ -2152,7 +2152,7 @@
     <string name="ai_reply_account_changed">The signed-in account changed; generate again</string>
     <string name="ai_reply_media_result">Context media: %1$d recognized, %2$d failed</string>
     <string name="ai_reply_media_title">Media recognition</string>
-    <string name="ai_reply_media_provider">Recognition provider profile</string>
+    <string name="ai_reply_media_provider">Provider profile</string>
     <string name="ai_reply_media_profile_missing">No vision profile yet. Add one under Entertainment → API Profiles.</string>
     <string name="ai_reply_media_enable">Recognize media in context</string>
     <string name="ai_reply_media_summary">Recognize context images, stickers and videos independently of the AI Recognition switch. A media reply target is always recognized.</string>
@@ -2291,7 +2291,7 @@
     <string name="api_profile_tts_note">Only credentials and model live here. Voice, style instructions and daily credits stay in text-to-speech.</string>
     <string name="api_profile_tts_model_hint">Leave empty to use the default model (%1$s)</string>
     <string name="tts_settings_profile">Synthesis profile</string>
-    <string name="tts_settings_note">Credentials and model are edited under Entertainment → API Profiles → Text to speech. This screen only picks which one. The sign-in cookie for daily credits is a separate credential.</string>
+    <string name="tts_settings_note">Credentials and model are edited under Entertainment → API Profiles → Text to speech. This screen selects the voice backend and uses its profile. The sign-in cookie for daily credits is a separate credential.</string>
     <string name="tts_model_fetch_hint">Tap below to fetch the model list</string>
     <string name="ai_reply_tts_profile_missing">No %1$s speech profile yet. Add one under Entertainment → API Profiles.</string>
     <string name="ui_group_ai_settings_title">API Settings</string>
@@ -4758,11 +4758,11 @@ Time: {time}</string>
     <string name="db_music_library">Library</string>
     <string name="db_music_library_empty">No songs for the selected account. Select an account in settings and generate a song.</string>
     <string name="db_music_content">Song idea</string>
-    <string name="db_music_prompt">Description</string>
+    <string name="db_music_prompt">What kind of song would you like?</string>
     <string name="db_music_ai_lyrics">AI lyrics</string>
     <string name="db_music_custom_lyrics">Custom lyrics</string>
     <string name="db_music_lyrics">Lyrics</string>
-    <string name="db_music_parameters">Music parameters</string>
+    <string name="db_music_parameters">Music style</string>
     <string name="db_music_theme">Theme</string>
     <string name="db_music_genre">Genre</string>
     <string name="db_music_mood">Mood</string>

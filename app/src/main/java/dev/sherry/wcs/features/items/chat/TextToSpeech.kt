@@ -132,8 +132,8 @@ object TextToSpeech :
      */
     private val activeProfile: ApiProfile? get() = TtsProfiles.active()
 
-    /** 当前档的后端。没配过任何档时回落 Breeze，与老默认一致。 */
-    val backend: Int get() = TtsProfiles.backendOf(activeProfile)
+    /** 当前档的后端；缺少对应配置时保留用户选择的后端。 */
+    val backend: Int get() = TtsProfiles.currentBackend()
 
     /** 魔方用的 Key。当前档不是魔方就是空，合成前的校验会拦下。 */
     val apiKey: String
@@ -702,7 +702,7 @@ object TextToSpeech :
     }
 
     /**
-     * 设置只有两行：选哪条合成配置、以及 Breeze 的每日积分签到。
+     * 设置只有两行：选择语音合成后端、以及 Breeze 的每日积分签到。
      *
      * 凭据与模型搬进配置档后，这里不再填 Key / Cookie / 模型 —— 那些在「娱乐 → API配置」
      * 里改，改一处所有引用方一起生效。签到使用当前 Breeze 配置档里的网页登录 Cookie，
@@ -710,10 +710,11 @@ object TextToSpeech :
      */
     private fun showSettingsDialog(context: android.content.Context, onApiKeySaved: () -> Unit = {}) {
         showComposeDialog(context) {
+            var backendState by remember { mutableIntStateOf(backend) }
             var profileId by remember { mutableStateOf(TtsProfiles.active()?.id.orEmpty()) }
             val profile = remember(profileId) { TtsProfiles.byId(profileId) }
             // 只有 Breeze 有积分可领；豆包/魔方不显示这一行，也就不留一个点了会报错的按钮
-            val isBreeze = profile == null || profile.provider == TTS_PROVIDER_BREEZE
+            val isBreeze = backendState == BACKEND_BREEZE
 
             val breezeCookie = profile?.takeIf { it.provider == TTS_PROVIDER_BREEZE }?.cookie.orEmpty()
             var creditsText by remember(profileId, breezeCookie) {
@@ -813,26 +814,18 @@ object TextToSpeech :
                     ) {
                         SegmentedColumn {
                             item {
-                                // 选配置等于选后端：一条档就代表一家服务商，所以不需要再单独切后端
-                                BaseWidget(
-                                    iconPlaceholder = false,
-                                    title = stringResource(R.string.tts_settings_profile),
-                                    description = profile?.let {
-                                        context.getString(TtsProfiles.providerLabelRes(it.provider)) +
-                                            " " + it.name
-                                    } ?: stringResource(R.string.api_profile_none),
-                                    onClick = {
-                                        showApiProfilePicker(context, profileId, CAP_TTS) { picked ->
-                                            profileId = picked.id
-                                            TtsProfiles.activeId = picked.id
-                                            onApiKeySaved()
-                                        }
+                                DropDownMenuWidget(
+                                    title = stringResource(R.string.ai_reply_tts_backend),
+                                    description = null,
+                                    value = backendState,
+                                    options = listOf(BACKEND_BREEZE, BACKEND_DOUBAO, BACKEND_MOFA).map {
+                                        DropdownOption(it, stringResource(TtsProfiles.providerLabelRes(TtsProfiles.providerOf(it))))
                                     },
-                                    trailingContent = {
-                                        Icon(
-                                            imageVector = MaterialSymbols.Outlined.Chevron_right,
-                                            contentDescription = null,
-                                        )
+                                    onValueChange = { picked ->
+                                        TtsProfiles.selectBackend(picked)
+                                        backendState = picked
+                                        profileId = TtsProfiles.active()?.id.orEmpty()
+                                        onApiKeySaved()
                                     },
                                 )
                             }

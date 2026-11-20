@@ -2105,7 +2105,7 @@
     <string name="ai_reply_account_changed">当前登录账号已变化，请重新生成</string>
     <string name="ai_reply_media_result">上下文多媒体：识别成功 %1$d 条，失败 %2$d 条</string>
     <string name="ai_reply_media_title">多媒体识别</string>
-    <string name="ai_reply_media_provider">识别服务商配置</string>
+    <string name="ai_reply_media_provider">服务商配置</string>
     <string name="ai_reply_media_profile_missing">还没有视觉识别配置，请到「娱乐 → API配置」新增一条</string>
     <string name="ai_reply_media_enable">识别上下文中的多媒体</string>
     <string name="ai_reply_media_summary">独立于 AI识别功能开关，逐条识别所选上下文中的图片、表情和视频。长按媒体作为回复目标时始终识别。</string>
@@ -2244,7 +2244,7 @@
     <string name="api_profile_tts_note">这里只存凭据与模型。音色、语气指令、积分签到仍在文字转语音里。</string>
     <string name="api_profile_tts_model_hint">留空用默认模型（%1$s）</string>
     <string name="tts_settings_profile">选择合成配置</string>
-    <string name="tts_settings_note">凭据与模型在「娱乐 → API配置 → 语音合成」里改；这里只选哪一条。签到用的登录 Cookie 与合成的 Key 是两套凭据。</string>
+    <string name="tts_settings_note">凭据与模型在「娱乐 → API配置 → 语音合成」里改；这里只选择语音合成后端并读取对应配置。签到用的登录 Cookie 与合成的 Key 是两套凭据。</string>
     <string name="tts_model_fetch_hint">点右下角获取模型列表</string>
     <string name="ai_reply_tts_profile_missing">还没有 %1$s 的语音合成配置，请到「娱乐 → API配置」新增一条</string>
     <string name="ui_group_ai_settings_title">API 配置</string>
@@ -4789,11 +4789,11 @@
     <string name="db_music_library">作品库</string>
     <string name="db_music_library_empty">所选账号暂无作品，请先在设置中选择账号，再生成音乐。</string>
     <string name="db_music_content">创作内容</string>
-    <string name="db_music_prompt">创作描述</string>
+    <string name="db_music_prompt">想写一首什么歌？</string>
     <string name="db_music_ai_lyrics">AI 作词</string>
     <string name="db_music_custom_lyrics">自定义歌词</string>
     <string name="db_music_lyrics">歌词</string>
-    <string name="db_music_parameters">音乐参数</string>
+    <string name="db_music_parameters">音乐风格</string>
     <string name="db_music_theme">主题</string>
     <string name="db_music_genre">流派</string>
     <string name="db_music_mood">情绪</string>

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
@@ -24,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,6 +45,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import coil3.compose.AsyncImage
 import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.outlined.Expand_less
+import com.composables.icons.materialsymbols.outlined.Expand_more
+import com.composables.icons.materialsymbols.outlined.Library_music
 import com.composables.icons.materialsymbols.outlined.Music_note
 import com.composables.icons.materialsymbols.outlined.Settings
 import dev.sherry.wcs.R
@@ -93,6 +96,15 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
     private var savedLyric by prefOption("doubao_music_lyric", "")
     private var savedTheme by prefOption("doubao_music_theme", "")
 
+    private fun accounts(): List<ApiProfile> =
+        ApiProfiles.ofCapability(CAP_TTS).filter { it.provider == TTS_PROVIDER_DOUBAO }
+
+    private fun effectiveProfileId(): String {
+        val profiles = accounts()
+        return profiles.firstOrNull { it.id == selectedProfileId }?.id
+            ?: (profiles.firstOrNull { it.hasCredential && it.userAgent.isNotBlank() } ?: profiles.firstOrNull())?.id.orEmpty()
+    }
+
     override fun onEnable() { WeChatInputBarMenuApi.addProvider(this) }
     override fun onDisable() { WeChatInputBarMenuApi.removeProvider(this) }
     override fun onClick(context: ComponentActivity) { open(context, "", "") }
@@ -113,7 +125,7 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
     @Composable
     private fun ShowComposeDialogScope.Content(talker: String, initialText: String) {
         val scope = rememberCoroutineScope()
-        var profileId by remember { mutableStateOf(selectedProfileId) }
+        var profileId by remember { mutableStateOf(effectiveProfileId()) }
         var prompt by remember { mutableStateOf(initialText.ifBlank { savedPrompt }) }
         var lyric by remember { mutableStateOf(savedLyric) }
         var theme by remember { mutableStateOf(savedTheme) }
@@ -135,9 +147,14 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
         var position by remember { mutableIntStateOf(0) }
         var duration by remember { mutableIntStateOf(0) }
         var expandedLyrics by remember { mutableStateOf(false) }
+        var expandedStyle by remember { mutableStateOf(false) }
         var deleteTarget by remember { mutableStateOf<DoubaoMusicTrack?>(null) }
-        val profiles = ApiProfiles.ofCapability(CAP_TTS).filter { it.provider == TTS_PROVIDER_DOUBAO }
+        val profiles = accounts()
         val profile = profiles.firstOrNull { it.id == profileId }
+        LaunchedEffect(profileId, profiles.map { it.id }) {
+            if (profiles.any { it.id == profileId }) selectedProfileId = profileId
+            else if (profiles.isNotEmpty()) profileId = effectiveProfileId()
+        }
 
         fun failure(e: Exception): String {
             WeLogger.w("DoubaoMusic", "operation failed: ${e.javaClass.simpleName}")
@@ -268,8 +285,13 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
         AlertDialogContent(
             title = {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(if (settings) R.string.db_music_settings else R.string.db_music_name))
-                    Spacer(Modifier.weight(1f))
+                    Text(
+                        stringResource(if (settings) R.string.db_music_settings else if (library) R.string.db_music_library else R.string.db_music_name),
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (!settings) IconButton(onClick = { library = !library }, enabled = !busy) {
+                        Icon(MaterialSymbols.Outlined.Library_music, contentDescription = stringResource(if (library) R.string.db_music_create else R.string.db_music_library))
+                    }
                     IconButton(onClick = { settings = !settings }, enabled = !busy) {
                         Icon(MaterialSymbols.Outlined.Settings, contentDescription = stringResource(R.string.db_music_settings))
                     }
@@ -280,23 +302,21 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
                     if (settings) {
                         SegmentedColumn(title = stringResource(R.string.db_music_account)) {
                             item {
-                                val options = listOf(DropdownOption("", stringResource(R.string.api_profile_none))) + profiles.map { DropdownOption(it.id, it.name) }
-                                DropDownMenuWidget(
-                                    title = stringResource(R.string.db_music_select_account), description = null,
-                                    value = profileId,
-                                    options = if (options.any { it.value == profileId }) options else options + DropdownOption(profileId, stringResource(R.string.api_profile_none)),
-                                    onValueChange = { stopPlayer(); profileId = it; selectedProfileId = it; selected = null; error = null; progress = "" },
-                                )
+                                if (profiles.isEmpty()) {
+                                    BaseWidget(title = stringResource(R.string.db_music_select_account), enabled = false)
+                                } else {
+                                    DropDownMenuWidget(
+                                        title = stringResource(R.string.db_music_select_account), description = null,
+                                        value = profileId.takeIf { id -> profiles.any { it.id == id } } ?: profiles.first().id,
+                                        options = profiles.map { DropdownOption(it.id, it.name) },
+                                        onValueChange = { stopPlayer(); profileId = it; selectedProfileId = it; selected = null; error = null; progress = "" },
+                                    )
+                                }
                             }
-                            item { BaseWidget(title = stringResource(R.string.api_profile_user_agent), description = profile?.userAgent?.takeIf { it.isNotBlank() } ?: stringResource(R.string.db_music_need_ua)) }
                         }
                         Text(stringResource(R.string.db_music_account_note), style = MaterialTheme.typography.bodySmall)
                         Text(stringResource(R.string.db_music_cache_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            FilterChip(selected = !library, onClick = { library = false }, label = { Text(stringResource(R.string.db_music_create)) }, modifier = Modifier.weight(1f))
-                            FilterChip(selected = library, onClick = { library = true }, label = { Text(stringResource(R.string.db_music_library)) }, modifier = Modifier.weight(1f))
-                        }
                         if (library) {
                             if (tracks.isEmpty()) Text(stringResource(R.string.db_music_library_empty))
                             tracks.forEach { track ->
@@ -313,26 +333,52 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
                                 }
                             }
                         } else {
-                            SegmentedColumn(title = stringResource(R.string.db_music_content)) {
-                                item { MusicField(R.string.db_music_prompt, prompt, !busy, true) { prompt = it; savedPrompt = it } }
-                                item {
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        FilterChip(selected = !custom, onClick = { custom = false }, enabled = !busy, label = { Text(stringResource(R.string.db_music_ai_lyrics)) }, modifier = Modifier.weight(1f))
-                                        FilterChip(selected = custom, onClick = { custom = true }, enabled = !busy, label = { Text(stringResource(R.string.db_music_custom_lyrics)) }, modifier = Modifier.weight(1f))
-                                    }
-                                }
-                                if (custom) item { MusicField(R.string.db_music_lyrics, lyric, !busy, true) { lyric = it; savedLyric = it } }
+                            OutlinedTextField(
+                                value = prompt,
+                                onValueChange = { prompt = it; savedPrompt = it },
+                                label = { Text(stringResource(R.string.db_music_prompt)) },
+                                enabled = !busy,
+                                minLines = 4,
+                                maxLines = 6,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                FilterChip(selected = !custom, onClick = { custom = false }, enabled = !busy, label = { Text(stringResource(R.string.db_music_ai_lyrics)) }, modifier = Modifier.weight(1f))
+                                FilterChip(selected = custom, onClick = { custom = true }, enabled = !busy, label = { Text(stringResource(R.string.db_music_custom_lyrics)) }, modifier = Modifier.weight(1f))
                             }
-                            SegmentedColumn(title = stringResource(R.string.db_music_parameters)) {
-                                item { MusicField(R.string.db_music_theme, theme, !busy) { theme = it; savedTheme = it } }
-                                item { Choice(R.string.db_music_genre, genre, listOf("Pop", "Rock", "Folk", "Electronic", "Hip Hop/Rap", "Chinese Style", "DJ", "R&B/Soul", "Reggae", "Punk", "Jazz"), !busy) { genre = it } }
-                                item { Choice(R.string.db_music_mood, mood, listOf("Happy", "Chill", "Dynamic/Energetic", "Excited", "Sentimental/Melancholic/Lonely", "Inspirational/Hopeful", "Sorrow/Sad", "Nostalgic/Memory", "Romantic"), !busy) { mood = it } }
+                            if (custom) OutlinedTextField(
+                                value = lyric,
+                                onValueChange = { lyric = it; savedLyric = it },
+                                label = { Text(stringResource(R.string.db_music_lyrics)) },
+                                enabled = !busy,
+                                minLines = 4,
+                                maxLines = 6,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            SegmentedColumn {
                                 item {
-                                    DropDownMenuWidget(
-                                        title = stringResource(R.string.db_music_gender), description = null, value = gender, enabled = !busy,
-                                        options = listOf(DropdownOption("", stringResource(R.string.db_music_unspecified)), DropdownOption("Male", stringResource(R.string.db_music_male)), DropdownOption("Female", stringResource(R.string.db_music_female))),
-                                        onValueChange = { gender = it },
+                                    BaseWidget(
+                                        title = stringResource(R.string.db_music_parameters),
+                                        description = listOf(genre, mood).filter { it.isNotBlank() }.joinToString(" / ")
+                                            .ifBlank { stringResource(R.string.db_music_unspecified) },
+                                        enabled = !busy,
+                                        onClick = { expandedStyle = !expandedStyle },
+                                        trailingContent = {
+                                            Icon(if (expandedStyle) MaterialSymbols.Outlined.Expand_less else MaterialSymbols.Outlined.Expand_more, contentDescription = null)
+                                        },
                                     )
+                                }
+                                if (expandedStyle) {
+                                    item { MusicField(R.string.db_music_theme, theme, !busy) { theme = it; savedTheme = it } }
+                                    item { Choice(R.string.db_music_genre, genre, listOf("Pop", "Rock", "Folk", "Electronic", "Hip Hop/Rap", "Chinese Style", "DJ", "R&B/Soul", "Reggae", "Punk", "Jazz"), !busy) { genre = it } }
+                                    item { Choice(R.string.db_music_mood, mood, listOf("Happy", "Chill", "Dynamic/Energetic", "Excited", "Sentimental/Melancholic/Lonely", "Inspirational/Hopeful", "Sorrow/Sad", "Nostalgic/Memory", "Romantic"), !busy) { mood = it } }
+                                    item {
+                                        DropDownMenuWidget(
+                                            title = stringResource(R.string.db_music_gender), description = null, value = gender, enabled = !busy,
+                                            options = listOf(DropdownOption("", stringResource(R.string.db_music_unspecified)), DropdownOption("Male", stringResource(R.string.db_music_male)), DropdownOption("Female", stringResource(R.string.db_music_female))),
+                                            onValueChange = { gender = it },
+                                        )
+                                    }
                                 }
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -387,8 +433,8 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
                 }
             },
             dismissButton = {
-                TextButton(onClick = { if (settings) settings = false else { job?.cancel(); onDismiss() } }) {
-                    Text(stringResource(if (settings) R.string.api_profile_back else R.string.dialog_close))
+                TextButton(onClick = { if (settings) settings = false else if (library) library = false else { job?.cancel(); onDismiss() } }) {
+                    Text(stringResource(if (settings || library) R.string.api_profile_back else R.string.dialog_close))
                 }
             },
         )
