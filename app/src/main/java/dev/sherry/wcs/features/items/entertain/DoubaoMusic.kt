@@ -345,13 +345,14 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
                         )
                         Screen.PLAYER -> selected?.let { track ->
                             val saved = DoubaoMusicStore.audio(track).isFile
+                            val retry: () -> Unit = { start(track) }
                             PlayerContent(
                                 track = track, playing = playing, position = position, duration = duration,
                                 onPlay = { play(track) }, onSeek = { position = it; player?.seekTo(it) },
                                 onDownload = { saveToDownloads(track) }, onSend = { sendAsVoice(track) },
                                 onCopyLyrics = { copyLyrics(context, track) },
                                 onDelete = { deleteTarget = track },
-                                onRetry = if (saved) null else { start(track) },
+                                onRetry = if (saved) null else retry,
                             )
                         }
                         Screen.LIBRARY -> LibraryContent(
