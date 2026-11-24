@@ -66,7 +66,6 @@ object DoubaoMusicClient {
         profile: ApiProfile,
         prompt: String,
         lyric: String,
-        theme: String,
         genre: String,
         mood: String,
         gender: String,
@@ -76,7 +75,8 @@ object DoubaoMusicClient {
         try {
             validateProfile(profile)
             val variables = JSONObject().put("lyric", if (customLyrics) lyric else "")
-                .put("theme", theme).put("generation_type", if (customLyrics) "custome_lyric" else "AI_lyric")
+                // 协议要求 6 个变量恒定全发，界面上没有主题输入，这一位就留空串
+                .put("theme", "").put("generation_type", if (customLyrics) "custome_lyric" else "AI_lyric")
                 .put("genre", genre).put("mood", mood).put("gender", gender)
             val body = payload(prompt, variables)
             val request = authenticated(profile, "/chat/completion")
@@ -146,7 +146,7 @@ object DoubaoMusicClient {
                         id = UUID.randomUUID().toString(), owner = DoubaoMusicStore.owner(profile),
                         title = task.text("title"), lyrics = task.text("lyric").ifBlank { task.text("response_for_model") },
                         audioUrl = main, backupUrl = backup,
-                        coverUrl = task.optJSONObject("cover")?.optJSONObject("image_ori")?.text("url").orEmpty(),
+                        coverUrl = coverUrlOf(task),
                         videoId = vid, taskId = task.text("unique_task_id"), conversationId = conversation,
                         duration = model?.optDouble("video_duration", 0.0)?.takeIf { it.isFinite() } ?: 0.0,
                         createdAt = System.currentTimeMillis(),
@@ -322,6 +322,32 @@ object DoubaoMusicClient {
         else -> null
     }
     private fun JSONObject.text(key: String): String = opt(key) as? String ?: ""
+
+    /**
+     * 封面的域名与容器形态都会变（抓包里域名换过 p26/p3，字段也见过 image_ori 与直接 url），
+     * 所以不认域名、只按「优先清晰图，再退回第一个可用 https 链接」的顺序取。
+     */
+    private fun coverUrlOf(task: JSONObject): String {
+        val cover = objectValue(task.opt("cover")) ?: return ""
+        val nested = listOf("image_ori", "image_large", "image_default", "image_small")
+            .mapNotNull { objectValue(cover.opt(it))?.let { image -> usableUrl(image.text("url")) ?: usableUrl(image.text("url_temp")) } }
+        return (nested + listOfNotNull(usableUrl(cover.text("url")), firstUrl(cover))).firstOrNull().orEmpty()
+    }
+
+    private fun firstUrl(value: Any?): String? = when (value) {
+        is JSONObject -> value.keys().asSequence().mapNotNull { firstUrl(value.opt(it)) }.firstOrNull()
+        is JSONArray -> (0 until value.length()).asSequence().mapNotNull { firstUrl(value.opt(it)) }.firstOrNull()
+        is String -> usableUrl(value)
+        else -> null
+    }
+
+    /** 直链要么本身就是 https，要么是音频那种 Base64 包装；两种形态都能吃。 */
+    private fun usableUrl(value: String?): String? {
+        val direct = value?.trim().orEmpty()
+        if (direct.isEmpty()) return null
+        if (direct.toHttpUrlOrNull()?.isHttps == true) return direct
+        return decodeUrl(direct).takeIf { it.isNotBlank() }
+    }
     private fun decodeUrl(value: String): String = runCatching {
         String(Base64.decode(value, Base64.DEFAULT), Charsets.UTF_8)
             .takeIf { it.toHttpUrlOrNull()?.isHttps == true }.orEmpty()

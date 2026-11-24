@@ -5,25 +5,32 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.media.MediaPlayer
 import androidx.activity.ComponentActivity
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,17 +48,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.lifecycleScope
 import coil3.compose.AsyncImage
 import com.composables.icons.materialsymbols.MaterialSymbols
-import com.composables.icons.materialsymbols.outlined.Expand_less
-import com.composables.icons.materialsymbols.outlined.Expand_more
-import com.composables.icons.materialsymbols.outlined.Library_music
 import com.composables.icons.materialsymbols.outlined.Music_note
-import com.composables.icons.materialsymbols.outlined.Settings
+import com.composables.icons.materialsymbols.outlined.Pause
+import com.composables.icons.materialsymbols.outlined.Photo_library
+import com.composables.icons.materialsymbols.outlined.Play_arrow
 import dev.sherry.wcs.R
-import dev.sherry.wcs.activity.TransparentActivity
 import dev.sherry.wcs.features.api.ui.WeCurrentConversationApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
 import dev.sherry.wcs.features.api.core.WeMessageApi
@@ -70,13 +75,12 @@ import dev.sherry.wcs.ui.content.SingleContactSelector
 import dev.sherry.wcs.ui.content.m3.BaseWidget
 import dev.sherry.wcs.ui.content.m3.DropDownMenuWidget
 import dev.sherry.wcs.ui.content.m3.DropdownOption
-import dev.sherry.wcs.ui.content.m3.SegmentedColumn
-import dev.sherry.wcs.ui.content.m3.TextFieldDialogWidget
 import dev.sherry.wcs.ui.utils.ShowComposeDialogScope
 import dev.sherry.wcs.ui.utils.showComposeDialog
 import dev.sherry.wcs.utils.AudioUtils
 import dev.sherry.wcs.utils.WeLogger
 import dev.sherry.wcs.utils.android.showToast
+import dev.sherry.wcs.utils.fs.KnownPaths
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -91,10 +95,17 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
     override val descriptionRes = R.string.db_music_description
     override val categoryIds = listOf(FeatureCategoryIds.ENTERTAIN)
 
+    private enum class Screen { CREATE, PLAYER, LIBRARY, SETTINGS }
+
+    private val GENRES = listOf("Pop", "Rock", "Folk", "Electronic", "Hip Hop/Rap", "Chinese Style", "DJ", "R&B/Soul", "Reggae", "Punk", "Jazz")
+    private val MOODS = listOf("Happy", "Chill", "Dynamic/Energetic", "Excited", "Sentimental/Melancholic/Lonely", "Inspirational/Hopeful", "Sorrow/Sad", "Nostalgic/Memory", "Romantic")
+
+    /** LRC 时间标记只用来对齐显示，复制出去的必须是纯歌词。 */
+    private val TIME_TAG = Regex("\\[\\d{1,2}:\\d{2}(?:[.,]\\d{1,3})?]")
+
     private var selectedProfileId by prefOption("doubao_music_profile_id", "")
     private var savedPrompt by prefOption("doubao_music_prompt", "")
     private var savedLyric by prefOption("doubao_music_lyric", "")
-    private var savedTheme by prefOption("doubao_music_theme", "")
 
     private fun accounts(): List<ApiProfile> =
         ApiProfiles.ofCapability(CAP_TTS).filter { it.provider == TTS_PROVIDER_DOUBAO }
@@ -125,32 +136,28 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
     @Composable
     private fun ShowComposeDialogScope.Content(talker: String, initialText: String) {
         val scope = rememberCoroutineScope()
+        var screen by remember { mutableStateOf(Screen.CREATE) }
         var profileId by remember { mutableStateOf(effectiveProfileId()) }
         var prompt by remember { mutableStateOf(initialText.ifBlank { savedPrompt }) }
         var lyric by remember { mutableStateOf(savedLyric) }
-        var theme by remember { mutableStateOf(savedTheme) }
         var custom by remember { mutableStateOf(false) }
         var genre by remember { mutableStateOf("") }
         var mood by remember { mutableStateOf("") }
         var gender by remember { mutableStateOf("") }
-        var settings by remember { mutableStateOf(false) }
-        var library by remember { mutableStateOf(false) }
         var tracks by remember { mutableStateOf<List<DoubaoMusicTrack>>(emptyList()) }
         var selected by remember { mutableStateOf<DoubaoMusicTrack?>(null) }
         var revision by remember { mutableIntStateOf(0) }
         var busy by remember { mutableStateOf(false) }
-        var progress by remember { mutableStateOf("") }
+        var status by remember { mutableStateOf("") }
         var error by remember { mutableStateOf<String?>(null) }
         var job by remember { mutableStateOf<Job?>(null) }
         var player by remember { mutableStateOf<MediaPlayer?>(null) }
         var playing by remember { mutableStateOf(false) }
         var position by remember { mutableIntStateOf(0) }
         var duration by remember { mutableIntStateOf(0) }
-        var expandedLyrics by remember { mutableStateOf(false) }
-        var expandedStyle by remember { mutableStateOf(false) }
         var deleteTarget by remember { mutableStateOf<DoubaoMusicTrack?>(null) }
         val profiles = accounts()
-        val profile = profiles.firstOrNull { it.id == profileId }
+        val profileName = profiles.firstOrNull { it.id == profileId }?.name.orEmpty()
         LaunchedEffect(profileId, profiles.map { it.id }) {
             if (profiles.any { it.id == profileId }) selectedProfileId = profileId
             else if (profiles.isNotEmpty()) profileId = effectiveProfileId()
@@ -197,7 +204,26 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
             while (playing) { position = player?.currentPosition ?: 0; delay(250) }
         }
         LaunchedEffect(profileId, revision) {
-            tracks = if (profile == null) emptyList() else withContext(Dispatchers.IO) { DoubaoMusicStore.all(profile) }
+            tracks = if (profileId.isBlank()) emptyList() else withContext(Dispatchers.IO) {
+                ApiProfiles.get(profileId)?.let { DoubaoMusicStore.all(it) } ?: emptyList()
+            }
+        }
+        // 生成时封面下载失败不该永久丢图：进播放页再补一次，URL 已过期就只能保持无封面
+        LaunchedEffect(selected, profileId) {
+            val track = selected ?: return@LaunchedEffect
+            if (track.coverUrl.isBlank() || DoubaoMusicStore.cover(track).isFile) return@LaunchedEffect
+            val temporary = DoubaoMusicStore.temporaryDirectory()
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    val part = File(temporary, "cover.part")
+                    DoubaoMusicClient.downloadCover(track.coverUrl, part)
+                    DoubaoMusicStore.publish(part, DoubaoMusicStore.cover(track))
+                    true
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { WeLogger.w("DoubaoMusic", "cover fetch failed"); false }
+                finally { temporary.listFiles()?.forEach { it.delete() }; temporary.delete() }
+            }
+            if (result) revision++
         }
 
         suspend fun download(track: DoubaoMusicTrack, snapshot: ApiProfile): DoubaoMusicTrack = withContext(Dispatchers.IO) {
@@ -222,8 +248,8 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
         fun start(retry: DoubaoMusicTrack? = null) {
             if (busy) return
             val snapshot = ApiProfiles.get(profileId)?.takeIf { it.capability == CAP_TTS && it.provider == TTS_PROVIDER_DOUBAO }
-            if (snapshot == null) { error = context.localizedChatString(R.string.db_music_need_account); settings = true; return }
-            if (snapshot.userAgent.isBlank()) { error = context.localizedChatString(R.string.db_music_need_ua); settings = true; return }
+            if (snapshot == null) { error = context.localizedChatString(R.string.db_music_need_account); screen = Screen.SETTINGS; return }
+            if (snapshot.userAgent.isBlank()) { error = context.localizedChatString(R.string.db_music_need_ua); screen = Screen.SETTINGS; return }
             if (retry == null && (prompt.isBlank() || (custom && lyric.isBlank()))) {
                 error = context.localizedChatString(if (prompt.isBlank()) R.string.db_music_need_prompt else R.string.db_music_need_lyric)
                 return
@@ -232,48 +258,62 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
             stopPlayer()
             savedPrompt = prompt
             savedLyric = lyric
-            savedTheme = theme
             busy = true
             error = null
-            progress = context.localizedChatString(if (retry == null) R.string.db_music_generating else R.string.db_music_downloading)
+            status = context.localizedChatString(if (retry == null) R.string.db_music_generating else R.string.db_music_downloading)
             job = scope.launch {
                 try {
                     val generated = if (retry != null) listOf(retry) else DoubaoMusicClient.generate(
-                        snapshot, prompt.trim(), lyric.trim(), theme.trim(), genre, mood, gender, custom,
+                        snapshot, prompt.trim(), lyric.trim(), genre, mood, gender, custom,
                     )
                     withContext(Dispatchers.IO) { generated.forEach { DoubaoMusicStore.save(it) } }
                     var failed = false
                     for (track in generated) {
                         selected = track
-                        progress = context.localizedChatString(R.string.db_music_downloading)
+                        status = context.localizedChatString(R.string.db_music_downloading)
                         try { selected = download(track, snapshot) }
                         catch (e: CancellationException) { throw e }
                         catch (e: Exception) { failed = true; error = failure(e) }
                         revision++
                     }
-                    progress = context.localizedChatString(if (failed) R.string.db_music_retry_download else R.string.db_music_saved)
+                    status = context.localizedChatString(if (failed) R.string.db_music_retry_download else R.string.db_music_saved)
+                    if (!failed) screen = Screen.PLAYER
                 } catch (e: CancellationException) {
-                    progress = context.localizedChatString(R.string.db_music_cancelled)
+                    status = context.localizedChatString(R.string.db_music_cancelled)
                     throw e
-                } catch (e: Exception) { error = failure(e); progress = "" }
+                } catch (e: Exception) { error = failure(e); status = "" }
                 finally { busy = false; revision++ }
             }
         }
-        fun send(track: DoubaoMusicTrack) {
+        fun saveToDownloads(track: DoubaoMusicTrack) {
+            scope.launch {
+                try {
+                    val path = withContext(Dispatchers.IO) {
+                        val target = uniqueTarget(filename(track))
+                        DoubaoMusicStore.audio(track).inputStream().use { input ->
+                            target.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        target.absolutePath
+                    }
+                    showToast(context, context.localizedChatString(R.string.db_music_saved_to, path))
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { showToast(context, failure(e)) }
+            }
+        }
+        fun sendAsVoice(track: DoubaoMusicTrack) {
             scope.launch {
                 try {
                     val contacts = withContext(Dispatchers.IO) { WeDatabaseApi.getFriends() + WeDatabaseApi.getGroups() }
                     showComposeDialog(context) {
                         SingleContactSelector(
-                            title = context.localizedChatString(R.string.db_music_send), contacts = contacts,
+                            title = context.localizedChatString(R.string.db_music_send_voice), contacts = contacts,
                             initialSelectedWxId = talker.takeIf { it.isNotBlank() }, onDismiss = onDismiss,
                             onConfirm = { destination ->
                                 onDismiss()
                                 scope.launch {
-                                    val ok = withContext(Dispatchers.IO) {
-                                        WeMessageApi.sendFile(destination, DoubaoMusicStore.audio(track).absolutePath, filename(track))
-                                    }
-                                    progress = context.localizedChatString(if (ok) R.string.db_music_send_queued else R.string.db_music_send_failed)
+                                    val ok = withContext(Dispatchers.IO) { convertAndSendVoice(destination, track) }
+                                    showToast(context, context.localizedChatString(
+                                        if (ok) R.string.db_music_send_queued else R.string.db_music_send_failed))
                                 }
                             },
                         )
@@ -285,156 +325,57 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
         AlertDialogContent(
             title = {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        stringResource(if (settings) R.string.db_music_settings else if (library) R.string.db_music_library else R.string.db_music_name),
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (!settings) IconButton(onClick = { library = !library }, enabled = !busy) {
-                        Icon(MaterialSymbols.Outlined.Library_music, contentDescription = stringResource(if (library) R.string.db_music_create else R.string.db_music_library))
+                    Text(stringResource(R.string.db_music_name), modifier = Modifier.weight(1f))
+                    IconButton(onClick = { screen = if (screen == Screen.LIBRARY) Screen.CREATE else Screen.LIBRARY }, enabled = !busy) {
+                        Icon(MaterialSymbols.Outlined.Photo_library, contentDescription = stringResource(R.string.db_music_library))
                     }
-                    IconButton(onClick = { settings = !settings }, enabled = !busy) {
-                        Icon(MaterialSymbols.Outlined.Settings, contentDescription = stringResource(R.string.db_music_settings))
+                    OutlinedButton(onClick = { screen = Screen.SETTINGS }, enabled = !busy, modifier = Modifier.width(104.dp)) {
+                        Text(profileName.ifBlank { stringResource(R.string.db_music_select_account) }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             },
             text = {
                 Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (settings) {
-                        SegmentedColumn(title = stringResource(R.string.db_music_account)) {
-                            item {
-                                if (profiles.isEmpty()) {
-                                    BaseWidget(title = stringResource(R.string.db_music_select_account), enabled = false)
-                                } else {
-                                    DropDownMenuWidget(
-                                        title = stringResource(R.string.db_music_select_account), description = null,
-                                        value = profileId.takeIf { id -> profiles.any { it.id == id } } ?: profiles.first().id,
-                                        options = profiles.map { DropdownOption(it.id, it.name) },
-                                        onValueChange = { stopPlayer(); profileId = it; selectedProfileId = it; selected = null; error = null; progress = "" },
-                                    )
-                                }
-                            }
-                        }
-                        Text(stringResource(R.string.db_music_account_note), style = MaterialTheme.typography.bodySmall)
-                        Text(stringResource(R.string.db_music_cache_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        if (library) {
-                            if (tracks.isEmpty()) Text(stringResource(R.string.db_music_library_empty))
-                            tracks.forEach { track ->
-                                SegmentedColumn {
-                                    item {
-                                        BaseWidget(
-                                            title = track.title.ifBlank { stringResource(R.string.db_music_untitled) },
-                                            description = formatDuration(track.duration) + " · " + stringResource(if (DoubaoMusicStore.audio(track).isFile) R.string.db_music_saved else R.string.db_music_retry_download),
-                                            enabled = !busy,
-                                            onClick = { stopPlayer(); selected = track; library = false; expandedLyrics = false },
-                                        )
-                                    }
-                                    item { BaseWidget(title = stringResource(R.string.db_music_delete), enabled = !busy, isError = true, onClick = { deleteTarget = track }) }
-                                }
-                            }
-                        } else {
-                            OutlinedTextField(
-                                value = prompt,
-                                onValueChange = { prompt = it; savedPrompt = it },
-                                label = { Text(stringResource(R.string.db_music_prompt)) },
-                                enabled = !busy,
-                                minLines = 4,
-                                maxLines = 6,
-                                modifier = Modifier.fillMaxWidth(),
+                    when (screen) {
+                        Screen.CREATE -> CreateContent(
+                            prompt = prompt, lyric = lyric, custom = custom, genre = genre, mood = mood, gender = gender,
+                            enabled = !busy, onPrompt = { prompt = it; savedPrompt = it }, onLyric = { lyric = it; savedLyric = it },
+                            onCustom = { custom = it }, onGenre = { genre = it }, onMood = { mood = it }, onGender = { gender = it },
+                            onGenerate = { start() },
+                        )
+                        Screen.PLAYER -> selected?.let { track ->
+                            val saved = DoubaoMusicStore.audio(track).isFile
+                            PlayerContent(
+                                track = track, playing = playing, position = position, duration = duration,
+                                onPlay = { play(track) }, onSeek = { position = it; player?.seekTo(it) },
+                                onDownload = { saveToDownloads(track) }, onSend = { sendAsVoice(track) },
+                                onCopyLyrics = { copyLyrics(context, track) },
+                                onDelete = { deleteTarget = track },
+                                onRetry = if (saved) null else { start(track) },
                             )
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                FilterChip(selected = !custom, onClick = { custom = false }, enabled = !busy, label = { Text(stringResource(R.string.db_music_ai_lyrics)) }, modifier = Modifier.weight(1f))
-                                FilterChip(selected = custom, onClick = { custom = true }, enabled = !busy, label = { Text(stringResource(R.string.db_music_custom_lyrics)) }, modifier = Modifier.weight(1f))
-                            }
-                            if (custom) OutlinedTextField(
-                                value = lyric,
-                                onValueChange = { lyric = it; savedLyric = it },
-                                label = { Text(stringResource(R.string.db_music_lyrics)) },
-                                enabled = !busy,
-                                minLines = 4,
-                                maxLines = 6,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            SegmentedColumn {
-                                item {
-                                    BaseWidget(
-                                        title = stringResource(R.string.db_music_parameters),
-                                        description = listOf(genre, mood).filter { it.isNotBlank() }.joinToString(" / ")
-                                            .ifBlank { stringResource(R.string.db_music_unspecified) },
-                                        enabled = !busy,
-                                        onClick = { expandedStyle = !expandedStyle },
-                                        trailingContent = {
-                                            Icon(if (expandedStyle) MaterialSymbols.Outlined.Expand_less else MaterialSymbols.Outlined.Expand_more, contentDescription = null)
-                                        },
-                                    )
-                                }
-                                if (expandedStyle) {
-                                    item { MusicField(R.string.db_music_theme, theme, !busy) { theme = it; savedTheme = it } }
-                                    item { Choice(R.string.db_music_genre, genre, listOf("Pop", "Rock", "Folk", "Electronic", "Hip Hop/Rap", "Chinese Style", "DJ", "R&B/Soul", "Reggae", "Punk", "Jazz"), !busy) { genre = it } }
-                                    item { Choice(R.string.db_music_mood, mood, listOf("Happy", "Chill", "Dynamic/Energetic", "Excited", "Sentimental/Melancholic/Lonely", "Inspirational/Hopeful", "Sorrow/Sad", "Nostalgic/Memory", "Romantic"), !busy) { mood = it } }
-                                    item {
-                                        DropDownMenuWidget(
-                                            title = stringResource(R.string.db_music_gender), description = null, value = gender, enabled = !busy,
-                                            options = listOf(DropdownOption("", stringResource(R.string.db_music_unspecified)), DropdownOption("Male", stringResource(R.string.db_music_male)), DropdownOption("Female", stringResource(R.string.db_music_female))),
-                                            onValueChange = { gender = it },
-                                        )
-                                    }
-                                }
-                            }
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Button(onClick = { start() }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.db_music_generate)) }
-                                if (busy) OutlinedButton(onClick = { job?.cancel() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.dialog_cancel)) }
-                            }
-                            Text(stringResource(R.string.db_music_quota_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            selected?.let { track ->
-                                val available = DoubaoMusicStore.audio(track).isFile
-                                SegmentedColumn(title = stringResource(R.string.db_music_result)) {
-                                    item {
-                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            val cover = DoubaoMusicStore.cover(track)
-                                            if (cover.isFile) AsyncImage(model = cover, contentDescription = null, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
-                                            else Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) { Icon(MaterialSymbols.Outlined.Music_note, contentDescription = null) }
-                                            Column(Modifier.weight(1f)) {
-                                                Text(track.title.ifBlank { stringResource(R.string.db_music_untitled) }, style = MaterialTheme.typography.titleSmall)
-                                                Text(formatDuration(track.duration), style = MaterialTheme.typography.bodySmall)
-                                                Text(stringResource(if (available) R.string.db_music_saved else R.string.db_music_retry_download), style = MaterialTheme.typography.bodySmall)
-                                            }
-                                        }
-                                    }
-                                    if (available) {
-                                        item {
-                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                                OutlinedButton(onClick = { play(track) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(stringResource(if (playing) R.string.db_music_pause else R.string.db_music_play)) }
-                                                OutlinedButton(onClick = { export(context, track) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.db_music_export)) }
-                                            }
-                                        }
-                                        if (duration > 0) item {
-                                            Slider(value = position.toFloat().coerceIn(0f, duration.toFloat()), valueRange = 0f..duration.toFloat(), onValueChange = { position = it.toInt(); player?.seekTo(position) })
-                                        }
-                                        item {
-                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                                OutlinedButton(onClick = {
-                                                    (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(track.title, track.lyrics))
-                                                    progress = context.localizedChatString(R.string.db_music_copied)
-                                                }, enabled = track.lyrics.isNotBlank(), modifier = Modifier.weight(1f)) { Text(stringResource(R.string.db_music_copy_lyrics)) }
-                                                Button(onClick = { send(track) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.db_music_send)) }
-                                            }
-                                        }
-                                    } else item { Button(onClick = { start(track) }, enabled = !busy) { Text(stringResource(R.string.db_music_retry_download)) } }
-                                    item { BaseWidget(title = stringResource(if (expandedLyrics) R.string.db_music_hide_lyrics else R.string.db_music_show_lyrics), onClick = { expandedLyrics = !expandedLyrics }) }
-                                    if (expandedLyrics) item { Text(track.lyrics.ifBlank { stringResource(R.string.db_music_no_lyrics) }, style = MaterialTheme.typography.bodySmall) }
-                                }
-                            }
                         }
+                        Screen.LIBRARY -> LibraryContent(
+                            tracks = tracks, count = stringResource(R.string.db_music_lib_count, profileName, tracks.size),
+                            emptyText = stringResource(R.string.db_music_library_empty),
+                            onOpen = { stopPlayer(); selected = it; screen = Screen.PLAYER },
+                        )
+                        Screen.SETTINGS -> SettingsContent(
+                            profiles = profiles, profileId = profileId,
+                            onSelect = { stopPlayer(); profileId = it; selectedProfileId = it; selected = null; error = null; status = "" },
+                        )
                     }
-                    if (busy) CircularProgressIndicator(Modifier.size(24.dp))
-                    if (progress.isNotBlank()) Text(progress, style = MaterialTheme.typography.bodySmall)
+                    if (busy) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Button(onClick = { job?.cancel() }, enabled = true) { Text(stringResource(R.string.dialog_cancel)) }
+                            Text(status, style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall)
                     error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { if (settings) settings = false else if (library) library = false else { job?.cancel(); onDismiss() } }) {
-                    Text(stringResource(if (settings || library) R.string.api_profile_back else R.string.dialog_close))
+                TextButton(onClick = { if (screen == Screen.CREATE) { job?.cancel(); onDismiss() } else screen = Screen.CREATE }) {
+                    Text(stringResource(if (screen == Screen.CREATE) R.string.dialog_close else R.string.api_profile_back))
                 }
             },
         )
@@ -449,7 +390,7 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
                         scope.launch {
                             try {
                                 withContext(Dispatchers.IO) { DoubaoMusicStore.delete(track) }
-                                if (selected?.id == track.id) selected = null
+                                if (selected?.id == track.id) { selected = null; screen = Screen.LIBRARY }
                                 revision++
                             } catch (e: Exception) { if (e is CancellationException) throw e; error = failure(e) }
                         }
@@ -460,16 +401,198 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
     }
 
     @Composable
-    private fun MusicField(titleRes: Int, value: String, enabled: Boolean, multiline: Boolean = false, change: (String) -> Unit) {
-        TextFieldDialogWidget(title = stringResource(titleRes), value = value, onValueChange = change,
-            dialogTitle = stringResource(titleRes), confirmLabel = stringResource(R.string.dialog_confirm),
-            dismissLabel = stringResource(R.string.dialog_cancel), enabled = enabled, singleLine = !multiline)
+    private fun CreateContent(
+        prompt: String, lyric: String, custom: Boolean, genre: String, mood: String, gender: String,
+        enabled: Boolean, onPrompt: (String) -> Unit, onLyric: (String) -> Unit, onCustom: (Boolean) -> Unit,
+        onGenre: (String) -> Unit, onMood: (String) -> Unit, onGender: (String) -> Unit, onGenerate: () -> Unit,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(stringResource(R.string.db_music_prompt), style = MaterialTheme.typography.labelMedium)
+            OutlinedTextField(
+                value = prompt, onValueChange = onPrompt, enabled = enabled, minLines = 3, maxLines = 5,
+                placeholder = { Text(stringResource(R.string.db_music_prompt_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.db_music_lyrics), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                SingleChoiceSegmentedButtonRow {
+                    listOf(false, true).forEachIndexed { index, isCustom ->
+                        SegmentedButton(
+                            selected = custom == isCustom, onClick = { onCustom(isCustom) }, enabled = enabled,
+                            shape = SegmentedButtonDefaults.itemShape(index, 2),
+                        ) {
+                            Text(stringResource(if (isCustom) R.string.db_music_custom_lyrics else R.string.db_music_ai_lyrics))
+                        }
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = lyric, onValueChange = onLyric, enabled = enabled && custom, minLines = 3, maxLines = 5,
+                placeholder = { Text(stringResource(if (custom) R.string.db_music_lyric_custom_hint else R.string.db_music_lyric_ai_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Choice(R.string.db_music_genre, genre, GENRES, enabled, onGenre)
+            Choice(R.string.db_music_mood, mood, MOODS, enabled, onMood)
+            // 协议要 Male/Female，行里显示中文，所以这一档单独给 value/label
+            DropDownMenuWidget(
+                title = stringResource(R.string.db_music_gender), description = null, value = gender, enabled = enabled,
+                options = listOf(
+                    DropdownOption("", stringResource(R.string.db_music_unspecified)),
+                    DropdownOption("Male", stringResource(R.string.db_music_male)),
+                    DropdownOption("Female", stringResource(R.string.db_music_female)),
+                ),
+                onValueChange = onGender,
+            )
+            Button(onClick = onGenerate, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.db_music_generate))
+            }
+            Text(stringResource(R.string.db_music_quota_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+
+    @Composable
+    private fun PlayerContent(
+        track: DoubaoMusicTrack, playing: Boolean, position: Int, duration: Int,
+        onPlay: () -> Unit, onSeek: (Int) -> Unit, onDownload: () -> Unit, onSend: () -> Unit,
+        onCopyLyrics: () -> Unit, onDelete: () -> Unit, onRetry: (() -> Unit)?,
+    ) {
+        val available = DoubaoMusicStore.audio(track).isFile
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val cover = DoubaoMusicStore.cover(track)
+                if (cover.isFile) AsyncImage(model = cover, contentDescription = null,
+                    modifier = Modifier.size(84.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop)
+                else Box(Modifier.size(84.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center) {
+                    Icon(MaterialSymbols.Outlined.Music_note, contentDescription = null)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(track.title.ifBlank { stringResource(R.string.db_music_untitled) },
+                        style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(formatDuration(track.duration) + " · " + stringResource(if (available) R.string.db_music_saved else R.string.db_music_retry_download),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                FilledIconButton(onClick = onPlay, enabled = available) {
+                    Icon(if (playing) MaterialSymbols.Outlined.Pause else MaterialSymbols.Outlined.Play_arrow,
+                        contentDescription = stringResource(if (playing) R.string.db_music_pause else R.string.db_music_play))
+                }
+            }
+            if (duration > 0) Slider(
+                value = position.toFloat().coerceIn(0f, duration.toFloat()), valueRange = 0f..duration.toFloat(),
+                onValueChange = { onSeek(it.toInt()) }, modifier = Modifier.fillMaxWidth(),
+            )
+            onRetry?.let {
+                Button(onClick = it, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.db_music_retry_download)) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onDownload, enabled = available, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.db_music_download), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                FilledTonalButton(onClick = onSend, enabled = available, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.db_music_send_voice), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.db_music_lyrics), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                TextButton(onClick = onCopyLyrics, enabled = track.lyrics.isNotBlank()) { Text(stringResource(R.string.db_music_copy_lyrics)) }
+            }
+            Text(
+                stripTimeTags(track.lyrics).ifBlank { stringResource(R.string.db_music_no_lyrics) },
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onDelete) {
+                    Text(stringResource(R.string.db_music_delete), color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun LibraryContent(tracks: List<DoubaoMusicTrack>, count: String, emptyText: String, onOpen: (DoubaoMusicTrack) -> Unit) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (tracks.isEmpty()) Text(emptyText)
+            else {
+                Text(count, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                tracks.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        row.forEach { track ->
+                            Column(
+                                modifier = Modifier.weight(1f).clickable { onOpen(track) },
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                val cover = DoubaoMusicStore.cover(track)
+                                if (cover.isFile) AsyncImage(model = cover, contentDescription = null,
+                                    modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
+                                else Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                                    Icon(MaterialSymbols.Outlined.Music_note, contentDescription = null)
+                                }
+                                Text(track.title.ifBlank { stringResource(R.string.db_music_untitled) },
+                                    style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(formatDuration(track.duration), style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun SettingsContent(profiles: List<ApiProfile>, profileId: String, onSelect: (String) -> Unit) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (profiles.isEmpty()) BaseWidget(title = stringResource(R.string.db_music_select_account), enabled = false)
+            else DropDownMenuWidget(
+                title = stringResource(R.string.db_music_select_account), description = null,
+                value = profileId.takeIf { id -> profiles.any { it.id == id } } ?: profiles.first().id,
+                options = profiles.map { DropdownOption(it.id, it.name) },
+                onValueChange = onSelect,
+            )
+            Text(stringResource(R.string.db_music_account_note), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.db_music_cache_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 
     @Composable
     private fun Choice(titleRes: Int, value: String, values: List<String>, enabled: Boolean, change: (String) -> Unit) {
-        DropDownMenuWidget(title = stringResource(titleRes), description = null, value = value, enabled = enabled,
-            options = listOf(DropdownOption("", stringResource(R.string.db_music_unspecified))) + values.map { DropdownOption(it, it) }, onValueChange = change)
+        DropDownMenuWidget(
+            title = stringResource(titleRes), description = null, value = value, enabled = enabled,
+            options = listOf(DropdownOption("", stringResource(R.string.db_music_unspecified))) + values.map { DropdownOption(it, it) },
+            onValueChange = change,
+        )
+    }
+
+    private fun convertAndSendVoice(talker: String, track: DoubaoMusicTrack): Boolean = runCatching {
+        val audio = DoubaoMusicStore.audio(track)
+        if (!audio.isFile) return false
+        val temporary = DoubaoMusicStore.temporaryDirectory()
+        // silk 交给微信后仍是异步上传，删掉会让发送半途失败，只能留给缓存目录按日期回收
+        val silk = File(temporary, "voice.silk")
+        if (!AudioUtils.anyToSilk(audio.absolutePath, silk.absolutePath)) return false
+        WeMessageApi.sendVoice(talker, silk.absolutePath, AudioUtils.getDurationMs(silk.absolutePath).toInt())
+    }.onFailure { WeLogger.e("DoubaoMusic", "send voice failed", it) }.getOrDefault(false)
+
+    private fun copyLyrics(context: Context, track: DoubaoMusicTrack) {
+        val text = stripTimeTags(track.lyrics)
+        if (text.isBlank()) return
+        (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(track.title, text))
+        showToast(context, context.localizedChatString(R.string.db_music_copied))
+    }
+
+    private fun stripTimeTags(lyrics: String): String = lyrics.replace(TIME_TAG, "").trim()
+
+    private fun uniqueTarget(name: String): File {
+        val directory = KnownPaths.downloads.toFile()
+        val base = name.substringBeforeLast('.')
+        val suffix = name.substringAfterLast('.')
+        var candidate = File(directory, name)
+        var index = 1
+        while (candidate.exists()) { candidate = File(directory, "$base ($index).$suffix"); index++ }
+        return candidate
     }
 
     private fun formatDuration(seconds: Double): String {
@@ -480,23 +603,4 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
     private fun filename(track: DoubaoMusicTrack): String = track.title
         .replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().take(80)
         .ifBlank { localizedChatString(R.string.db_music_untitled) } + ".m4a"
-
-    private fun export(context: Context, track: DoubaoMusicTrack) {
-        TransparentActivity.launch(context) {
-            val activity = this
-            val launcher = registerForActivityResult(ActivityResultContracts.CreateDocument("audio/mp4")) { uri ->
-                if (uri == null) { finish(); return@registerForActivityResult }
-                lifecycleScope.launch(Dispatchers.IO) {
-                    val ok = runCatching {
-                        contentResolver.openOutputStream(uri, "w")!!.use { output -> DoubaoMusicStore.audio(track).inputStream().use { it.copyTo(output) } }
-                    }.isSuccess
-                    withContext(Dispatchers.Main) {
-                        showToast(activity, activity.localizedChatString(if (ok) R.string.db_music_exported else R.string.db_music_export_failed))
-                        finish()
-                    }
-                }
-            }
-            launcher.launch(filename(track))
-        }
-    }
 }

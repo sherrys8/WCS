@@ -34,7 +34,8 @@ WcS 注入微信进程后，读写的不止自己的目录。这份文档列出�
 | `logs/` | 日期文件日志 `wcs-<日期>.log` | `WeLogger.kt:68` |
 | `crashes/` | 崩溃日志导出 | `CrashLogsManager.kt:222` |
 | `doubao_music/library/<账号摘要>/<作品UUID>/` | 豆包音乐作品音频、封面、歌词和元数据；用户手动管理，不按四天规则删除 | `DoubaoMusicStore.kt` |
-| `WCS_Cache/doubao_music/<请求UUID>/` | 豆包音乐下载/元数据发布中间件；用完清理，遗留文件保留今天及前3天；按用户要求使用大写WCS_Cache，不改其他功能的Wcs_Cache目录 | `DoubaoMusicStore.kt` |
+| `WCS_Cache/doubao_music/<请求UUID>/` | 豆包音乐下载/元数据发布中间件与发送语音的 silk 临时件；用完清理，遗留文件保留今天及前3天；按用户要求使用大写WCS_Cache，不改其他功能的Wcs_Cache目录 | `DoubaoMusicStore.kt` |
+| `Download/WcS/`（公共目录） | 豆包音乐「下载音乐」的落点，重名自动加 ` (1)`；不再走系统文件选择器 | `DoubaoMusic.kt` |
 | `dex_cache/` | DexKit 解析缓存 `*.json`，方法体 MD5 命中即跳过重扫 | `DexCacheManager.kt:35,40` |
 | `scripts_java/` | BeanShell 脚本插件 | `JavaScriptingHook.kt:70` |
 | `scripts_python/`、`python/data/` | Python 插件脚本与其数据目录 | `PythonPluginManager.kt:41,42` |
