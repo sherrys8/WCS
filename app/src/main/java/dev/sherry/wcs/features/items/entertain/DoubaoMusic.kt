@@ -168,7 +168,9 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
         }
 
         fun failure(e: Exception): String {
-            WeLogger.w("DoubaoMusic", "operation failed: ${e.javaClass.simpleName}")
+            // 只记类名时线上根本看不出原因：一次 FileNotFoundException 光靠类名追不到是哪一步，
+            // 提示词（临时目录、落点路径）全在 message 里，堆栈也一并留下。
+            WeLogger.w("DoubaoMusic", "operation failed: ${e.javaClass.simpleName}: ${e.message}", e)
             return if (e is DoubaoMusicException) context.localizedChatString(e.textRes, e.detail)
             else context.localizedChatString(R.string.db_music_request_failed)
         }

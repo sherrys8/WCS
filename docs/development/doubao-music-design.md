@@ -92,7 +92,7 @@ DoubaoMusicClient使用现有OkHttp依赖，原生实现参考Python协议，无
 
 | 数据 | 位置（相对KnownPaths.moduleData） | 规则 |
 |---|---|---|
-| 临时音频、封面、元数据发布件 | `WCS_Cache/doubao_music/<请求UUID>/` | 用完清理；遗留文件按最后修改日期保留今天及之前3天，下次创建临时目录时清理更早文件 |
+| 临时音频、封面、元数据发布件 | `WCS_Cache/doubao_music/<请求UUID>/` | 用完清理；遗留文件按最后修改日期保留今天及之前3天，下次创建临时目录时清理更早文件。**空目录只有闲置超过10分钟才回收**：从领到目录到写出首个文件之间目录是空的，并发进来的清理会把它当垃圾删掉，写入端随后 `outputStream()` 抛 FileNotFoundException（曾表现为「豆包已生成、模块下载失败」） |
 | 完成作品和待重试下载元数据 | `doubao_music/library/<账号摘要>/<作品UUID>/` | 保留audio.m4a、cover.jpg、track.json，由用户从作品库确认删除 |
 | 下载音乐 | `Download/WcS/<歌名>.m4a`（公共目录，重名追加序号） | 用户管理，不参加模块缓存清理 |
 

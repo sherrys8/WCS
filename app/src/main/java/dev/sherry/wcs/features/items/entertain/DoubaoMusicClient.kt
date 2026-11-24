@@ -5,7 +5,9 @@ import dev.sherry.wcs.R
 import dev.sherry.wcs.features.items.chat.ApiProfile
 import dev.sherry.wcs.utils.AudioUtils
 import dev.sherry.wcs.utils.MediaFileTypeDetector
+import dev.sherry.wcs.utils.WeLogger
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -166,7 +168,11 @@ object DoubaoMusicClient {
                 validateAudio(destination)
                 return
             } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { destination.delete() }
+            catch (e: Exception) {
+                // 主备两条都失败时，只有这里知道各自为什么失败
+                WeLogger.w("DoubaoMusic", "audio attempt failed: ${e.javaClass.simpleName}: ${e.message}")
+                destination.delete()
+            }
         }
         if (track.videoId.isNotBlank()) {
             validateProfile(profile)
@@ -198,27 +204,43 @@ object DoubaoMusicClient {
     }
 
     private suspend fun download(url: String, destination: File, limit: Long) {
-        val parsed = url.toHttpUrlOrNull()?.takeIf { it.isHttps }
-            ?: throw DoubaoMusicException(R.string.db_music_download_failed)
+        // 下载失败的原因只有落在日志里才追得动：CDN 403/404、URL 过期、非 https、超限
+        // 都只会抛同一句「下载失败」，界面上看不出来。
+        val parsed = url.toHttpUrlOrNull()?.takeIf { it.isHttps } ?: run {
+            WeLogger.w("DoubaoMusic", "download rejected: not https, host=${url.substringAfter("//").substringBefore('/')}")
+            throw DoubaoMusicException(R.string.db_music_download_failed)
+        }
         val request = Request.Builder().url(parsed).build()
         val context = currentCoroutineContext()
         execute(cdn, request) { response ->
-            if (!response.isSuccessful) throw DoubaoMusicException(R.string.db_music_download_failed)
+            if (!response.isSuccessful) {
+                WeLogger.w("DoubaoMusic", "download http ${response.code} host=${parsed.host}")
+                throw DoubaoMusicException(R.string.db_music_download_failed)
+            }
             val body = response.body ?: throw DoubaoMusicException(R.string.db_music_download_failed)
-            if (body.contentLength() > limit) throw DoubaoMusicException(R.string.db_music_download_failed)
+            if (body.contentLength() > limit) {
+                WeLogger.w("DoubaoMusic", "download too large: ${body.contentLength()} > $limit")
+                throw DoubaoMusicException(R.string.db_music_download_failed)
+            }
             body.byteStream().use { input ->
-                destination.outputStream().use { output ->
-                    val buffer = ByteArray(16 * 1024)
-                    var total = 0L
-                    while (true) {
-                        context.ensureActive()
-                        val size = input.read(buffer)
-                        if (size < 0) break
-                        total += size
-                        if (total > limit) throw DoubaoMusicException(R.string.db_music_download_failed)
-                        output.write(buffer, 0, size)
+                try {
+                    destination.outputStream().use { output ->
+                        val buffer = ByteArray(16 * 1024)
+                        var total = 0L
+                        while (true) {
+                            context.ensureActive()
+                            val size = input.read(buffer)
+                            if (size < 0) break
+                            total += size
+                            if (total > limit) throw DoubaoMusicException(R.string.db_music_download_failed)
+                            output.write(buffer, 0, size)
+                        }
+                        if (total == 0L) throw DoubaoMusicException(R.string.db_music_download_failed)
                     }
-                    if (total == 0L) throw DoubaoMusicException(R.string.db_music_download_failed)
+                } catch (e: FileNotFoundException) {
+                    // 目录被谁删掉了就在这里露馅，别只剩一个类名
+                    WeLogger.w("DoubaoMusic", "cannot write ${destination.absolutePath}: ${e.message}")
+                    throw e
                 }
             }
         }

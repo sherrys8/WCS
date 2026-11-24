@@ -15,6 +15,9 @@ object DoubaoMusicStore {
     private val ids = Regex("[a-fA-F0-9-]{36}")
     private val owners = Regex("[a-f0-9]{64}")
 
+    /** 临时目录闲置多久才允许回收。要大于一次下载的最长耗时，见 [temporaryDirectory]。 */
+    private const val TEMPORARY_IDLE_MS = 10L * 60 * 1000
+
     fun owner(profile: ApiProfile): String = MessageDigest.getInstance("SHA-256")
         .digest((profile.id + "\n" + DoubaoMusicClient.cookieValue(profile.cookie, "sessionid")).toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it.toInt() and 0xff) }
@@ -28,12 +31,23 @@ object DoubaoMusicStore {
     fun audio(track: DoubaoMusicTrack): File = File(directory(track), "audio.m4a")
     fun cover(track: DoubaoMusicTrack): File = File(directory(track), "cover.jpg")
 
+    /**
+     * 每次下载音频、写元数据都领一个一次性目录。
+     *
+     * 顺手回收旧临时目录时**只能删「又空又闲置」的**：从拿到目录到真正写出第一个文件之间
+     * 有一段窗口，此时目录是空的；另一个协程（封面补图、[save]）进来清理，就会把它当垃圾删掉，
+     * 写入端随后 `outputStream()` 直接抛 FileNotFoundException——表现是「豆包已经生成，
+     * 模块却下载失败」。清理频率远低于领取频率，用闲置阈值把窗口挡掉即可。
+     */
     fun temporaryDirectory(): File {
         val root = KnownPaths.moduleData.resolve("WCS_Cache").resolve("doubao_music").toFile()
         if (!root.isDirectory && !root.mkdirs() && !root.isDirectory) throw IOException("Cannot create music cache")
         val zone = ZoneId.systemDefault()
+        val staleBefore = System.currentTimeMillis() - TEMPORARY_IDLE_MS
         val cutoff = LocalDate.now(zone).minusDays(3).atStartOfDay(zone).toInstant().toEpochMilli()
-        root.listFiles()?.filter { it.isDirectory && ids.matches(it.name) }?.forEach { folder ->
+        root.listFiles()?.forEach { folder ->
+            if (!folder.isDirectory || !ids.matches(folder.name)) return@forEach
+            if (folder.lastModified() >= staleBefore) return@forEach
             folder.listFiles()?.filter { it.isFile && it.lastModified() < cutoff }?.forEach { it.delete() }
             if (folder.listFiles()?.isEmpty() == true) folder.delete()
         }
