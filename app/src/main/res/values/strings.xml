@@ -4758,16 +4758,40 @@ Time: {time}</string>
     <string name="db_music_prompt">Description</string>
     <string name="db_music_prompt_hint">Describe the topic, mood or scene of this song</string>
     <string name="db_music_ai_lyrics">AI lyrics</string>
-    <string name="db_music_custom_lyrics">Custom lyrics</string>
+    <string name="db_music_mode_custom">Custom</string>
     <string name="db_music_lyrics">Lyrics</string>
     <string name="db_music_lyric_ai_hint">AI writes the lyrics; nothing to fill in here</string>
     <string name="db_music_lyric_custom_hint">Paste your own lyrics, one line each</string>
     <string name="db_music_genre">Genre</string>
     <string name="db_music_mood">Mood</string>
     <string name="db_music_gender">Vocals</string>
-    <string name="db_music_unspecified">Not specified</string>
+    <string name="db_music_settings_entry">Settings</string>
     <string name="db_music_male">Male</string>
     <string name="db_music_female">Female</string>
+    <string-array name="db_music_genre_labels">
+        <item>Pop</item>
+        <item>Rock</item>
+        <item>Folk</item>
+        <item>Electronic</item>
+        <item>Hip Hop</item>
+        <item>Chinese Style</item>
+        <item>DJ</item>
+        <item>R&amp;B</item>
+        <item>Reggae</item>
+        <item>Punk</item>
+        <item>Jazz</item>
+    </string-array>
+    <string-array name="db_music_mood_labels">
+        <item>Happy</item>
+        <item>Chill</item>
+        <item>Energetic</item>
+        <item>Excited</item>
+        <item>Sentimental</item>
+        <item>Inspirational</item>
+        <item>Sad</item>
+        <item>Nostalgic</item>
+        <item>Romantic</item>
+    </string-array>
     <string name="db_music_generate">Generate music</string>
     <string name="db_music_generating">Waiting for music generation…</string>
     <string name="db_music_downloading">Downloading audio and saving the song…</string>

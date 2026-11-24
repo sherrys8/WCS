@@ -15,12 +15,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -28,9 +29,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,7 +44,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,6 +56,7 @@ import com.composables.icons.materialsymbols.outlined.Music_note
 import com.composables.icons.materialsymbols.outlined.Pause
 import com.composables.icons.materialsymbols.outlined.Photo_library
 import com.composables.icons.materialsymbols.outlined.Play_arrow
+import com.composables.icons.materialsymbols.outlined.Settings
 import dev.sherry.wcs.R
 import dev.sherry.wcs.features.api.ui.WeCurrentConversationApi
 import dev.sherry.wcs.features.api.core.WeDatabaseApi
@@ -99,6 +100,8 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
 
     private val GENRES = listOf("Pop", "Rock", "Folk", "Electronic", "Hip Hop/Rap", "Chinese Style", "DJ", "R&B/Soul", "Reggae", "Punk", "Jazz")
     private val MOODS = listOf("Happy", "Chill", "Dynamic/Energetic", "Excited", "Sentimental/Melancholic/Lonely", "Inspirational/Hopeful", "Sorrow/Sad", "Nostalgic/Memory", "Romantic")
+    private const val VOICE_MALE = "Male"
+    private const val VOICE_FEMALE = "Female"
 
     /** LRC 时间标记只用来对齐显示，复制出去的必须是纯歌词。 */
     private val TIME_TAG = Regex("\\[\\d{1,2}:\\d{2}(?:[.,]\\d{1,3})?]")
@@ -139,11 +142,12 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
         var screen by remember { mutableStateOf(Screen.CREATE) }
         var profileId by remember { mutableStateOf(effectiveProfileId()) }
         var prompt by remember { mutableStateOf(initialText.ifBlank { savedPrompt }) }
-        var lyric by remember { mutableStateOf(savedLyric) }
+        // 自定义歌词单独留一份草稿：切回 AI 作词时输入框显示空，再切回来还能看到刚才写的
+        var customLyric by remember { mutableStateOf(savedLyric) }
         var custom by remember { mutableStateOf(false) }
-        var genre by remember { mutableStateOf("") }
-        var mood by remember { mutableStateOf("") }
-        var gender by remember { mutableStateOf("") }
+        var genre by remember { mutableStateOf(GENRES.first()) }
+        var mood by remember { mutableStateOf(MOODS.first()) }
+        var gender by remember { mutableStateOf(VOICE_MALE) }
         var tracks by remember { mutableStateOf<List<DoubaoMusicTrack>>(emptyList()) }
         var selected by remember { mutableStateOf<DoubaoMusicTrack?>(null) }
         var revision by remember { mutableIntStateOf(0) }
@@ -250,21 +254,21 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
             val snapshot = ApiProfiles.get(profileId)?.takeIf { it.capability == CAP_TTS && it.provider == TTS_PROVIDER_DOUBAO }
             if (snapshot == null) { error = context.localizedChatString(R.string.db_music_need_account); screen = Screen.SETTINGS; return }
             if (snapshot.userAgent.isBlank()) { error = context.localizedChatString(R.string.db_music_need_ua); screen = Screen.SETTINGS; return }
-            if (retry == null && (prompt.isBlank() || (custom && lyric.isBlank()))) {
+            if (retry == null && (prompt.isBlank() || (custom && customLyric.isBlank()))) {
                 error = context.localizedChatString(if (prompt.isBlank()) R.string.db_music_need_prompt else R.string.db_music_need_lyric)
                 return
             }
             if (retry != null && retry.owner != DoubaoMusicStore.owner(snapshot)) return
             stopPlayer()
             savedPrompt = prompt
-            savedLyric = lyric
+            savedLyric = customLyric
             busy = true
             error = null
             status = context.localizedChatString(if (retry == null) R.string.db_music_generating else R.string.db_music_downloading)
             job = scope.launch {
                 try {
                     val generated = if (retry != null) listOf(retry) else DoubaoMusicClient.generate(
-                        snapshot, prompt.trim(), lyric.trim(), genre, mood, gender, custom,
+                        snapshot, prompt.trim(), if (custom) customLyric.trim() else "", genre, mood, gender, custom,
                     )
                     withContext(Dispatchers.IO) { generated.forEach { DoubaoMusicStore.save(it) } }
                     var failed = false
@@ -329,8 +333,8 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
                     IconButton(onClick = { screen = if (screen == Screen.LIBRARY) Screen.CREATE else Screen.LIBRARY }, enabled = !busy) {
                         Icon(MaterialSymbols.Outlined.Photo_library, contentDescription = stringResource(R.string.db_music_library))
                     }
-                    OutlinedButton(onClick = { screen = Screen.SETTINGS }, enabled = !busy, modifier = Modifier.width(104.dp)) {
-                        Text(profileName.ifBlank { stringResource(R.string.db_music_select_account) }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    IconButton(onClick = { screen = Screen.SETTINGS }, enabled = !busy) {
+                        Icon(MaterialSymbols.Outlined.Settings, contentDescription = stringResource(R.string.db_music_settings_entry))
                     }
                 }
             },
@@ -338,8 +342,9 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
                 Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     when (screen) {
                         Screen.CREATE -> CreateContent(
-                            prompt = prompt, lyric = lyric, custom = custom, genre = genre, mood = mood, gender = gender,
-                            enabled = !busy, onPrompt = { prompt = it; savedPrompt = it }, onLyric = { lyric = it; savedLyric = it },
+                            prompt = prompt, customLyric = customLyric, custom = custom, genre = genre, mood = mood, gender = gender,
+                            enabled = !busy, onPrompt = { prompt = it; savedPrompt = it },
+                            onCustomLyric = { customLyric = it; savedLyric = it },
                             onCustom = { custom = it }, onGenre = { genre = it }, onMood = { mood = it }, onGender = { gender = it },
                             onGenerate = { start() },
                         )
@@ -403,52 +408,71 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
 
     @Composable
     private fun CreateContent(
-        prompt: String, lyric: String, custom: Boolean, genre: String, mood: String, gender: String,
-        enabled: Boolean, onPrompt: (String) -> Unit, onLyric: (String) -> Unit, onCustom: (Boolean) -> Unit,
+        prompt: String, customLyric: String, custom: Boolean, genre: String, mood: String, gender: String,
+        enabled: Boolean, onPrompt: (String) -> Unit, onCustomLyric: (String) -> Unit, onCustom: (Boolean) -> Unit,
         onGenre: (String) -> Unit, onMood: (String) -> Unit, onGender: (String) -> Unit, onGenerate: () -> Unit,
     ) {
+        val genreLabels = stringArrayResource(R.array.db_music_genre_labels).asList()
+        val moodLabels = stringArrayResource(R.array.db_music_mood_labels).asList()
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(stringResource(R.string.db_music_prompt), style = MaterialTheme.typography.labelMedium)
             OutlinedTextField(
-                value = prompt, onValueChange = onPrompt, enabled = enabled, minLines = 3, maxLines = 5,
+                value = prompt, onValueChange = onPrompt, enabled = enabled, minLines = 2, maxLines = 5,
                 placeholder = { Text(stringResource(R.string.db_music_prompt_hint)) },
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.db_music_lyrics), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                SingleChoiceSegmentedButtonRow {
-                    listOf(false, true).forEachIndexed { index, isCustom ->
-                        SegmentedButton(
-                            selected = custom == isCustom, onClick = { onCustom(isCustom) }, enabled = enabled,
-                            shape = SegmentedButtonDefaults.itemShape(index, 2),
+                // 两个模式做成一枚胶囊开关：选中那半填主色，不用 M3 分段按钮（带勾还会被喵体文案撑成两行）
+                Row(
+                    modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    listOf(false, true).forEach { isCustom ->
+                        val active = custom == isCustom
+                        TextButton(
+                            onClick = { onCustom(isCustom) }, enabled = enabled,
+                            colors = ButtonDefaults.textButtonColors(
+                                containerColor = if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                contentColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                         ) {
-                            Text(stringResource(if (isCustom) R.string.db_music_custom_lyrics else R.string.db_music_ai_lyrics))
+                            Text(stringResource(if (isCustom) R.string.db_music_mode_custom else R.string.db_music_ai_lyrics))
                         }
                     }
                 }
             }
             OutlinedTextField(
-                value = lyric, onValueChange = onLyric, enabled = enabled && custom, minLines = 3, maxLines = 5,
+                value = if (custom) customLyric else "", onValueChange = onCustomLyric,
+                enabled = enabled && custom, minLines = 2, maxLines = 5,
                 placeholder = { Text(stringResource(if (custom) R.string.db_music_lyric_custom_hint else R.string.db_music_lyric_ai_hint)) },
                 modifier = Modifier.fillMaxWidth(),
             )
-            Choice(R.string.db_music_genre, genre, GENRES, enabled, onGenre)
-            Choice(R.string.db_music_mood, mood, MOODS, enabled, onMood)
-            // 协议要 Male/Female，行里显示中文，所以这一档单独给 value/label
-            DropDownMenuWidget(
-                title = stringResource(R.string.db_music_gender), description = null, value = gender, enabled = enabled,
-                options = listOf(
-                    DropdownOption("", stringResource(R.string.db_music_unspecified)),
-                    DropdownOption("Male", stringResource(R.string.db_music_male)),
-                    DropdownOption("Female", stringResource(R.string.db_music_female)),
-                ),
-                onValueChange = onGender,
+            Picker(R.string.db_music_genre, genre, GENRES, genreLabels, enabled, onGenre)
+            Picker(R.string.db_music_mood, mood, MOODS, moodLabels, enabled, onMood)
+            Picker(
+                R.string.db_music_gender, gender, listOf(VOICE_MALE, VOICE_FEMALE),
+                listOf(stringResource(R.string.db_music_male), stringResource(R.string.db_music_female)), enabled, onGender,
             )
             Button(onClick = onGenerate, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.db_music_generate))
             }
             Text(stringResource(R.string.db_music_quota_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+
+    /** 协议值与显示名不是一回事（发送要 `Pop`，行里要「流行」），标签由资源给，越界就退回原值。 */
+    @Composable
+    private fun Picker(
+        titleRes: Int, value: String, values: List<String>, labels: List<String>,
+        enabled: Boolean, change: (String) -> Unit,
+    ) {
+        DropDownMenuWidget(
+            title = stringResource(titleRes), description = null, value = value, enabled = enabled,
+            options = values.mapIndexed { index, item -> DropdownOption(item, labels.getOrElse(index) { item }) },
+            onValueChange = change,
+        )
     }
 
     @Composable
@@ -556,15 +580,6 @@ object DoubaoMusic : ClickableFeature(), WeChatInputBarMenuApi.IActionItemsProvi
             Text(stringResource(R.string.db_music_account_note), style = MaterialTheme.typography.bodySmall)
             Text(stringResource(R.string.db_music_cache_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    }
-
-    @Composable
-    private fun Choice(titleRes: Int, value: String, values: List<String>, enabled: Boolean, change: (String) -> Unit) {
-        DropDownMenuWidget(
-            title = stringResource(titleRes), description = null, value = value, enabled = enabled,
-            options = listOf(DropdownOption("", stringResource(R.string.db_music_unspecified))) + values.map { DropdownOption(it, it) },
-            onValueChange = change,
-        )
     }
 
     private fun convertAndSendVoice(talker: String, track: DoubaoMusicTrack): Boolean = runCatching {
